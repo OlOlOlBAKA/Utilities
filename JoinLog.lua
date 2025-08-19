@@ -44,6 +44,6 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
     SendJoinLogWebhook(player.DisplayName.."** Has Joined The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
 
-game:GetService("Players").PlayerRemoved:Connect(function(player)
+game:GetService("Players").PlayerRemoving:Connect(function(player)
     SendJoinLogWebhook(player.DisplayName .."** Has Left The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
