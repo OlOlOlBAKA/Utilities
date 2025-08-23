@@ -1,7 +1,9 @@
-
+local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
 local JoinLogWebhook = "https://discord.com/api/webhooks/1407327551092949094/gb1tGaFkepie8povvZA60IT3B27BB9Er9B7DQXzCLlSKn8Df7W9wGznocqvZvytieMBQ"
+
+local Player = Players.LocalPlayer
 
 local function SendJoinLogWebhook(title, webhookURL, displayName, Username)
    local Response = request({
@@ -40,10 +42,12 @@ Body = HttpService:JSONEncode({
 )
 end
 
-game:GetService("Players").PlayerAdded:Connect(function(player)
+SendJoinLogWebhook(Player.DisplayName.."** Has Joined The Server.**", JoinLogWebhook, Player.DisplayName, Player.Name)
+
+Players.PlayerAdded:Connect(function(player)
     SendJoinLogWebhook(player.DisplayName.."** Has Joined The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
 
-game:GetService("Players").PlayerRemoving:Connect(function(player)
+Players.PlayerRemoving:Connect(function(player)
     SendJoinLogWebhook(player.DisplayName .."** Has Left The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
