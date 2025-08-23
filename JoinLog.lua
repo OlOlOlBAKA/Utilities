@@ -78,7 +78,7 @@ end)
 
 Players.PlayerRemoving:Connect(function(player)
       if player.Name == Player.Name then
-
+         SendStatusWebhook("**Macro Status**","Macro Status: Stopped","",tonumber(0xFFFFFF),"",JoinLogWebhook,"<t:" .. os.time() .. ":F>", "")
       end
     SendJoinLogWebhook(player.DisplayName .."** Has Left The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
