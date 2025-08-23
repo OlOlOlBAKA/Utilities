@@ -42,6 +42,34 @@ Body = HttpService:JSONEncode({
 )
 end
 
+local function SendStatusWebhook(title, desc, imageURL, color, anothermessage, webhookURL, GotTime, contentmsg)
+   local Response = request({
+Url = webhookURL,
+Method = "POST",
+Headers = {
+["Content-Type"] = "application/json"
+},
+Body = HttpService:JSONEncode({
+["content"] = contentmsg,
+["embeds"] = {{
+["title"] = title,
+["description"] = desc,
+["image"] = {["url"] = imageURL},
+["type"] = "rich",
+["color"] = tonumber(color),
+["fields"] = {
+{
+["name"] = "Time",
+["value"] = GotTime,
+["inline"] = true,
+},
+}
+}}
+})
+}
+)
+end
+
 SendJoinLogWebhook(Player.DisplayName.."** Has Joined The Server.**", JoinLogWebhook, Player.DisplayName, Player.Name)
 
 Players.PlayerAdded:Connect(function(player)
@@ -49,5 +77,8 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+      if player.Name == Player.Name then
+
+      end
     SendJoinLogWebhook(player.DisplayName .."** Has Left The Server.**", JoinLogWebhook, player.DisplayName, player.Name)
 end)
