@@ -1,0 +1,23 @@
+if game.PlaceId == 15532962292 then
+_G.BiomeWebhook = "https://discord.com/api/webhooks/1401863494181064785/d5jCAV2Uzct4BgQwfhJahYmviX3huH9uzmZUDkF9K7W77YryXQ8bcufDhHlP5DinuhTv"
+_G.AuraWebhook = "https://discord.com/api/webhooks/1402263661308936272/QKTw1r0bxbVuZWTivCVlvkrpXwSuYSYfQCWzGpmlos20glq3rVh28TkRcs0TvtU2qfqO"
+_G.MerchantWebhook = "https://discord.com/api/webhooks/1402263937071845396/PMHFPLS3OrpYEOR-zp8SHaJ3GB9jW3tjiRLtrUOi0bnUOU-oCLpFSeqVTYMzz2xW_gLu"
+-- Biome Ping Type Your Role ID here
+_G.SandStorm = "@&1404697152537497770"
+_G.Hell = "@&1404697074611519509"
+_G.Starfall = "@&1404697006353678356"
+_G.Corruption = "@&1404696919430795284"
+_G.Null = "@&1404696767420825760"
+-- For Glitched And Dreamspace You Need To Type Only true or false for allow ping everyone or not
+_G.Glitched = true
+_G.Dreamspace = true
+-- Merchant Ping Type Your Role ID here
+_G.Jester = "@&1404029495073046619"
+-- Auras Ping Type Your Role ID here
+_G.Globals = "@&1404039499587260416"
+_G.OneBillion = "@&1404039598400737341"
+-- Eden (ONLY FOR PERSON WHO USED MACRO) Role ID too
+_G.Eden = "@&1405497438638178365"
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Sol-s-RNG/refs/heads/main/Test.lua"))()
+end
