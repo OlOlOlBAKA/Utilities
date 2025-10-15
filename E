@@ -20,7 +20,7 @@ frame.BackgroundTransparency = 1 -- เริ่มต้น transparency 1
 
 -- สร้าง TweenInfo สำหรับ fade in (3 วินาที)
 local fadeInInfo = TweenInfo.new(
-    2, -- เวลา 3 วินาที
+    1.5, -- เวลา 3 วินาที
     Enum.EasingStyle.Quad, -- สไตล์การเคลื่อนไหว
     Enum.EasingDirection.InOut
 )
@@ -58,7 +58,7 @@ effect.Contrast = 50
 effect.Parent = game.Lighting
 game.ReplicatedStorage.Assets.Sounds.HundredMillion1:Play()
 game.ReplicatedStorage.Assets.Sounds.HundredMillion2:Play()
-task.wait(2)
+task.wait(1.5)
 fadeInTween:Play()
 task.wait(2)
 for _,v in pairs(workspace.GlobalRolls.LegendaryRoll.Attachment:GetChildren()) do
