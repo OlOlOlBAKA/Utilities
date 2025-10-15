@@ -1,9 +1,7 @@
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
-
-game.Players.LocalPlayer.Character.ChildAdded:Connect(function(v)
-   if v:IsA("Tool") and v.Name == "RightGear" then
+game:GetService("Players").LocalPlayer.PlayerGui.MainInterface.Crafting.Index.ItemViewportHolder.CraftButton.MouseButton1Click:Connect(function()
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FadeGui"
 screenGui.IgnoreGuiInset = true
@@ -74,5 +72,4 @@ fadeOutTween:Play()
 task.wait(1)
 screenGui:Destroy()
 
-   end
 end)
