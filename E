@@ -1,0 +1,78 @@
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+
+game.Players.LocalPlayer.Character.ChildAdded:Connect(function(v)
+   if v:IsA("Tool") and v.Name == "RightGear" then
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FadeGui"
+screenGui.IgnoreGuiInset = true
+screenGui.ClipToDeviceSafeArea = false
+screenGui.Parent = CoreGui
+
+-- สร้าง Frame
+local frame = Instance.new("Frame")
+frame.Name = "FadeFrame"
+frame.Parent = screenGui
+frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- สีขาว
+frame.Size = UDim2.new(1, 0, 1, 0) -- 100,0,100,0
+frame.Position = UDim2.new(0, 0, 0, 0)
+frame.ZIndex = 100
+frame.BackgroundTransparency = 1 -- เริ่มต้น transparency 1
+
+-- สร้าง TweenInfo สำหรับ fade in (3 วินาที)
+local fadeInInfo = TweenInfo.new(
+    2, -- เวลา 3 วินาที
+    Enum.EasingStyle.Quad, -- สไตล์การเคลื่อนไหว
+    Enum.EasingDirection.InOut
+)
+
+-- สร้าง Tween สำหรับ fade in (จาก 1 ไป 0)
+local fadeInTween = TweenService:Create(
+    frame,
+    fadeInInfo,
+    {BackgroundTransparency = 0}
+)
+
+-- สร้าง TweenInfo สำหรับ fade out (3 วินาที)
+local fadeOutInfo = TweenInfo.new(
+    1,
+    Enum.EasingStyle.Quad,
+    Enum.EasingDirection.InOut
+)
+
+-- สร้าง Tween สำหรับ fade out (จาก 0 ไป 1)
+local fadeOutTween = TweenService:Create(
+    frame,
+    fadeOutInfo,
+    {BackgroundTransparency = 1}
+)
+for _,v in pairs(workspace.GlobalRolls.LegendaryRoll.Attachment:GetChildren()) do
+   if v:IsA("Beam") then
+      v.Enabled = true
+   end
+end
+      local effect = Instance.new("ColorCorrectionEffect")
+effect.Brightness = -10
+effect.TintColor = Color3.new(1,1,1)
+effect.Saturation = -1
+effect.Contrast = 50
+effect.Parent = game.Lighting
+game.ReplicatedStorage.Assets.Sounds.HundredMillion1:Play()
+game.ReplicatedStorage.Assets.Sounds.HundredMillion2:Play()
+task.wait(2)
+fadeInTween:Play()
+task.wait(2)
+for _,v in pairs(workspace.GlobalRolls.LegendaryRoll.Attachment:GetChildren()) do
+   if v:IsA("Beam") then
+      v.Enabled = false
+   end
+end
+effect:Destroy()
+task.wait(2)
+fadeOutTween:Play()
+task.wait(1)
+screenGui:Destroy()
+
+   end
+end)
