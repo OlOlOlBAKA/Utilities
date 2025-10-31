@@ -1,9 +1,7 @@
-
-
 if game.PlaceId == 15532962292 then
-_G.BiomeWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
-_G.AuraWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
-_G.MerchantWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
+_G.BiomeWebhook = "https://discord.com/api/webhooks/1414083283591102474/aOH7L5Pmv_v8s6tY4WNWaz5DnM3nK3CwAz_gBR_x_8IKu0czHMEl4f8KHqNGrxheKHLw"
+_G.AuraWebhook = "https://discord.com/api/webhooks/1414083889923887175/te8oSM8zvcTmWwbAjMoj73Pq93cL543tDSDDZ9aMzKOUBRE3SPYFbRW2Wnd1MiBdCk63"
+_G.MerchantWebhook = "https://discord.com/api/webhooks/1414084255256154202/3VPoGBJWSBOsJ4e0_VzNoj3KEtdl07USFpazfPkSdnTVJcRJORDk3l62EYrrzWPRGHLD"
 
 _G.SandStorm = "<@&1404697152537497770>"
 _G.Hell = "<@&1404697074611519509>"
