@@ -1,24 +1,27 @@
+
+
 if game.PlaceId == 15532962292 then
-   -- Webhooks Type Your Webhook Link here
-_G.BiomeWebhook = "https://discord.com/api/webhooks/1414083283591102474/aOH7L5Pmv_v8s6tY4WNWaz5DnM3nK3CwAz_gBR_x_8IKu0czHMEl4f8KHqNGrxheKHLw"
-_G.AuraWebhook = "https://discord.com/api/webhooks/1414083889923887175/te8oSM8zvcTmWwbAjMoj73Pq93cL543tDSDDZ9aMzKOUBRE3SPYFbRW2Wnd1MiBdCk63"
-_G.MerchantWebhook = "https://discord.com/api/webhooks/1414084255256154202/3VPoGBJWSBOsJ4e0_VzNoj3KEtdl07USFpazfPkSdnTVJcRJORDk3l62EYrrzWPRGHLD"
--- Biome Ping Type Your Role ID here
-_G.SandStorm = ""
-_G.Hell = ""
-_G.Starfall = ""
-_G.Corruption = ""
-_G.Null = ""
--- For Glitched And Dreamspace You Need To Type Only true or false for allow ping everyone or not
+_G.BiomeWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
+_G.AuraWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
+_G.MerchantWebhook = "https://discord.com/api/webhooks/1433817675334684854/qQctyKCxA6WkgIiGMq0tcY1BI81k5gKZ9vVb2oN0UC6aBoq1_BYSaIc0Vxs4Tyix8XNI"
+
+_G.SandStorm = "<@&1404697152537497770>"
+_G.Hell = "<@&1404697074611519509>"
+_G.Starfall = "<@&1404697006353678356>"
+_G.Corruption = "<@&1404696919430795284>"
+_G.Null = "<@&1404696767420825760>"
+
 _G.Glitched = true
 _G.Dreamspace = true
--- Merchant Ping Type Your Role ID here
-_G.Jester = "@&1404029495073046619"
--- Auras Ping Type Your Role ID here
-_G.Globals = "@&1404039499587260416"
-_G.OneBillion = "@&1404039598400737341"
--- Eden (ONLY FOR PERSON WHO USED MACRO) Role ID too
-_G.Eden = "@&1405497438638178365"
+
+_G.Jester = "<@&1404029495073046619>"
+
+_G.Globals = "<@&1404039499587260416>"
+_G.OneBillion = "<@&1404039598400737341>"
+
+_G.Eden = "<@&1405497438638178365>"
+
+_G.BlacklistedUsers = {"AresKaan7","KINSOSAD_FB"}
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Sol-s-RNG/refs/heads/main/Test.lua"))()
 end
