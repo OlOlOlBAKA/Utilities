@@ -1,6 +1,4 @@
---// ClickerGui – Roblox Native Draggable + VirtualUser
---// LocalScript → StarterGui
-
+-- Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -12,7 +10,7 @@ local player = Players.LocalPlayer
 
 -- Create GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ClickerGui_RobloxDrag"
+screenGui.Name = "ClickerGui_ClickThrough"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 999
 screenGui.Parent = CoreGui  -- Use player:WaitForChild("PlayerGui") for live games
@@ -23,9 +21,9 @@ screenGui.Parent = CoreGui  -- Use player:WaitForChild("PlayerGui") for live gam
 local TOGGLE_SIZE = UDim2.new(0, 140, 0, 50)
 local TOGGLE_POS  = UDim2.new(0, 15, 0, 15)
 
-local DOT_SIZE    = UDim2.new(0, 60, 0, 60)
-local DOT_COLOR_ON  = Color3.fromRGB(0, 170, 255)   -- clicking
-local DOT_COLOR_OFF = Color3.fromRGB(200, 200, 200) -- draggable
+local DOT_SIZE    = UDim2.new(0, 20, 0, 20)
+local DOT_COLOR_ON  = Color3.fromRGB(0, 170, 255)
+local DOT_COLOR_OFF = Color3.fromRGB(200, 200, 200)
 
 local CLICK_INTERVAL = 0.05
 -------------------------------------------------
@@ -46,35 +44,36 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 12)
 toggleCorner.Parent = toggle
 
--- Click Dot
+-- Click Dot (SMALL + CLICK-THROUGH)
 local dot = Instance.new("Frame")
 dot.Size = DOT_SIZE
 dot.BackgroundColor3 = DOT_COLOR_OFF
 dot.Visible = false
 dot.Name = "ClickDot"
-dot.Draggable = false  -- Controlled by us
-dot.Active = true      -- Required for Draggable
+dot.ZIndex = 0          -- Below other UI
+dot.Active = false      -- CLICKS PASS THROUGH
+dot.Draggable = false   -- Controlled by us
 dot.Parent = screenGui
 
 local dotCorner = Instance.new("UICorner")
 dotCorner.CornerRadius = UDim.new(1, 0)
 dotCorner.Parent = dot
 
--- Drag glow (feedback when dragging)
-local dragGlow = Instance.new("UIStroke")
-dragGlow.Color = Color3.fromRGB(255, 255, 255)
-dragGlow.Thickness = 4
-dragGlow.Transparency = 1
-dragGlow.Parent = dot
+-- Visual indicator (glow ring)
+local glow = Instance.new("UIStroke")
+glow.Color = Color3.fromRGB(255, 255, 255)
+glow.Thickness = 2
+glow.Transparency = 0.7
+glow.Parent = dot
 
 -------------------------------------------------
 -- State
 -------------------------------------------------
-local isEnabled = false  -- true = clicking
+local isEnabled = false
 local clickConn = nil
 
 -------------------------------------------------
--- VirtualUser Click
+-- VirtualUser Click (at dot center)
 -------------------------------------------------
 local function fireClick()
 	if not dot.Visible then return end
@@ -103,13 +102,13 @@ local function setEnabled(on)
 	isEnabled = on
 
 	if on then
-		-- CLICKER ON
+		-- ON: Clicking
 		toggle.Text = "Clicker: ON"
 		toggle.BackgroundColor3 = Color3.fromRGB(0, 140, 0)
 		dot.BackgroundColor3 = DOT_COLOR_ON
 		dot.Visible = true
-		dot.Draggable = false  -- DISABLE DRAG
-		dragGlow.Transparency = 1
+		dot.Draggable = false  -- NO DRAG
+		glow.Transparency = 0.3
 
 		-- Center if first time
 		if dot.Position == UDim2.new() then
@@ -118,13 +117,14 @@ local function setEnabled(on)
 
 		startClicking()
 	else
-		-- CLICKER OFF
+		-- OFF: Draggable
 		toggle.Text = "Clicker: OFF"
 		toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 		dot.BackgroundColor3 = DOT_COLOR_OFF
-		dot.Draggable = true   -- ENABLE DRAG
+		dot.Draggable = true   -- DRAG ENABLED
 		stopClicking()
 		dot.Visible = true
+		glow.Transparency = 0.7
 	end
 end
 
@@ -134,36 +134,35 @@ toggle.MouseButton1Click:Connect(function()
 end)
 
 -------------------------------------------------
--- Native Drag Feedback (Glow when dragging)
+-- Visual Feedback on Hover/Drag (only when OFF)
 -------------------------------------------------
 dot.MouseEnter:Connect(function()
-	if dot.Draggable then
-		TweenService:Create(dragGlow, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+	if not isEnabled then
+		TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.3}):Play()
 	end
 end)
 
 dot.MouseLeave:Connect(function()
-	if dot.Draggable then
-		TweenService:Create(dragGlow, TweenInfo.new(0.2), {Transparency = 1}):Play()
+	if not isEnabled then
+		TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.7}):Play()
 	end
 end)
 
 -- Mobile touch feedback
-dot.TouchTap:Connect(function() end) -- No action
 dot.InputBegan:Connect(function(input)
-	if dot.Draggable and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
-		TweenService:Create(dragGlow, TweenInfo.new(0.1), {Transparency = 0}):Play()
+	if not isEnabled and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+		TweenService:Create(glow, TweenInfo.new(0.1), {Transparency = 0.2}):Play()
 	end
 end)
 
 dot.InputEnded:Connect(function(input)
-	if dot.Draggable and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
-		TweenService:Create(dragGlow, TweenInfo.new(0.2), {Transparency = 1}):Play()
+	if not isEnabled then
+		TweenService:Create(glow, TweenInfo.new(0.2), {Transparency = 0.7}):Play()
 	end
 end)
 
 -------------------------------------------------
--- Toggle Hover Feedback
+-- Toggle Hover
 -------------------------------------------------
 toggle.MouseEnter:Connect(function()
 	if not isEnabled then
