@@ -1,7 +1,7 @@
 if game.PlaceId == 15532962292 then
-_G.BiomeWebhook = "https://discord.com/api/webhooks/1414083283591102474/aOH7L5Pmv_v8s6tY4WNWaz5DnM3nK3CwAz_gBR_x_8IKu0czHMEl4f8KHqNGrxheKHLw"
-_G.AuraWebhook = "https://discord.com/api/webhooks/1414083889923887175/te8oSM8zvcTmWwbAjMoj73Pq93cL543tDSDDZ9aMzKOUBRE3SPYFbRW2Wnd1MiBdCk63"
-_G.MerchantWebhook = "https://discord.com/api/webhooks/1414084255256154202/3VPoGBJWSBOsJ4e0_VzNoj3KEtdl07USFpazfPkSdnTVJcRJORDk3l62EYrrzWPRGHLD"
+_G.BiomeWebhook = "https://discord.com/api/webhooks/1401863494181064785/d5jCAV2Uzct4BgQwfhJahYmviX3huH9uzmZUDkF9K7W77YryXQ8bcufDhHlP5DinuhTv"
+_G.AuraWebhook = "https://discord.com/api/webhooks/1402263661308936272/QKTw1r0bxbVuZWTivCVlvkrpXwSuYSYfQCWzGpmlos20glq3rVh28TkRcs0TvtU2qfqO"
+_G.MerchantWebhook = "https://discord.com/api/webhooks/1402263937071845396/PMHFPLS3OrpYEOR-zp8SHaJ3GB9jW3tjiRLtrUOi0bnUOU-oCLpFSeqVTYMzz2xW_gLu"
 
 _G.SandStorm = "<@&1404697152537497770>"
 _G.Hell = "<@&1404697074611519509>"
@@ -16,10 +16,11 @@ _G.Jester = "<@&1404029495073046619>"
 
 _G.Globals = "<@&1404039499587260416>"
 _G.OneBillion = "<@&1404039598400737341>"
+_G.Native = "<@&1440282670079934495>"
 
 _G.Eden = "<@&1405497438638178365>"
 
-_G.BlacklistedUsers = {"AresKaan7","KINSOSAD_FB"}
+_G.BlacklistedUsers = {"AresKaan7"}
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Sol-s-RNG/refs/heads/main/Test.lua"))()
 end
