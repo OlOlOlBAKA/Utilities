@@ -5,6 +5,7 @@ _G.MerchantWebhook = "https://discord.com/api/webhooks/1402263937071845396/PMHFP
 
 _G.SandStorm = "<@&1404697152537497770>"
 _G.Hell = "<@&1404697074611519509>"
+_G.Heaven = "<@&1446728593760583681>"
 _G.Starfall = "<@&1404697006353678356>"
 _G.Corruption = "<@&1404696919430795284>"
 _G.Null = "<@&1404696767420825760>"
