@@ -290,13 +290,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				if roomFolder then
 					local _, _, exitFront, exitBack = getRoomPositions(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-
+					if exitBack then 
+						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
+					end
 					if exitFront then 
 						moveAlongWaypoints(currentPos, exitFront, roomFolder) 
-					end
-					if exitBack then 
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
 					end
 				end
 				task.wait() -- Prevents frame spikes during room iteration
