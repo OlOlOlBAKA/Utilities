@@ -90,7 +90,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand (HeightOffset strictly applied ONLY to path nodes)
+-- Computes path sub-waypoints on demand
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local distance = (endPos - startPos).Magnitude
 
@@ -133,26 +133,27 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	return rawWaypoints
 end
 
--- Get Door Positions without HeightOffset
-local function getRoomPositions(roomFolder: Instance): (Vector3?, Vector3?, Vector3?, Vector3?)
+-- Get Door Positions AND apply HeightOffset directly to keep Y level smooth
+local function getRoomPositions(roomFolder: Instance, heightOffset: number): (Vector3?, Vector3?, Vector3?, Vector3?)
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	local roomExit = roomFolder:FindFirstChild("RoomExit", true) or roomEntrance
 
 	local entFront, entBack, exitFront, exitBack
+	local offsetVector = Vector3.new(0, heightOffset, 0)
 
 	if roomEntrance then
 		local cf = roomEntrance:IsA("BasePart") and roomEntrance.CFrame or (roomEntrance:IsA("Model") and (roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()))
 		if cf then
-			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder)
-			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder)
+			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder) + offsetVector
+			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder) + offsetVector
 		end
 	end
 
 	if roomExit then
 		local cf = roomExit:IsA("BasePart") and roomExit.CFrame or (roomExit:IsA("Model") and (roomExit.PrimaryPart and roomExit.PrimaryPart.CFrame or roomExit:GetPivot()))
 		if cf then
-			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder)
-			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder)
+			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder) + offsetVector
+			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder) + offsetVector
 		end
 	end
 
@@ -246,7 +247,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Setup spawn position
 	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 	if spawnRoom then
-		local entFront = getRoomPositions(spawnRoom)
+		local entFront = getRoomPositions(spawnRoom, heightOffset)
 		if entFront then
 			if model:IsA("Model") then
 				model:PivotTo(CFrame.new(entFront))
@@ -271,7 +272,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront = getRoomPositions(roomFolder)
+					local entFront, entBack, exitFront = getRoomPositions(roomFolder, heightOffset)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 
 					if entFront then
@@ -290,14 +291,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				task.wait()
 			end
 		else
-			-- Backward Pass (Smooth Door Threshold Passing)
+			-- Backward Pass (Rebound)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
+					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder, heightOffset)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 
-					-- Travel to Exit threshold, then pass straight through door
 					if exitFront then moveAlongWaypoints(currentPos, exitFront, roomFolder) end
 					if exitBack then moveDirectTo(exitBack) end
 					if entBack then 
