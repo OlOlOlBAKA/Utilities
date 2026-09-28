@@ -12,14 +12,14 @@ type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
 	HeightOffset: number?,
-	DelayTime: number?
+	DelayTime: number?,
+	SpawnOffsetRooms: number?
 }
 
 -- Align to floor inside room geometry (specifically inspecting "Parts" folders)
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
 	local filterTargets = {}
 
-	-- Include room "Parts" folders or rooms directly in raycast whitelist
 	for _, room in ipairs(currentRooms:GetChildren()) do
 		local partsFolder = room:FindFirstChild("Parts")
 		if partsFolder then
@@ -95,6 +95,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local speed = options.Speed or 60
 	local heightOffset = options.HeightOffset or 2.5
 	local delayTime = options.DelayTime or 0
+	
+	-- Clamp SpawnOffsetRooms to a maximum of 15
+	local rawOffset = options.SpawnOffsetRooms or 10
+	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
 	-- Auto-parent model to Workspace if not parented
 	if model.Parent ~= Workspace then
@@ -111,7 +115,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local latestRoomNumber = latestRoomValue.Value
-	local targetSpawnNumber = math.max(0, latestRoomNumber - 10)
+	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 
 	local lastNode = nil
 	local firstNode = nil
@@ -138,7 +142,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Build initial node path
+	-- Build initial node path based on SpawnOffsetRooms
 	for roomNum = targetSpawnNumber, latestRoomValue.Value + 1 do
 		addRoomToPath(roomNum)
 	end
@@ -233,8 +237,33 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	roomAddedConnection:Disconnect()
 
-	-- Always despawn model upon path completion
+	-- Perform 300 stud fall down animation before despawning
 	if model then
+		local currentCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
+		local fallTargetCFrame = currentCFrame - Vector3.new(0, 300, 0)
+		local fallTime = 300 / (speed / 1.25)
+		local fallTweenInfo = TweenInfo.new(fallTime, Enum.EasingStyle.QuadIn)
+
+		if model:IsA("BasePart") then
+			local fallTween = TweenService:Create(model, fallTweenInfo, { CFrame = fallTargetCFrame })
+			fallTween:Play()
+			fallTween.Completed:Wait()
+		elseif model:IsA("Model") then
+			local CFrameValue = Instance.new("CFrameValue")
+			CFrameValue.Value = currentCFrame
+
+			local connection = CFrameValue.Changed:Connect(function(newCFrame)
+				model:PivotTo(newCFrame)
+			end)
+
+			local fallTween = TweenService:Create(CFrameValue, fallTweenInfo, { Value = fallTargetCFrame })
+			fallTween:Play()
+			fallTween.Completed:Wait()
+
+			connection:Disconnect()
+			CFrameValue:Destroy()
+		end
+
 		model:Destroy()
 	end
 end
