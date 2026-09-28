@@ -23,16 +23,6 @@ type MovementOptions = {
 	ReboundDelayTime: number?
 }
 
--- Target folder names to check for room node sequences
-local NODE_FOLDER_NAMES = {
-	"path",
-	"nodes",
-	"node",
-	"pathfind",
-	"waypoints",
-	"points"
-}
-
 -- Disable Collisions on all entity parts
 local function disableCollision(instance: Instance)
 	if instance:IsA("BasePart") then
@@ -54,32 +44,45 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Dynamically search for node folders ("Path", "Nodes", "Node", etc.)
+-- Uses string.match to find any folder matching path/node keywords
 local function findNodesContainer(roomFolder: Instance): Instance?
 	for _, child in ipairs(roomFolder:GetChildren()) do
-		local lowerName = string.lower(child.Name)
-		for _, targetName in ipairs(NODE_FOLDER_NAMES) do
-			if lowerName == targetName then
-				return child
-			end
+		local name = string.lower(child.Name)
+		if string.match(name, "path") or string.match(name, "node") or string.match(name, "waypoint") or string.match(name, "point") then
+			return child
 		end
 	end
 	return nil
+end
+
+-- Uses string.match to find Entrance or Exit parts as fallback
+local function findRoomAnchors(roomFolder: Instance): (BasePart?, BasePart?)
+	local entrance, exit
+	for _, descendant in ipairs(roomFolder:GetDescendants()) do
+		local name = string.lower(descendant.Name)
+		if not entrance and string.match(name, "entrance") then
+			entrance = descendant
+		elseif not exit and string.match(name, "exit") then
+			exit = descendant
+		end
+		if entrance and exit then break end
+	end
+	return entrance, exit
 end
 
 -- Extract vector positions from a room folder
 local function getRoomNodes(roomFolder: Instance): {Vector3}
 	local nodes = {}
 
-	-- 1. Scan for dynamic path/node folders
+	-- 1. Scan using string.match for node/path containers
 	local nodesContainer = findNodesContainer(roomFolder)
 
 	if nodesContainer then
 		local children = nodesContainer:GetChildren()
 		-- Sort nodes numerically (1, 2, 3...) or alphabetically
 		table.sort(children, function(a, b)
-			local numA = tonumber(a.Name)
-			local numB = tonumber(b.Name)
+			local numA = tonumber(string.match(a.Name, "%d+"))
+			local numB = tonumber(string.match(b.Name, "%d+"))
 			if numA and numB then
 				return numA < numB
 			end
@@ -95,10 +98,9 @@ local function getRoomNodes(roomFolder: Instance): {Vector3}
 		end
 	end
 
-	-- 2. Fallback: If no node folder exists or was cleared, lock to Entrance / Exit anchors
+	-- 2. Fallback using string.match for Entrance/Exit anchors if no nodes container was found
 	if #nodes == 0 then
-		local entrance = roomFolder:FindFirstChild("RoomEntrance", true) or roomFolder:FindFirstChild("Entrance", true)
-		local exit = roomFolder:FindFirstChild("RoomExit", true) or roomFolder:FindFirstChild("Exit", true)
+		local entrance, exit = findRoomAnchors(roomFolder)
 
 		if entrance then
 			local entPos = entrance:IsA("BasePart") and entrance.Position or entrance:GetPivot().Position
