@@ -91,33 +91,58 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	return position
 end
 
+-- Robust path calculation with retry mechanisms to prevent cascading pathfinding failures
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
-	local path = PathfindingService:CreatePath({
-		AgentRadius = 1,      -- Small radius to clear doorframes
-		AgentHeight = 2.5,    -- Low height for ceiling clearance
+	-- Primary Attempt: Tight agent parameters for natural movement
+	local primaryPath = PathfindingService:CreatePath({
+		AgentRadius = 1,
+		AgentHeight = 2.5,
 		AgentCanJump = false,
 		WaypointSpacing = 2,
-		Costs = {
-			Default = 1
-		}
+		Costs = { Default = 1 }
 	})
 
 	local success, err = pcall(function()
-		path:ComputeAsync(startPos, endPos)
+		primaryPath:ComputeAsync(startPos, endPos)
 	end)
 
-	if success and path.Status == Enum.PathStatus.Success then
-		return path:GetWaypoints()
-	else
-		warn("[PathfindingMovement] Pathfinding status: " .. tostring(path.Status) .. " | Reason: " .. tostring(err))
-		return {
-			{ Position = startPos },
-			{ Position = endPos }
-		}
+	if success and primaryPath.Status == Enum.PathStatus.Success then
+		return primaryPath:GetWaypoints()
 	end
+
+	-- Secondary Attempt: Fallback with minimal radius to recover from tight spaces
+	local secondaryPath = PathfindingService:CreatePath({
+		AgentRadius = 0.1,
+		AgentHeight = 1,
+		AgentCanJump = false,
+		WaypointSpacing = 3,
+		Costs = { Default = 1 }
+	})
+
+	local secondarySuccess, _ = pcall(function()
+		secondaryPath:ComputeAsync(startPos, endPos)
+	end)
+
+	if secondarySuccess and secondaryPath.Status == Enum.PathStatus.Success then
+		return secondaryPath:GetWaypoints()
+	end
+
+	-- Final Fallback: Direct segment interpolation to avoid sudden teleporting/clipping
+	warn("[PathfindingMovement] Direct movement fallback triggered between nodes.")
+	
+	local waypoints = {}
+	local distance = (endPos - startPos).Magnitude
+	local steps = math.max(2, math.ceil(distance / 4))
+
+	for i = 0, steps do
+		local alpha = i / steps
+		table.insert(waypoints, { Position = startPos:Lerp(endPos, alpha) })
+	end
+
+	return waypoints
 end
 
--- Offsets target position 5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
+-- Offsets target position 2.5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
 local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	
@@ -131,7 +156,7 @@ local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 		end
 
 		if cframe then
-			return (cframe * CFrame.new(0, 0, 5)).Position
+			return (cframe * CFrame.new(0, 0, 2.5)).Position
 		end
 	end
 
