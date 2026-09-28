@@ -15,9 +15,9 @@ type MovementOptions = {
 	
 	-- Rebound System Options
 	Rebound: boolean?,
-	ReboundCount: number?,      -- Target count (0 = initial sweep, 1 = back, 2 = forward, etc.)
-	ReboundTime: number?,       -- Delay at the end before returning
-	ReboundDelayTime: number?   -- Delay at the earliest room before sweeping forward
+	ReboundCount: number?,
+	ReboundTime: number?,
+	ReboundDelayTime: number?
 }
 
 type ActionType = "MOVE" | "WAIT"
@@ -55,26 +55,44 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Snaps doorway positions directly to floor level to stop flying or going underground
+-- Strictly samples ground level while ignoring ceilings, roofs, and overhead structures
 local function alignToFloorLevel(position: Vector3, heightOffset: number): Vector3
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	
 	local currentRooms = Workspace:FindFirstChild("CurrentRooms")
-	if currentRooms then
-		raycastParams.FilterDescendantsInstances = {currentRooms}
-	else
-		raycastParams.FilterDescendantsInstances = {Workspace}
+	if not currentRooms then
+		return position + Vector3.new(0, heightOffset, 0)
 	end
 
-	local startPos = Vector3.new(position.X, position.Y + 12, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
+	-- Collect valid floor candidates, ignoring ceilings and roofs
+	local validFloorTargets = {}
+	for _, room in ipairs(currentRooms:GetChildren()) do
+		for _, descendant in ipairs(room:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				local name = string.lower(descendant.Name)
+				local isCeiling = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top")
+				if not isCeiling then
+					table.insert(validFloorTargets, descendant)
+				end
+			end
+		end
+	end
+
+	if #validFloorTargets == 0 then
+		return position + Vector3.new(0, heightOffset, 0)
+	end
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Include
+	raycastParams.FilterDescendantsInstances = validFloorTargets
+
+	-- Raycast down starting close to position height (below ceiling level)
+	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
 	end
 
-	return position
+	return position + Vector3.new(0, heightOffset, 0)
 end
 
 -- Computes sub-waypoints preserving 3D stair / height transitions
@@ -197,7 +215,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Forward Path Construction (Reaches in front of RoomExit of Room + 1 at end)
+	-- Forward Path Construction
 	local function buildForwardPath(startNum: number, endNum: number)
 		for roomNum = startNum, endNum do
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
@@ -205,12 +223,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder, heightOffset)
 				
 				if roomNum == endNum and exitFront then
-					-- End Room: Walk through Entrance and stop in front of Exit
 					if entFront then appendMoveTarget(entFront) end
 					if entBack then appendMoveTarget(entBack) end
 					appendMoveTarget(exitFront)
 				else
-					-- Intermediate Rooms: Walk Entrance Front -> Entrance Back
 					if entFront and entBack then
 						appendMoveTarget(entFront)
 						appendMoveTarget(entBack)
@@ -290,11 +306,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				currentReboundState += 1
 				
 				if currentReboundState % 2 == 1 then
-					-- Rebound 1, 3, 5... (Going Backwards)
 					appendWait(reboundTime)
 					buildBackwardPath(endRoomNumber, targetSpawnNumber)
 				else
-					-- Rebound 2, 4, 6... (Going Forwards)
 					appendWait(reboundDelayTime)
 					buildForwardPath(targetSpawnNumber, endRoomNumber)
 				end
