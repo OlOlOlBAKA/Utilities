@@ -117,7 +117,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	end
 end
 
--- Offsets target position 2.5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
+-- Offsets target position 5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
 local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	
@@ -131,7 +131,7 @@ local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 		end
 
 		if cframe then
-			return (cframe * CFrame.new(0, 0, -2.5)).Position
+			return (cframe * CFrame.new(0, 0, 5)).Position
 		end
 	end
 
