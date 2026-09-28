@@ -44,7 +44,7 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Uses string.match to find any folder matching path/node keywords
+-- Searches for any folder matching path/node keywords using string.match
 local function findNodesContainer(roomFolder: Instance): Instance?
 	for _, child in ipairs(roomFolder:GetChildren()) do
 		local name = string.lower(child.Name)
@@ -55,30 +55,14 @@ local function findNodesContainer(roomFolder: Instance): Instance?
 	return nil
 end
 
--- Uses string.match to find Entrance or Exit parts as fallback
-local function findRoomAnchors(roomFolder: Instance): (BasePart?, BasePart?)
-	local entrance, exit
-	for _, descendant in ipairs(roomFolder:GetDescendants()) do
-		local name = string.lower(descendant.Name)
-		if not entrance and string.match(name, "entrance") then
-			entrance = descendant
-		elseif not exit and string.match(name, "exit") then
-			exit = descendant
-		end
-		if entrance and exit then break end
-	end
-	return entrance, exit
-end
-
--- Extract vector positions from a room folder
+-- Extract vector positions strictly from the node/path container
 local function getRoomNodes(roomFolder: Instance): {Vector3}
 	local nodes = {}
-
-	-- 1. Scan using string.match for node/path containers
 	local nodesContainer = findNodesContainer(roomFolder)
 
 	if nodesContainer then
 		local children = nodesContainer:GetChildren()
+		
 		-- Sort nodes numerically (1, 2, 3...) or alphabetically
 		table.sort(children, function(a, b)
 			local numA = tonumber(string.match(a.Name, "%d+"))
@@ -98,21 +82,56 @@ local function getRoomNodes(roomFolder: Instance): {Vector3}
 		end
 	end
 
-	-- 2. Fallback using string.match for Entrance/Exit anchors if no nodes container was found
-	if #nodes == 0 then
-		local entrance, exit = findRoomAnchors(roomFolder)
+	return nodes
+end
 
-		if entrance then
-			local entPos = entrance:IsA("BasePart") and entrance.Position or entrance:GetPivot().Position
-			table.insert(nodes, entPos)
-		end
-		if exit then
-			local exitPos = exit:IsA("BasePart") and exit.Position or exit:GetPivot().Position
-			table.insert(nodes, exitPos)
+-- Dynamic Fan-Raycast: Scans surrounding angles to find an unblocked path around obstacles
+local function generateBypassPath(model: Instance, targetRoom: Instance): {Vector3}
+	local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+	local targetPos = targetRoom:GetPivot().Position
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { model }
+
+	local directDirection = (targetPos - startPos)
+	local directHit = Workspace:Raycast(startPos, directDirection, raycastParams)
+
+	-- 1. If direct route is clear, return simple line
+	if not directHit then
+		return { startPos, targetPos }
+	end
+
+	-- 2. Direct path blocked: Scan around in a fan pattern to find open space
+	local scanDist = directDirection.Magnitude
+	local baseCFrame = CFrame.lookAt(startPos, targetPos)
+	
+	local anglesToTest = { 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90 }
+	local bestWaypoint = nil
+
+	for _, angleDeg in ipairs(anglesToTest) do
+		local rotatedCFrame = baseCFrame * CFrame.Angles(0, math.rad(angleDeg), 0)
+		local rayDir = rotatedCFrame.LookVector * scanDist
+		local rayHit = Workspace:Raycast(startPos, rayDir, raycastParams)
+
+		-- Found an open corridor/doorway angle
+		if not rayHit then
+			local detourPoint = startPos + rayDir
+			-- Check if we can reach targetPos from this detour point
+			local secondHit = Workspace:Raycast(detourPoint, targetPos - detourPoint, raycastParams)
+			if not secondHit then
+				bestWaypoint = detourPoint
+				break
+			end
 		end
 	end
 
-	return nodes
+	-- 3. Return sequence with intermediate detour waypoint (or hit point if totally trapped)
+	if bestWaypoint then
+		return { startPos, bestWaypoint, targetPos }
+	else
+		return { startPos, directHit.Position }
+	end
 end
 
 -- Build full sequence across target room numbers
@@ -230,8 +249,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local isReverse = (currentReboundState % 2 == 1)
 
 		local sequence = buildSequenceForRooms(currentRooms, targetSpawnNumber, endRoomNumber, isReverse)
+
+		-- Dynamic Obstacle Avoidance Fallback: If no node folder exists, generate an unblocked path around walls
 		if #sequence < 2 then
-			break
+			local targetRoom = currentRooms:FindFirstChild(tostring(endRoomNumber)) or currentRooms:FindFirstChild(tostring(latestRoomValue.Value))
+			if targetRoom then
+				sequence = generateBypassPath(model, targetRoom)
+			else
+				break
+			end
 		end
 
 		runner:setSequence(sequence)
