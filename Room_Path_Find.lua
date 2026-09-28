@@ -47,7 +47,6 @@ end
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
 	local allCandidates = {}
 
-	-- Collect all candidate floor parts across active rooms
 	for _, room in ipairs(currentRooms:GetChildren()) do
 		local partsFolder = room:FindFirstChild("Parts")
 		local searchContainer = partsFolder or room
@@ -71,7 +70,6 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 		end
 	end
 
-	-- Fallback if no nearby floors match vertical range criteria
 	if #validFloorTargets == 0 then
 		validFloorTargets = #allCandidates > 0 and allCandidates or currentRooms:GetChildren()
 	end
@@ -80,7 +78,6 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
 	raycastParams.FilterDescendantsInstances = validFloorTargets
 
-	-- Start raycast downward from target position
 	local startPos = position + Vector3.new(0, 4, 0)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
 
@@ -91,9 +88,8 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	return position
 end
 
--- Robust path calculation with retry mechanisms to prevent cascading pathfinding failures
+-- Robust path calculation with retry mechanisms to prevent cascading failures
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
-	-- Primary Attempt: Tight agent parameters for natural movement
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -110,7 +106,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 		return primaryPath:GetWaypoints()
 	end
 
-	-- Secondary Attempt: Fallback with minimal radius to recover from tight spaces
+	-- Fallback with minimal radius
 	local secondaryPath = PathfindingService:CreatePath({
 		AgentRadius = 0.1,
 		AgentHeight = 1,
@@ -127,9 +123,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 		return secondaryPath:GetWaypoints()
 	end
 
-	-- Final Fallback: Direct segment interpolation to avoid sudden teleporting/clipping
-	warn("[PathfindingMovement] Direct movement fallback triggered between nodes.")
-	
+	-- Direct linear interpolation fallback
 	local waypoints = {}
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 4))
@@ -142,8 +136,8 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	return waypoints
 end
 
--- Offsets target position 2.5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
-local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
+-- Returns both FRONT (+2.5 studs) and BEHIND (-2.5 studs) positions for doorway navigation
+local function getEntrancePositions(roomFolder: Instance): (Vector3?, Vector3?)
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	
 	if roomEntrance then
@@ -156,18 +150,21 @@ local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 		end
 
 		if cframe then
-			return (cframe * CFrame.new(0, 0, 2.5)).Position
+			local frontPos = (cframe * CFrame.new(0, 0, 2.5)).Position
+			local backPos = (cframe * CFrame.new(0, 0, -2.5)).Position
+			return frontPos, backPos
 		end
 	end
 
-	-- Fallback to model pivot/position if RoomEntrance isn't found
+	-- Fallback position if RoomEntrance doesn't exist
+	local fallbackPos: Vector3?
 	if roomFolder:IsA("Model") then
-		return roomFolder.PrimaryPart and roomFolder.PrimaryPart.Position or roomFolder:GetPivot().Position
+		fallbackPos = roomFolder.PrimaryPart and roomFolder.PrimaryPart.Position or roomFolder:GetPivot().Position
 	elseif roomFolder:IsA("BasePart") then
-		return roomFolder.Position
+		fallbackPos = roomFolder.Position
 	end
 	
-	return nil
+	return fallbackPos, fallbackPos
 end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
@@ -206,29 +203,30 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local firstNode = nil
 	local highestProcessedRoom = -1
 
-	local function addRoomToPath(roomNum: number)
+	local function addRoomToPath(roomNum: number, isLastRoom: boolean)
 		local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 		if roomFolder then
-			local entrancePos = getFrontOfEntrancePosition(roomFolder)
-			if entrancePos then
-				local newNode = NodeObject.new(entrancePos)
+			local frontPos, backPos = getEntrancePositions(roomFolder)
+			
+			if frontPos and backPos then
+				-- 1. Node in FRONT of entrance
+				local frontNode = NodeObject.new(frontPos)
+				if not firstNode then firstNode = frontNode end
+				if lastNode then lastNode:setNext(frontNode) end
+				lastNode = frontNode
 
-				if not firstNode then
-					firstNode = newNode
-				end
+				-- 2. Node BEHIND entrance (transitions through the doorway)
+				local backNode = NodeObject.new(backPos)
+				lastNode:setNext(backNode)
+				lastNode = backNode
 
-				if lastNode then
-					lastNode:setNext(newNode)
-				end
-
-				lastNode = newNode
 				highestProcessedRoom = roomNum
 			end
 		end
 	end
 
 	for roomNum = targetSpawnNumber, latestRoomValue.Value + 1 do
-		addRoomToPath(roomNum)
+		addRoomToPath(roomNum, roomNum == latestRoomValue.Value + 1)
 	end
 
 	local roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
@@ -237,7 +235,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if not child:FindFirstChild("RoomEntrance", true) then
 				child:WaitForChild("RoomEntrance", 2)
 			end
-			addRoomToPath(roomNum)
+			addRoomToPath(roomNum, false)
 		end
 	end)
 
@@ -260,16 +258,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
+	-- Continuous execution loop without node pauses
 	while currentNode do
 		local nextNodes = currentNode:getAllNext()
 
 		if #nextNodes == 0 then
-			task.wait(0.3)
+			task.wait(0.05)
 			nextNodes = currentNode:getAllNext()
-
-			if #nextNodes == 0 then
-				break
-			end
+			if #nextNodes == 0 then break end
 		end
 
 		local nextNode = nextNodes[1]
@@ -278,6 +274,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		local waypoints = computePathWaypoints(startPos, endPos)
 
+		-- Traverse all waypoints continuously
 		for i = 1, #waypoints do
 			local rawTargetPos = waypoints[i].Position
 			local targetPos = alignToFloor(rawTargetPos, heightOffset, currentRooms)
@@ -319,9 +316,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	roomAddedConnection:Disconnect()
 
-	-- Stop all entity sounds when path finishes
-	stopEntitySounds(model)
-
 	-- Gravity fall sequence before despawning
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
@@ -355,6 +349,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			connection:Disconnect()
 			CFrameValue:Destroy()
 		end
+
+		-- Stop all entity sounds AFTER falling 300 studs
+		stopEntitySounds(model)
 
 		model:Destroy()
 	end
