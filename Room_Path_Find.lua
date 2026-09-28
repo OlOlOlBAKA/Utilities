@@ -90,15 +90,14 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand
+-- Fallback calculation or Rebound turning points keep raw ground position (unaffected by HeightOffset)
+local function getRoomGroundCenter(roomFolder: Instance): Vector3
+	local cf, size = roomFolder:GetBoundingBox()
+	return alignToFloorLevel(cf.Position, roomFolder)
+end
+
+-- Computes path waypoints applying HeightOffset to all movement nodes
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
-	local distance = (endPos - startPos).Magnitude
-
-	-- Skip pathfinding overhead for tiny threshold distances to prevent tweaking
-	if distance < 6 then
-		return { endPos }
-	end
-
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -120,44 +119,18 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return rawWaypoints
 	end
 
-	-- Fallback linear path
+	-- Fallback linear calculation if pathfinding fails (ground node position remains unaffected by HeightOffset)
+	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 5))
 
 	for i = 1, steps do
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
 		local groundPos = alignToFloorLevel(interpolated, roomFolder)
-		table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+		table.insert(rawWaypoints, groundPos) -- Unaffected by height offset on path failure
 	end
 
 	return rawWaypoints
-end
-
--- Get Door Positions AND apply HeightOffset directly to keep Y level smooth
-local function getRoomPositions(roomFolder: Instance, heightOffset: number): (Vector3?, Vector3?, Vector3?, Vector3?)
-	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
-	local roomExit = roomFolder:FindFirstChild("RoomExit", true) or roomEntrance
-
-	local entFront, entBack, exitFront, exitBack
-	local offsetVector = Vector3.new(0, heightOffset, 0)
-
-	if roomEntrance then
-		local cf = roomEntrance:IsA("BasePart") and roomEntrance.CFrame or (roomEntrance:IsA("Model") and (roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()))
-		if cf then
-			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder) + offsetVector
-			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder) + offsetVector
-		end
-	end
-
-	if roomExit then
-		local cf = roomExit:IsA("BasePart") and roomExit.CFrame or (roomExit:IsA("Model") and (roomExit.PrimaryPart and roomExit.PrimaryPart.CFrame or roomExit:GetPivot()))
-		if cf then
-			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder) + offsetVector
-			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder) + offsetVector
-		end
-	end
-
-	return entFront, entBack, exitFront, exitBack
 end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
@@ -199,7 +172,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 	local endRoomNumber = latestRoomNumber + 1
 
-	-- Helper to move smooth to target
+	-- Move entity directly to node
 	local function moveDirectTo(targetPos: Vector3)
 		if not model or not model.Parent then return end
 		
@@ -236,7 +209,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Move through a series of sub-nodes on demand
+	-- Compute and move through waypoints
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?)
 		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, roomFolder)
 		for _, nodePos in ipairs(waypoints) do
@@ -244,16 +217,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Setup spawn position
+	-- Position Entity at Spawn Point (Rebound / Spawn stop point unaffected by HeightOffset)
 	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 	if spawnRoom then
-		local entFront = getRoomPositions(spawnRoom, heightOffset)
-		if entFront then
-			if model:IsA("Model") then
-				model:PivotTo(CFrame.new(entFront))
-			elseif model:IsA("BasePart") then
-				model.Position = entFront
-			end
+		local spawnCenterGround = getRoomGroundCenter(spawnRoom)
+		if model:IsA("Model") then
+			model:PivotTo(CFrame.new(spawnCenterGround))
+		elseif model:IsA("BasePart") then
+			model.Position = spawnCenterGround
 		end
 	end
 
@@ -272,21 +243,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront = getRoomPositions(roomFolder, heightOffset)
+					local targetCenter = getRoomGroundCenter(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-
-					if entFront then
-						moveAlongWaypoints(currentPos, entFront, roomFolder)
-					end
-					if entBack then
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveDirectTo(entBack)
-					end
-
-					if roomNum == endRoomNumber and exitFront then
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitFront, roomFolder)
-					end
+					
+					moveAlongWaypoints(currentPos, targetCenter, roomFolder)
 				end
 				task.wait()
 			end
@@ -295,23 +255,23 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder, heightOffset)
+					local targetCenter = getRoomGroundCenter(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-
-					if exitFront then moveAlongWaypoints(currentPos, exitFront, roomFolder) end
-					if exitBack then moveDirectTo(exitBack) end
-					if entBack then 
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entBack, roomFolder) 
-					end
-					if entFront then moveDirectTo(entFront) end
+					
+					moveAlongWaypoints(currentPos, targetCenter, roomFolder)
 				end
 				task.wait()
 			end
 		end
 
-		-- Check for Rebound trigger
+		-- Rebound Stop Point Handlers (Unaffected by HeightOffset)
 		if isRebound and currentReboundState < targetReboundCount then
+			local currentRoom = currentRooms:FindFirstChild(tostring(currentReboundState % 2 == 0 and endRoomNumber or targetSpawnNumber))
+			if currentRoom then
+				local stopPointGround = getRoomGroundCenter(currentRoom)
+				moveDirectTo(stopPointGround)
+			end
+
 			currentReboundState += 1
 			if currentReboundState % 2 == 1 then
 				if reboundTime > 0 then task.wait(reboundTime) end
