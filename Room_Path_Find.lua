@@ -41,48 +41,42 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Safely aligns Y height for multi-story / multi-floor rooms
-local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
-	local allCandidates = {}
+-- Gets stable ground height by raycasting down specifically for large main floor parts
+local function getStableFloorY(position: Vector3, roomFolder: Instance?): number
+	local candidates = {}
 
-	for _, room in ipairs(currentRooms:GetChildren()) do
-		local partsFolder = room:FindFirstChild("Parts")
-		local searchContainer = partsFolder or room
+	if roomFolder then
+		local partsFolder = roomFolder:FindFirstChild("Parts")
+		local searchContainer = partsFolder or roomFolder
 
 		for _, descendant in ipairs(searchContainer:GetDescendants()) do
 			if descendant:IsA("BasePart") then
-				local lowerName = string.lower(descendant.Name)
-				if lowerName == "floor" or string.find(lowerName, "floor") or string.find(lowerName, "base") or descendant.Size.Y <= 3 then
-					table.insert(allCandidates, descendant)
+				local name = string.lower(descendant.Name)
+				-- Only target primary floor geometry (ignore small props, steps, or thresholds)
+				if (name == "floor" or string.find(name, "basefloor") or string.find(name, "mainfloor")) and descendant.Size.X > 4 and descendant.Size.Z > 4 then
+					table.insert(candidates, descendant)
 				end
 			end
 		end
 	end
 
-	local validFloorTargets = {}
-	for _, part in ipairs(allCandidates) do
-		local verticalDist = math.abs(part.Position.Y - position.Y)
-		if verticalDist <= 15 then
-			table.insert(validFloorTargets, part)
-		end
-	end
-
-	if #validFloorTargets == 0 then
-		validFloorTargets = #allCandidates > 0 and allCandidates or currentRooms:GetChildren()
-	end
-
+	-- Fallback raycast params if specific floor parts aren't tagged
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	raycastParams.FilterDescendantsInstances = validFloorTargets
-
-	local startPos = position + Vector3.new(0, 4, 0)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
-
-	if rayResult then
-		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
+	if #candidates > 0 then
+		raycastParams.FilterDescendantsInstances = candidates
+	else
+		raycastParams.FilterDescendantsInstances = Workspace:GetChildren()
 	end
 
-	return position
+	local startPos = Vector3.new(position.X, position.Y + 10, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -50, 0), raycastParams)
+
+	if rayResult then
+		return rayResult.Position.Y
+	end
+
+	return position.Y
 end
 
 -- Computes sub-waypoints between start and end positions
@@ -119,7 +113,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3): {Vector
 	return rawWaypoints
 end
 
--- Gets Front (+2.5 studs) and Behind (-2.5 studs) positions
+-- Gets Front (+2.5 studs) and Behind (-2.5 studs) positions for doorway navigation
 local function getEntrancePositions(roomFolder: Instance): (Vector3?, Vector3?)
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true) or roomFolder:FindFirstChild("RoomExit", true)
 	
@@ -185,27 +179,29 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local highestProcessedRoom = -1
 	local lastTargetPos: Vector3? = nil
 
-	local function appendTarget(rawPos: Vector3)
-		local adjustedPos = alignToFloor(rawPos, heightOffset, currentRooms)
-		if lastTargetPos then
-			local subPoints = computePathWaypoints(lastTargetPos, adjustedPos)
-			for _, pt in ipairs(subPoints) do
-				table.insert(globalWaypointQueue, pt)
-			end
-		else
-			table.insert(globalWaypointQueue, adjustedPos)
-		end
-		lastTargetPos = adjustedPos
-	end
-
 	local function addRoomToPath(roomNum: number)
 		local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 		if roomFolder then
 			local frontPos, backPos = getEntrancePositions(roomFolder)
 			
 			if frontPos and backPos then
-				appendTarget(frontPos)
-				appendTarget(backPos)
+				-- Calculate floor Y level once per room segment for perfect stability
+				local roomFloorY = getStableFloorY(frontPos, roomFolder) + heightOffset
+				
+				local stableFront = Vector3.new(frontPos.X, roomFloorY, frontPos.Z)
+				local stableBack = Vector3.new(backPos.X, roomFloorY, backPos.Z)
+
+				if lastTargetPos then
+					local subPoints = computePathWaypoints(lastTargetPos, stableFront)
+					for _, pt in ipairs(subPoints) do
+						table.insert(globalWaypointQueue, Vector3.new(pt.X, roomFloorY, pt.Z))
+					end
+				else
+					table.insert(globalWaypointQueue, stableFront)
+				end
+
+				table.insert(globalWaypointQueue, stableBack)
+				lastTargetPos = stableBack
 				highestProcessedRoom = roomNum
 			end
 		end
@@ -242,13 +238,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Seamless execution stream across the pre-computed waypoint queue
+	-- Smooth continuous execution loop
 	local queueIndex = 2
 	local active = true
 
 	while active do
 		if queueIndex > #globalWaypointQueue then
-			-- Brief wait to check if new rooms were added to the end of queue
 			task.wait(0.05)
 			if queueIndex > #globalWaypointQueue then
 				active = false
@@ -258,11 +253,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		local targetPos = globalWaypointQueue[queueIndex]
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-		local segmentDistance = (targetPos - currentPos).Magnitude
+		
+		-- Flatten movement direction so orientation stays horizontal
+		local flatCurrentPos = Vector3.new(currentPos.X, targetPos.Y, currentPos.Z)
+		local segmentDistance = (targetPos - flatCurrentPos).Magnitude
 
 		if segmentDistance > 0.05 then
 			local travelTime = segmentDistance / speed
-			local targetCFrame = CFrame.lookAt(targetPos, targetPos + (targetPos - currentPos).Unit)
+			local lookTarget = targetPos + (targetPos - flatCurrentPos).Unit
+			local targetCFrame = CFrame.lookAt(targetPos, Vector3.new(lookTarget.X, targetPos.Y, lookTarget.Z))
 			local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
 			if model:IsA("BasePart") then
