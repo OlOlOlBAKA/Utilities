@@ -11,7 +11,22 @@ type MovementOptions = {
 	Speed: number?,
 	HeightOffset: number?,
 	DelayTime: number?,
-	SpawnOffsetRooms: number?
+	SpawnOffsetRooms: number?,
+	
+	-- Rebound System Options
+	Rebound: boolean?,
+	ReboundCount: number?,
+	ReboundTime: number?,      -- Delay at the end before heading back
+	ReboundDelayTime: number?  -- Delay at the start/origin before starting return sweep
+}
+
+-- Types for global waypoint queue items
+type ActionType = "MOVE" | "WAIT"
+
+type WaypointNode = {
+	Type: ActionType,
+	Position: Vector3?,
+	WaitDuration: number?
 }
 
 -- Disable CanCollide on all parts of the entity
@@ -74,13 +89,12 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local rawWaypoints = {}
 	if success and primaryPath.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(primaryPath:GetWaypoints()) do
-			-- Preserve vertical height computed by Roblox pathfinding (stairs, ramps, slopes)
 			table.insert(rawWaypoints, wp.Position + Vector3.new(0, heightOffset, 0))
 		end
 		return rawWaypoints
 	end
 
-	-- Fallback linear interpolation points if pathfinding fails entirely
+	-- Fallback linear interpolation points if pathfinding fails
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 4))
 
@@ -139,6 +153,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
+	-- Rebound Settings
+	local isRebound = options.Rebound or false
+	local maxRebounds = options.ReboundCount or 1
+	local reboundTime = options.ReboundTime or 0
+	local reboundDelayTime = options.ReboundDelayTime or 0
+
 	if model.Parent ~= Workspace then
 		model.Parent = Workspace
 	end
@@ -155,117 +175,150 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local latestRoomNumber = latestRoomValue.Value
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 
-	local globalWaypointQueue: {Vector3} = {}
-	local highestProcessedRoom = -1
+	local globalQueue: {WaypointNode} = {}
 	local lastTargetPos: Vector3? = nil
+	local currentReboundCount = 0
 
-	local function addRoomToPath(roomNum: number)
-		local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
-		if roomFolder then
-			local frontPos, backPos = getEntrancePositions(roomFolder)
-			
-			if frontPos and backPos then
-				if lastTargetPos then
-					-- Compute path steps keeping stair/slope elevation
-					local subPoints = computePathWaypoints(lastTargetPos, frontPos, heightOffset)
-					for _, pt in ipairs(subPoints) do
-						table.insert(globalWaypointQueue, pt)
-					end
-				else
-					table.insert(globalWaypointQueue, frontPos + Vector3.new(0, heightOffset, 0))
+	local function appendMoveTarget(rawPos: Vector3)
+		local targetWithHeight = rawPos + Vector3.new(0, heightOffset, 0)
+		if lastTargetPos then
+			local subPoints = computePathWaypoints(lastTargetPos, rawPos, heightOffset)
+			for _, pt in ipairs(subPoints) do
+				table.insert(globalQueue, { Type = "MOVE", Position = pt })
+			end
+		else
+			table.insert(globalQueue, { Type = "MOVE", Position = targetWithHeight })
+		end
+		lastTargetPos = targetWithHeight
+	end
+
+	local function appendWait(duration: number)
+		if duration > 0 then
+			table.insert(globalQueue, { Type = "WAIT", WaitDuration = duration })
+		end
+	end
+
+	-- Forward Path Construction
+	local function buildForwardPath(startNum: number, endNum: number)
+		for roomNum = startNum, endNum do
+			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
+			if roomFolder then
+				local frontPos, backPos = getEntrancePositions(roomFolder)
+				if frontPos and backPos then
+					appendMoveTarget(frontPos)
+					appendMoveTarget(backPos)
 				end
-
-				table.insert(globalWaypointQueue, backPos + Vector3.new(0, heightOffset, 0))
-				lastTargetPos = backPos
-				highestProcessedRoom = roomNum
 			end
 		end
 	end
 
-	for roomNum = targetSpawnNumber, latestRoomValue.Value + 1 do
-		addRoomToPath(roomNum)
+	-- Backward Path Construction (Rebound)
+	local function buildBackwardPath(startNum: number, endNum: number)
+		for roomNum = startNum, endNum, -1 do
+			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
+			if roomFolder then
+				local frontPos, backPos = getEntrancePositions(roomFolder)
+				if frontPos and backPos then
+					appendMoveTarget(backPos)
+					appendMoveTarget(frontPos)
+				end
+			end
+		end
 	end
 
-	local roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
-		local roomNum = tonumber(child.Name)
-		if roomNum and roomNum > highestProcessedRoom then
-			if not (child:FindFirstChild("RoomEntrance", true) or child:FindFirstChild("RoomExit", true)) then
-				task.wait(0.1)
-			end
-			addRoomToPath(roomNum)
-		end
-	end)
+	-- Build initial sweep
+	local endRoomNumber = latestRoomValue.Value + 1
+	buildForwardPath(targetSpawnNumber, endRoomNumber)
 
-	if #globalWaypointQueue == 0 then
-		warn("PathfindingMovement: No valid rooms/waypoints found.")
-		roomAddedConnection:Disconnect()
+	if isRebound then
+		while currentReboundCount < maxRebounds do
+			currentReboundCount += 1
+			
+			-- Pause at RoomExit of latest room before going back
+			appendWait(reboundTime)
+			
+			-- Sweep backwards to earliest room entrance
+			buildBackwardPath(endRoomNumber, targetSpawnNumber)
+			
+			-- Pause at earliest room entrance before sweeping forward again (if multi-rebound)
+			if currentReboundCount < maxRebounds then
+				appendWait(reboundDelayTime)
+				buildForwardPath(targetSpawnNumber, endRoomNumber)
+			end
+		end
+	end
+
+	if #globalQueue == 0 then
+		warn("PathfindingMovement: No valid waypoints generated.")
 		return
 	end
 
-	local initialPosition = globalWaypointQueue[1]
-	if model:IsA("Model") then
-		model:PivotTo(CFrame.new(initialPosition))
-	elseif model:IsA("BasePart") then
-		model.Position = initialPosition
+	-- Position Entity at Initial Spawn Point
+	local initialNode = globalQueue[1]
+	if initialNode and initialNode.Position then
+		if model:IsA("Model") then
+			model:PivotTo(CFrame.new(initialNode.Position))
+		elseif model:IsA("BasePart") then
+			model.Position = initialNode.Position
+		end
 	end
 
 	if delayTime > 0 then
 		task.wait(delayTime)
 	end
 
-	-- Smooth continuous execution loop through stair steps and room transitions
+	-- Execute Queue Sequence
 	local queueIndex = 2
 	local active = true
 
 	while active do
-		if queueIndex > #globalWaypointQueue then
-			task.wait(0.05)
-			if queueIndex > #globalWaypointQueue then
-				active = false
-				break
-			end
+		if queueIndex > #globalQueue then
+			active = false
+			break
 		end
 
-		local targetPos = globalWaypointQueue[queueIndex]
-		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-		local segmentDistance = (targetPos - currentPos).Magnitude
+		local node = globalQueue[queueIndex]
 
-		if segmentDistance > 0.05 then
-			local travelTime = segmentDistance / speed
-			local direction = (targetPos - currentPos).Unit
-			
-			-- Look target points along 3D move direction (preserves looking up/down stairs naturally)
-			local lookTarget = targetPos + direction
-			local targetCFrame = CFrame.lookAt(targetPos, lookTarget)
-			local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+		if node.Type == "WAIT" then
+			task.wait(node.WaitDuration or 0)
+		elseif node.Type == "MOVE" and node.Position then
+			local targetPos = node.Position
+			local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+			local segmentDistance = (targetPos - currentPos).Magnitude
 
-			if model:IsA("BasePart") then
-				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
-				tween:Play()
-				tween.Completed:Wait()
-			elseif model:IsA("Model") then
-				local CFrameValue = Instance.new("CFrameValue")
-				CFrameValue.Value = model:GetPivot()
+			if segmentDistance > 0.05 then
+				local travelTime = segmentDistance / speed
+				local direction = (targetPos - currentPos).Unit
+				local lookTarget = targetPos + direction
+				local targetCFrame = CFrame.lookAt(targetPos, lookTarget)
+				local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
-				local connection = CFrameValue.Changed:Connect(function(newCFrame)
-					if model and model.Parent then
-						model:PivotTo(newCFrame)
-					end
-				end)
+				if model:IsA("BasePart") then
+					local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
+					tween:Play()
+					tween.Completed:Wait()
+				elseif model:IsA("Model") then
+					local CFrameValue = Instance.new("CFrameValue")
+					CFrameValue.Value = model:GetPivot()
 
-				local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
-				tween:Play()
-				tween.Completed:Wait()
+					local connection = CFrameValue.Changed:Connect(function(newCFrame)
+						if model and model.Parent then
+							model:PivotTo(newCFrame)
+						end
+					end)
 
-				connection:Disconnect()
-				CFrameValue:Destroy()
+					local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
+					tween:Play()
+					tween.Completed:Wait()
+
+					connection:Disconnect()
+					CFrameValue:Destroy()
+				end
 			end
 		end
 
 		queueIndex += 1
 	end
-
-	roomAddedConnection:Disconnect()
 
 	-- Gravity fall sequence before despawning
 	if model and model.Parent then
@@ -301,7 +354,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			CFrameValue:Destroy()
 		end
 
-		-- Stop entity sounds AFTER falling 300 studs
+		-- Stop entity audio tracks
 		stopEntitySounds(model)
 
 		model:Destroy()
