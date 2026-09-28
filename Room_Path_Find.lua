@@ -15,12 +15,11 @@ type MovementOptions = {
 	
 	-- Rebound System Options
 	Rebound: boolean?,
-	ReboundCount: number?,      -- Target count (0 = initial sweep only, 1 = back, 2 = forward, 3 = back, etc.)
+	ReboundCount: number?,      -- Target count (0 = initial sweep, 1 = back, 2 = forward, etc.)
 	ReboundTime: number?,       -- Delay at the end before returning
 	ReboundDelayTime: number?   -- Delay at the earliest room before sweeping forward
 }
 
--- Types for global waypoint queue items
 type ActionType = "MOVE" | "WAIT"
 
 type WaypointNode = {
@@ -56,14 +55,20 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Fallback floor alignment only used if pathfinding fails
-local function getFallbackFloorY(position: Vector3, heightOffset: number): Vector3
+-- Snaps doorway positions directly to floor level to stop flying or going underground
+local function alignToFloorLevel(position: Vector3, heightOffset: number): Vector3
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	raycastParams.FilterDescendantsInstances = {Workspace:FindFirstChild("CurrentRooms") or Workspace}
+	
+	local currentRooms = Workspace:FindFirstChild("CurrentRooms")
+	if currentRooms then
+		raycastParams.FilterDescendantsInstances = {currentRooms}
+	else
+		raycastParams.FilterDescendantsInstances = {Workspace}
+	end
 
-	local startPos = Vector3.new(position.X, position.Y + 10, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -50, 0), raycastParams)
+	local startPos = Vector3.new(position.X, position.Y + 12, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
@@ -101,40 +106,36 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	for i = 1, steps do
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
-		table.insert(rawWaypoints, getFallbackFloorY(interpolated, heightOffset))
+		table.insert(rawWaypoints, alignToFloorLevel(interpolated, heightOffset))
 	end
 
 	return rawWaypoints
 end
 
--- Gets Front (+2.5 studs) and Behind (-2.5 studs) positions for doorway navigation
-local function getEntrancePositions(roomFolder: Instance): (Vector3?, Vector3?)
-	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true) or roomFolder:FindFirstChild("RoomExit", true)
-	
+-- Gets Entrance (Front/Back) and Exit (Front/Back) positions for exact room bounds
+local function getRoomPositions(roomFolder: Instance, heightOffset: number): (Vector3?, Vector3?, Vector3?, Vector3?)
+	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
+	local roomExit = roomFolder:FindFirstChild("RoomExit", true) or roomEntrance
+
+	local entFront, entBack, exitFront, exitBack
+
 	if roomEntrance then
-		local cframe: CFrame?
-		
-		if roomEntrance:IsA("BasePart") then
-			cframe = roomEntrance.CFrame
-		elseif roomEntrance:IsA("Model") then
-			cframe = roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()
-		end
-
-		if cframe then
-			local frontPos = (cframe * CFrame.new(0, 0, 2.5)).Position
-			local backPos = (cframe * CFrame.new(0, 0, -2.5)).Position
-			return frontPos, backPos
+		local cf = roomEntrance:IsA("BasePart") and roomEntrance.CFrame or (roomEntrance:IsA("Model") and (roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()))
+		if cf then
+			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, heightOffset)
+			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, heightOffset)
 		end
 	end
 
-	local fallbackPos: Vector3?
-	if roomFolder:IsA("Model") then
-		fallbackPos = roomFolder.PrimaryPart and roomFolder.PrimaryPart.Position or roomFolder:GetPivot().Position
-	elseif roomFolder:IsA("BasePart") then
-		fallbackPos = roomFolder.Position
+	if roomExit then
+		local cf = roomExit:IsA("BasePart") and roomExit.CFrame or (roomExit:IsA("Model") and (roomExit.PrimaryPart and roomExit.PrimaryPart.CFrame or roomExit:GetPivot()))
+		if cf then
+			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, heightOffset)
+			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, heightOffset)
+		end
 	end
-	
-	return fallbackPos, fallbackPos
+
+	return entFront, entBack, exitFront, exitBack
 end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
@@ -179,16 +180,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local lastTargetPos: Vector3? = nil
 
 	local function appendMoveTarget(rawPos: Vector3)
-		local targetWithHeight = rawPos + Vector3.new(0, heightOffset, 0)
 		if lastTargetPos then
-			local subPoints = computePathWaypoints(lastTargetPos, rawPos, heightOffset)
+			local subPoints = computePathWaypoints(lastTargetPos, rawPos, 0)
 			for _, pt in ipairs(subPoints) do
 				table.insert(globalQueue, { Type = "MOVE", Position = pt })
 			end
 		else
-			table.insert(globalQueue, { Type = "MOVE", Position = targetWithHeight })
+			table.insert(globalQueue, { Type = "MOVE", Position = rawPos })
 		end
-		lastTargetPos = targetWithHeight
+		lastTargetPos = rawPos
 	end
 
 	local function appendWait(duration: number)
@@ -197,15 +197,24 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Forward Path Construction
+	-- Forward Path Construction (Reaches in front of RoomExit of Room + 1 at end)
 	local function buildForwardPath(startNum: number, endNum: number)
 		for roomNum = startNum, endNum do
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 			if roomFolder then
-				local frontPos, backPos = getEntrancePositions(roomFolder)
-				if frontPos and backPos then
-					appendMoveTarget(frontPos)
-					appendMoveTarget(backPos)
+				local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder, heightOffset)
+				
+				if roomNum == endNum and exitFront then
+					-- End Room: Walk through Entrance and stop in front of Exit
+					if entFront then appendMoveTarget(entFront) end
+					if entBack then appendMoveTarget(entBack) end
+					appendMoveTarget(exitFront)
+				else
+					-- Intermediate Rooms: Walk Entrance Front -> Entrance Back
+					if entFront and entBack then
+						appendMoveTarget(entFront)
+						appendMoveTarget(entBack)
+					end
 				end
 			end
 		end
@@ -216,35 +225,37 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		for roomNum = startNum, endNum, -1 do
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 			if roomFolder then
-				local frontPos, backPos = getEntrancePositions(roomFolder)
-				if frontPos and backPos then
-					appendMoveTarget(backPos)
-					appendMoveTarget(frontPos)
+				local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder, heightOffset)
+				
+				if exitFront and exitBack then
+					appendMoveTarget(exitFront)
+					appendMoveTarget(exitBack)
+				end
+				if entBack and entFront then
+					appendMoveTarget(entBack)
+					appendMoveTarget(entFront)
 				end
 			end
 		end
 	end
 
-	-- State management for active rebound sweeps
 	local currentReboundState = 0
 	local endRoomNumber = latestRoomValue.Value + 1
 
 	-- Initial sweep (Rebound 0)
 	buildForwardPath(targetSpawnNumber, endRoomNumber)
 
-	-- Dynamically append new rooms if player opens doors during movement
+	-- Dynamically append newly opened rooms
 	local roomAddedConnection
 	roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
 		local roomNum = tonumber(child.Name)
 		if roomNum and roomNum > endRoomNumber then
 			endRoomNumber = roomNum
-			-- If in forward mode or initial sweep, extend path into newly opened room
 			if currentReboundState % 2 == 0 then
-				local frontPos, backPos = getEntrancePositions(child)
-				if frontPos and backPos then
-					appendMoveTarget(frontPos)
-					appendMoveTarget(backPos)
-				end
+				local entFront, entBack, exitFront = getRoomPositions(child, heightOffset)
+				if entFront then appendMoveTarget(entFront) end
+				if entBack then appendMoveTarget(entBack) end
+				if exitFront then appendMoveTarget(exitFront) end
 			end
 		end
 	end)
@@ -269,13 +280,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Continuous execution stream with dynamic Rebound iteration
+	-- Execution Loop
 	local queueIndex = 2
 	local active = true
 
 	while active do
 		if queueIndex > #globalQueue then
-			-- Reached end of current queue segment
 			if isRebound and currentReboundState < targetReboundCount then
 				currentReboundState += 1
 				
@@ -341,7 +351,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		roomAddedConnection:Disconnect()
 	end
 
-	-- Gravity fall sequence before despawning
+	-- Despawn Gravity Fall
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
@@ -375,9 +385,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			CFrameValue:Destroy()
 		end
 
-		-- Stop entity audio tracks
 		stopEntitySounds(model)
-
 		model:Destroy()
 	end
 end
