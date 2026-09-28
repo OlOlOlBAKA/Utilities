@@ -15,14 +15,32 @@ type MovementOptions = {
 	DelayTime: number?
 }
 
-local raycastParams = RaycastParams.new()
-raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+-- Align to floor inside room geometry (specifically inspecting "Parts" folders)
+local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
+	local filterTargets = {}
 
-local function alignToFloor(position: Vector3, heightOffset: number): Vector3
-	local rayResult = Workspace:Raycast(position + Vector3.new(0, 5, 0), Vector3.new(0, -50, 0), raycastParams)
+	-- Include room "Parts" folders or rooms directly in raycast whitelist
+	for _, room in ipairs(currentRooms:GetChildren()) do
+		local partsFolder = room:FindFirstChild("Parts")
+		if partsFolder then
+			table.insert(filterTargets, partsFolder)
+		else
+			table.insert(filterTargets, room)
+		end
+	end
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Include
+	raycastParams.FilterDescendantsInstances = filterTargets
+
+	-- Start raycast from 2 studs above to stay below ceilings, raycasting down 25 studs
+	local startPos = position + Vector3.new(0, 2, 0)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -25, 0), raycastParams)
+
 	if rayResult then
 		return rayResult.Position + Vector3.new(0, heightOffset, 0)
 	end
+
 	return position
 end
 
@@ -78,7 +96,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local heightOffset = options.HeightOffset or 2.5
 	local delayTime = options.DelayTime or 0
 
-	-- Automatically parent model to Workspace if needed
+	-- Auto-parent model to Workspace if not parented
 	if model.Parent ~= Workspace then
 		model.Parent = Workspace
 	end
@@ -91,8 +109,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		warn("PathfindingMovement: CurrentRooms or GameData.LatestRoom missing!")
 		return
 	end
-
-	raycastParams.FilterDescendantsInstances = { model }
 
 	local latestRoomNumber = latestRoomValue.Value
 	local targetSpawnNumber = math.max(0, latestRoomNumber - 10)
@@ -127,7 +143,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		addRoomToPath(roomNum)
 	end
 
-	-- Dynamically append rooms as new ones generate
+	-- Dynamic room listener connection
 	local roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
 		local roomNum = tonumber(child.Name)
 		if roomNum and roomNum > highestProcessedRoom then
@@ -144,9 +160,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Teleport model to start position
+	-- Set initial position
 	local currentNode = firstNode
-	local initialPosition = alignToFloor(currentNode:getPosition(), heightOffset)
+	local initialPosition = alignToFloor(currentNode:getPosition(), heightOffset, currentRooms)
 
 	if model:IsA("Model") then
 		model:PivotTo(CFrame.new(initialPosition))
@@ -154,12 +170,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		model.Position = initialPosition
 	end
 
-	-- Wait delay time before starting movement
+	-- Optional delay before running
 	if delayTime > 0 then
 		task.wait(delayTime)
 	end
 
-	-- Travel node by node
+	-- Travel node loop
 	while currentNode do
 		local nextNodes = currentNode:getAllNext()
 
@@ -180,7 +196,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		for i = 1, #waypoints do
 			local rawTargetPos = waypoints[i].Position
-			local targetPos = alignToFloor(rawTargetPos, heightOffset)
+			local targetPos = alignToFloor(rawTargetPos, heightOffset, currentRooms)
 
 			local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 			local segmentDistance = (targetPos - currentPos).Magnitude
@@ -216,6 +232,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	roomAddedConnection:Disconnect()
+
+	-- Always despawn model upon path completion
+	if model then
+		model:Destroy()
+	end
 end
 
 return PathfindingMovement
