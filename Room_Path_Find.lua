@@ -47,7 +47,7 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Fast Raycast-based Floor Alignment with Instance Caching
+-- Fast Raycast-based Floor Alignment with strict floor filtering
 local roomFloorCache: { [Instance]: { BasePart } } = {}
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -59,7 +59,7 @@ local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	for _, descendant in ipairs(roomFolder:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			local name = string.lower(descendant.Name)
-			local isCeiling = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top")
+			local isCeiling = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top") or string.find(name, "wall")
 			if not isCeiling then
 				table.insert(floorParts, descendant)
 			end
@@ -80,8 +80,9 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
 	raycastParams.FilterDescendantsInstances = floorParts
 
-	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
+	-- Cast ray down from a slight height above current position to lock to ground level
+	local startPos = Vector3.new(position.X, position.Y + 5, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -20, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z)
@@ -90,13 +91,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Fallback calculation or Rebound turning points keep raw ground position (unaffected by HeightOffset)
-local function getRoomGroundCenter(roomFolder: Instance): Vector3
-	local cf, size = roomFolder:GetBoundingBox()
-	return alignToFloorLevel(cf.Position, roomFolder)
-end
-
--- Computes path waypoints applying HeightOffset to all movement nodes
+-- Computes path waypoints applying HeightOffset to all intermediate nodes
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -119,7 +114,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return rawWaypoints
 	end
 
-	-- Fallback linear calculation if pathfinding fails (ground node position remains unaffected by HeightOffset)
+	-- Fallback linear calculation if pathfinding fails
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 5))
 
@@ -127,10 +122,52 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
 		local groundPos = alignToFloorLevel(interpolated, roomFolder)
-		table.insert(rawWaypoints, groundPos) -- Unaffected by height offset on path failure
+		table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
 	end
 
 	return rawWaypoints
+end
+
+-- Get target position 3 studs in front of RoomEntrance
+local function getEntranceTargetPosition(roomFolder: Instance, heightOffset: number): Vector3?
+	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
+	if not roomEntrance then return nil end
+
+	local cf: CFrame? = nil
+	if roomEntrance:IsA("BasePart") then
+		cf = roomEntrance.CFrame
+	elseif roomEntrance:IsA("Model") then
+		cf = roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()
+	end
+
+	if cf then
+		-- Position 3 studs in front along local Z-axis
+		local frontPos = (cf * CFrame.new(0, 0, 3)).Position
+		local groundPos = alignToFloorLevel(frontPos, roomFolder)
+		return groundPos + Vector3.new(0, heightOffset, 0)
+	end
+
+	return nil
+end
+
+-- Rebound/Stop point strictly at floor level (unaffected by HeightOffset)
+local function getEntranceGroundPosition(roomFolder: Instance): Vector3?
+	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
+	if not roomEntrance then return nil end
+
+	local cf: CFrame? = nil
+	if roomEntrance:IsA("BasePart") then
+		cf = roomEntrance.CFrame
+	elseif roomEntrance:IsA("Model") then
+		cf = roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()
+	end
+
+	if cf then
+		local frontPos = (cf * CFrame.new(0, 0, 3)).Position
+		return alignToFloorLevel(frontPos, roomFolder)
+	end
+
+	return nil
 end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
@@ -209,7 +246,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Compute and move through waypoints
+	-- Compute and move through waypoints to target
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?)
 		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, roomFolder)
 		for _, nodePos in ipairs(waypoints) do
@@ -217,14 +254,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Position Entity at Spawn Point (Rebound / Spawn stop point unaffected by HeightOffset)
+	-- Position Entity at Spawn Point (Ground level, unaffected by HeightOffset)
 	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 	if spawnRoom then
-		local spawnCenterGround = getRoomGroundCenter(spawnRoom)
-		if model:IsA("Model") then
-			model:PivotTo(CFrame.new(spawnCenterGround))
-		elseif model:IsA("BasePart") then
-			model.Position = spawnCenterGround
+		local spawnPos = getEntranceGroundPosition(spawnRoom)
+		if spawnPos then
+			if model:IsA("Model") then
+				model:PivotTo(CFrame.new(spawnPos))
+			elseif model:IsA("BasePart") then
+				model.Position = spawnPos
+			end
 		end
 	end
 
@@ -239,37 +278,42 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		endRoomNumber = latestRoomValue.Value + 1
 
 		if currentReboundState % 2 == 0 then
-			-- Forward Pass
+			-- Forward Pass: Pathfind to 3 studs in front of RoomEntrance
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local targetCenter = getRoomGroundCenter(roomFolder)
-					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					
-					moveAlongWaypoints(currentPos, targetCenter, roomFolder)
+					task.wait(0.05) -- 0.05s buffer delay per room for path compute stability
+					local targetPos = getEntranceTargetPosition(roomFolder, heightOffset)
+					if targetPos then
+						local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+						moveAlongWaypoints(currentPos, targetPos, roomFolder)
+					end
 				end
-				task.wait()
 			end
 		else
-			-- Backward Pass (Rebound)
+			-- Backward Pass (Rebound): Pathfind in reverse to 3 studs in front of RoomEntrance
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local targetCenter = getRoomGroundCenter(roomFolder)
-					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					
-					moveAlongWaypoints(currentPos, targetCenter, roomFolder)
+					task.wait(0.05) -- 0.05s buffer delay per room for path compute stability
+					local targetPos = getEntranceTargetPosition(roomFolder, heightOffset)
+					if targetPos then
+						local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+						moveAlongWaypoints(currentPos, targetPos, roomFolder)
+					end
 				end
-				task.wait()
 			end
 		end
 
-		-- Rebound Stop Point Handlers (Unaffected by HeightOffset)
+		-- Rebound Stop Handlers (Ground level, unaffected by HeightOffset)
 		if isRebound and currentReboundState < targetReboundCount then
-			local currentRoom = currentRooms:FindFirstChild(tostring(currentReboundState % 2 == 0 and endRoomNumber or targetSpawnNumber))
+			local stopRoomNum = (currentReboundState % 2 == 0) and endRoomNumber or targetSpawnNumber
+			local currentRoom = currentRooms:FindFirstChild(tostring(stopRoomNum))
 			if currentRoom then
-				local stopPointGround = getRoomGroundCenter(currentRoom)
-				moveDirectTo(stopPointGround)
+				local stopPointGround = getEntranceGroundPosition(currentRoom)
+				if stopPointGround then
+					moveDirectTo(stopPointGround)
+				end
 			end
 
 			currentReboundState += 1
