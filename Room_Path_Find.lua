@@ -41,51 +41,29 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Gets stable ground height by raycasting down specifically for large main floor parts
-local function getStableFloorY(position: Vector3, roomFolder: Instance?): number
-	local candidates = {}
-
-	if roomFolder then
-		local partsFolder = roomFolder:FindFirstChild("Parts")
-		local searchContainer = partsFolder or roomFolder
-
-		for _, descendant in ipairs(searchContainer:GetDescendants()) do
-			if descendant:IsA("BasePart") then
-				local name = string.lower(descendant.Name)
-				-- Only target primary floor geometry (ignore small props, steps, or thresholds)
-				if (name == "floor" or string.find(name, "basefloor") or string.find(name, "mainfloor")) and descendant.Size.X > 4 and descendant.Size.Z > 4 then
-					table.insert(candidates, descendant)
-				end
-			end
-		end
-	end
-
-	-- Fallback raycast params if specific floor parts aren't tagged
+-- Fallback floor alignment only used if pathfinding fails
+local function getFallbackFloorY(position: Vector3, heightOffset: number): Vector3
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	if #candidates > 0 then
-		raycastParams.FilterDescendantsInstances = candidates
-	else
-		raycastParams.FilterDescendantsInstances = Workspace:GetChildren()
-	end
+	raycastParams.FilterDescendantsInstances = {Workspace:FindFirstChild("CurrentRooms") or Workspace}
 
 	local startPos = Vector3.new(position.X, position.Y + 10, position.Z)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -50, 0), raycastParams)
 
 	if rayResult then
-		return rayResult.Position.Y
+		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
 	end
 
-	return position.Y
+	return position
 end
 
--- Computes sub-waypoints between start and end positions
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3): {Vector3}
+-- Computes sub-waypoints preserving 3D stair / height transitions
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
 		AgentCanJump = false,
-		WaypointSpacing = 2,
+		WaypointSpacing = 2.5,
 		Costs = { Default = 1 }
 	})
 
@@ -96,18 +74,20 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3): {Vector
 	local rawWaypoints = {}
 	if success and primaryPath.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(primaryPath:GetWaypoints()) do
-			table.insert(rawWaypoints, wp.Position)
+			-- Preserve vertical height computed by Roblox pathfinding (stairs, ramps, slopes)
+			table.insert(rawWaypoints, wp.Position + Vector3.new(0, heightOffset, 0))
 		end
 		return rawWaypoints
 	end
 
-	-- Fallback linear interpolation points
+	-- Fallback linear interpolation points if pathfinding fails entirely
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 4))
 
 	for i = 1, steps do
 		local alpha = i / steps
-		table.insert(rawWaypoints, startPos:Lerp(endPos, alpha))
+		local interpolated = startPos:Lerp(endPos, alpha)
+		table.insert(rawWaypoints, getFallbackFloorY(interpolated, heightOffset))
 	end
 
 	return rawWaypoints
@@ -185,23 +165,18 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local frontPos, backPos = getEntrancePositions(roomFolder)
 			
 			if frontPos and backPos then
-				-- Calculate floor Y level once per room segment for perfect stability
-				local roomFloorY = getStableFloorY(frontPos, roomFolder) + heightOffset
-				
-				local stableFront = Vector3.new(frontPos.X, roomFloorY, frontPos.Z)
-				local stableBack = Vector3.new(backPos.X, roomFloorY, backPos.Z)
-
 				if lastTargetPos then
-					local subPoints = computePathWaypoints(lastTargetPos, stableFront)
+					-- Compute path steps keeping stair/slope elevation
+					local subPoints = computePathWaypoints(lastTargetPos, frontPos, heightOffset)
 					for _, pt in ipairs(subPoints) do
-						table.insert(globalWaypointQueue, Vector3.new(pt.X, roomFloorY, pt.Z))
+						table.insert(globalWaypointQueue, pt)
 					end
 				else
-					table.insert(globalWaypointQueue, stableFront)
+					table.insert(globalWaypointQueue, frontPos + Vector3.new(0, heightOffset, 0))
 				end
 
-				table.insert(globalWaypointQueue, stableBack)
-				lastTargetPos = stableBack
+				table.insert(globalWaypointQueue, backPos + Vector3.new(0, heightOffset, 0))
+				lastTargetPos = backPos
 				highestProcessedRoom = roomNum
 			end
 		end
@@ -238,7 +213,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Smooth continuous execution loop
+	-- Smooth continuous execution loop through stair steps and room transitions
 	local queueIndex = 2
 	local active = true
 
@@ -253,15 +228,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		local targetPos = globalWaypointQueue[queueIndex]
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-		
-		-- Flatten movement direction so orientation stays horizontal
-		local flatCurrentPos = Vector3.new(currentPos.X, targetPos.Y, currentPos.Z)
-		local segmentDistance = (targetPos - flatCurrentPos).Magnitude
+		local segmentDistance = (targetPos - currentPos).Magnitude
 
 		if segmentDistance > 0.05 then
 			local travelTime = segmentDistance / speed
-			local lookTarget = targetPos + (targetPos - flatCurrentPos).Unit
-			local targetCFrame = CFrame.lookAt(targetPos, Vector3.new(lookTarget.X, targetPos.Y, lookTarget.Z))
+			local direction = (targetPos - currentPos).Unit
+			
+			-- Look target points along 3D move direction (preserves looking up/down stairs naturally)
+			local lookTarget = targetPos + direction
+			local targetCFrame = CFrame.lookAt(targetPos, lookTarget)
 			local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
 			if model:IsA("BasePart") then
