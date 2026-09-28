@@ -1,4 +1,4 @@
-local PathfindingMovement = {}
+Local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
 local TweenService = game:GetService("TweenService")
@@ -284,18 +284,19 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
-			-- Backward Pass (Rebound) - Navigates only via exit points
+			-- Backward Pass (Rebound)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local _, _, exitFront, exitBack = getRoomPositions(roomFolder)
+					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					if exitFront then 
-						moveAlongWaypoints(currentPos, exitFront, roomFolder) 
-					end
-					if exitBack then 
+					if entBack then 
 						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
+						moveAlongWaypoints(currentPos, entBack, roomFolder) 
+					end
+					if entFront then 
+						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+						moveAlongWaypoints(currentPos, entFront, roomFolder) 
 					end
 				end
 				task.wait() -- Prevents frame spikes during room iteration
@@ -358,3 +359,5 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 end
 
 return PathfindingMovement
+
+This script the backward part "local entFront, entBack, exitFront, exitBack" keep only exitFront and exitBack
