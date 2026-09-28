@@ -92,6 +92,13 @@ end
 
 -- Computes path sub-waypoints on demand (HeightOffset strictly applied ONLY to path nodes)
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
+	local distance = (endPos - startPos).Magnitude
+
+	-- Skip pathfinding overhead for tiny threshold distances to prevent tweaking
+	if distance < 6 then
+		return { endPos }
+	end
+
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -114,7 +121,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	end
 
 	-- Fallback linear path
-	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 5))
 
 	for i = 1, steps do
@@ -273,7 +279,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					end
 					if entBack then
 						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entBack, roomFolder)
+						moveDirectTo(entBack)
 					end
 
 					if roomNum == endRoomNumber and exitFront then
@@ -281,31 +287,26 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, exitFront, roomFolder)
 					end
 				end
-				task.wait() -- Prevents frame spikes during room iteration
+				task.wait()
 			end
 		else
-			-- Backward Pass (Rebound)
+			-- Backward Pass (Smooth Door Threshold Passing)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
 					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 
+					-- Travel to Exit threshold, then pass straight through door
 					if exitFront then moveAlongWaypoints(currentPos, exitFront, roomFolder) end
-					if exitBack then 
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
-					end
+					if exitBack then moveDirectTo(exitBack) end
 					if entBack then 
 						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 						moveAlongWaypoints(currentPos, entBack, roomFolder) 
 					end
-					if entFront then 
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entFront, roomFolder) 
-					end
+					if entFront then moveDirectTo(entFront) end
 				end
-				task.wait() -- Prevents frame spikes during room iteration
+				task.wait()
 			end
 		end
 
@@ -360,7 +361,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		model:Destroy()
 	end
 	
-	-- Clean cache when done
 	table.clear(roomFloorCache)
 end
 
