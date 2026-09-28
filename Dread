@@ -1,0 +1,462 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local ContentProvider = game:GetService("ContentProvider")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Camera = workspace.CurrentCamera
+
+local modulesClient = ReplicatedStorage:WaitForChild("ModulesClient")
+local ModuleEvents = require(modulesClient:WaitForChild("Module_Events"))
+
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+local mainUI = playerGui:WaitForChild("MainUI")
+local initiator = mainUI:WaitForChild("Initiator")
+local mainGame = initiator:WaitForChild("Main_Game")
+local remoteListener = mainGame:WaitForChild("RemoteListener")
+
+local modulesFolder = remoteListener:WaitForChild("Modules")
+local dreadFolder = modulesFolder:WaitForChild("Dread")
+
+local ambienceColdSound = dreadFolder:WaitForChild("AmbienceCold")
+local ambienceSound = dreadFolder:FindFirstChild("Ambience")
+local ambienceEndSound = dreadFolder:FindFirstChild("AmbienceEnd")
+local soundBreath = dreadFolder:FindFirstChild("SoundBreath")
+
+task.spawn(function()
+	pcall(function()
+		local soundsToPreload = {}
+		if ambienceColdSound then table.insert(soundsToPreload, ambienceColdSound) end
+		if ambienceSound then table.insert(soundsToPreload, ambienceSound) end
+		if ambienceEndSound then table.insert(soundsToPreload, ambienceEndSound) end
+		if soundBreath then table.insert(soundsToPreload, soundBreath) end
+
+		ContentProvider:PreloadAsync(soundsToPreload)
+	end)
+end)
+
+local gameData = ReplicatedStorage:FindFirstChild("GameData")
+if not gameData then
+	gameData = Instance.new("Folder")
+	gameData.Name = "GameData"
+	gameData.Parent = ReplicatedStorage
+end
+
+local latestRoomFolder = gameData:FindFirstChild("LatestRoom")
+if not latestRoomFolder then
+	latestRoomFolder = Instance.new("IntValue")
+	latestRoomFolder.Name = "LatestRoom"
+	latestRoomFolder.Value = 1
+	latestRoomFolder.Parent = gameData
+end
+
+local function TurnOffAllRoomLights()
+	local currentRooms = workspace:FindFirstChild("CurrentRooms")
+	if not currentRooms then return end
+
+	local targetAmbient = Color3.fromRGB(0, 0, 0)
+	local nextRoomIndex = latestRoomFolder.Value + 1
+	local nextRoom = currentRooms:FindFirstChild(tostring(nextRoomIndex))
+
+	for _, room in ipairs(currentRooms:GetChildren()) do
+		if room ~= nextRoom then
+			task.spawn(function()
+				pcall(function()
+					ModuleEvents.toggle(room, false, targetAmbient)
+				end)
+			end)
+		end
+	end
+end
+
+local sanityCC = Lighting:FindFirstChild("Sanity")
+if not sanityCC then
+	sanityCC = Instance.new("ColorCorrectionEffect")
+	sanityCC.Name = "Sanity"
+	sanityCC.Enabled = false
+	sanityCC.Parent = Lighting
+end
+
+local liveSanity = sanityCC:Clone()
+liveSanity.Name = "LiveSanity"
+liveSanity.Enabled = false
+liveSanity.Parent = Camera
+
+local soundMain = SoundService:FindFirstChild("Main")
+if not soundMain then
+	soundMain = Instance.new("Folder")
+	soundMain.Name = "Main"
+	soundMain.Parent = SoundService
+end
+
+local sanityEq = soundMain:FindFirstChild("SanityEqualizer")
+if not sanityEq then
+	sanityEq = Instance.new("EqualizerSoundEffect")
+	sanityEq.Name = "SanityEqualizer"
+	sanityEq.Enabled = false
+	sanityEq.Parent = soundMain
+end
+
+local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+local camShakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value, function(shakeCFrame)
+	if workspace.CurrentCamera then
+		workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame * shakeCFrame
+	end
+end)
+camShakerInstance:Start()
+
+local function PlayDreadJumpscareUI(controller)
+	controller.deathtick = tick() + 5
+
+	local jumpscareFolder = mainUI:FindFirstChild("Jumpscare")
+	local jumpscare_Dread = jumpscareFolder and jumpscareFolder:FindFirstChild("Jumpscare_Dread")
+	
+	if jumpscare_Dread then
+		jumpscare_Dread.Visible = true
+		jumpscare_Dread.AnchorPoint = Vector2.new(0.5, 0.5)
+		jumpscare_Dread.Position = UDim2.new(0.5, 0, 0.5, 0)
+	end
+
+	local dreadJumpscareScript = remoteListener:FindFirstChild("Jumpscares") and remoteListener.Jumpscares:FindFirstChild("Dread")
+	local boomSound = dreadJumpscareScript and dreadJumpscareScript:FindFirstChild("Boom")
+	local killSound = dreadJumpscareScript and dreadJumpscareScript:FindFirstChild("Kill")
+
+	if boomSound then
+		boomSound.SoundGroup = nil
+		boomSound.TimePosition = 0
+		boomSound.Volume = 1
+		boomSound:Play()
+	end
+
+	if killSound then
+		killSound.SoundGroup = nil
+		killSound.TimePosition = 0
+		killSound.Volume = 1
+
+		local eq = killSound:FindFirstChild("EqualizerSoundEffect")
+		if eq then
+			eq.LowGain = 0
+			eq.MidGain = 0
+			eq.HighGain = 0
+		end
+
+		killSound:Play()
+	end
+
+	if jumpscare_Dread then
+		for _, child in ipairs(jumpscare_Dread:GetChildren()) do
+			if child:IsA("ImageLabel") or child:IsA("Frame") then
+				child.AnchorPoint = Vector2.new(0.5, 0.5)
+				child.Position = UDim2.new(0.5, 0, 0.5, 0)
+				child.ImageTransparency = 0
+			end
+		end
+
+		for i = 1, 6 do
+			local frame = jumpscare_Dread:FindFirstChild("Frame" .. i) or jumpscare_Dread:FindFirstChildWhichIsA("ImageLabel")
+			if frame then
+				frame.ImageTransparency = 0
+				frame.Rotation = math.random(-20, 20)
+			end
+
+			local randX = math.random(-25, 25)
+			local randY = math.random(-25, 25)
+			jumpscare_Dread.Position = UDim2.new(0.5 + randX / 1000, 0, 0.5 + randY / 1000, 0)
+			jumpscare_Dread.Rotation = math.random(-15, 15)
+
+			task.wait(0.066)
+		end
+
+		if killSound and killSound:FindFirstChild("EqualizerSoundEffect") then
+			local eq = killSound.EqualizerSoundEffect
+			TweenService:Create(eq, TweenInfo.new(1, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut), { LowGain = -20, MidGain = -80, HighGain = -80 }):Play()
+		end
+
+		if killSound then
+			TweenService:Create(killSound, TweenInfo.new(2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Volume = 0 }):Play()
+		end
+
+		jumpscare_Dread.BackgroundTransparency = 0
+		controller.deathtick = tick() - 1
+		task.wait(0.5)
+		jumpscare_Dread.BackgroundTransparency = 1
+		jumpscare_Dread.Rotation = 0
+		jumpscare_Dread.Visible = false
+	end
+
+	local activeChar = LocalPlayer.Character
+	local activeHumanoid = activeChar and activeChar:FindFirstChildOfClass("Humanoid")
+	if activeHumanoid then
+		activeHumanoid:TakeDamage(activeHumanoid.MaxHealth)
+	end
+end
+
+local isDreadActive = false
+
+local function RunDread(controller, mode)
+	if not controller or controller.dead then return end
+
+	local dreadVignette = mainUI:FindFirstChild("MainFrame") and mainUI.MainFrame:FindFirstChild("DreadVignette")
+
+	if mode == "clear" then
+		isDreadActive = false
+
+		if ambienceColdSound and ambienceColdSound.IsPlaying then
+			TweenService:Create(ambienceColdSound, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Volume = 0 }):Play()
+			task.delay(1, function()
+				ambienceColdSound:Stop()
+				ambienceColdSound.Volume = 0.9
+			end)
+		end
+
+		TweenService:Create(liveSanity, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+			Saturation = 0, Brightness = 0, Contrast = 0, TintColor = Color3.new(1, 1, 1)
+		}):Play()
+
+	elseif mode == "cold" then
+		local spawnRoomValue = latestRoomFolder.Value
+		isDreadActive = true
+		liveSanity.Enabled = true
+
+		TweenService:Create(liveSanity, TweenInfo.new(3, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+			Saturation = -0.2, Brightness = 0.02, Contrast = 0.04, TintColor = Color3.new(1, 1, 1)
+		}):Play()
+
+		if ambienceColdSound then
+			ambienceColdSound.Volume = 0.9
+			ambienceColdSound:Play()
+		end
+
+		while isDreadActive do
+			if soundBreath and not soundBreath.IsPlaying then
+				soundBreath:Play()
+			end
+			task.wait(1.9)
+			if not isDreadActive or latestRoomFolder.Value ~= spawnRoomValue then
+				break
+			end
+		end
+
+		if ambienceColdSound then
+			ambienceColdSound:Stop()
+		end
+
+	elseif mode == "spawn" then
+		TurnOffAllRoomLights()
+
+		isDreadActive = true
+		local spawnRoomValue = latestRoomFolder.Value
+
+		local baseEq = soundMain:FindFirstChild("SanityEqualizer")
+		local liveEq = baseEq and baseEq:Clone()
+		if liveEq then
+			liveEq.Name = "SanityEqualizerLive"
+			liveEq.Enabled = true
+			liveEq.Parent = soundMain
+		end
+
+		local totalSaturation = 1
+		for _, effect in ipairs(Lighting:GetChildren()) do
+			if effect:IsA("ColorCorrectionEffect") and effect.Enabled and effect ~= liveSanity then
+				totalSaturation += effect.Saturation
+			end
+		end
+
+		liveSanity.Enabled = true
+		TweenService:Create(liveSanity, TweenInfo.new(4.6, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+			Brightness = 0.2, Contrast = 0.4, Saturation = -totalSaturation, TintColor = Color3.new(1, 1, 1)
+		}):Play()
+
+		if liveEq then
+			TweenService:Create(liveEq, TweenInfo.new(4.6, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+				LowGain = 0, MidGain = -20, HighGain = -40
+			}):Play()
+		end
+
+		local shake1, shake2
+		if controller.camShaker and controller.camShaker.StartShake then
+			shake1 = controller.camShaker:StartShake(1, 16, 4.6, Vector3.new(0, 0, 0))
+			shake2 = controller.camShaker:StartShake(8, 1, 4.6, Vector3.new(0, 0, 0))
+		end
+
+		if ambienceSound then
+			ambienceSound.SoundGroup = nil
+			ambienceSound.TimePosition = 0
+			ambienceSound.Volume = 1
+			ambienceSound:Play()
+		end
+
+		task.wait(4.6)
+
+		spawnRoomValue = latestRoomFolder.Value
+
+		if dreadVignette then
+			dreadVignette.ImageColor3 = Color3.new(1, 1, 1)
+			dreadVignette.Size = UDim2.new(2, 0, 2, 0)
+			dreadVignette.Visible = true
+
+			TweenService:Create(dreadVignette, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+				ImageColor3 = Color3.new(0, 0, 0), Size = UDim2.new(1.2, 0, 1.2, 0)
+			}):Play()
+		end
+
+		local dreadModelTemplate = ReplicatedStorage:FindFirstChild("Entities") and ReplicatedStorage.Entities:FindFirstChild("Dread")
+		if not dreadModelTemplate then
+			warn("[Dread] Missing ReplicatedStorage.Entities.Dread model")
+			isDreadActive = false
+			return
+		end
+
+		local dreadEntity = dreadModelTemplate:Clone()
+		local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+		local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+
+		if hrp and dreadEntity.PrimaryPart then
+			dreadEntity.PrimaryPart.CFrame = CFrame.new(hrp.Position + (Camera.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit * -64)
+		end
+
+		dreadEntity.Parent = workspace
+		if dreadEntity.PrimaryPart and dreadEntity.PrimaryPart:FindFirstChild("Footsteps") then dreadEntity.PrimaryPart.Footsteps:Play() end
+		if dreadEntity.PrimaryPart and dreadEntity.PrimaryPart:FindFirstChild("PlaySound") then dreadEntity.PrimaryPart.PlaySound:Play() end
+
+		local chaseSpeed = 9
+		task.delay(10, function()
+			if isDreadActive then
+				chaseSpeed = 11
+				task.wait(10)
+				if isDreadActive then chaseSpeed = 13 end
+			end
+		end)
+
+		while isDreadActive and not controller.dead do
+			local dt = task.wait()
+
+			if latestRoomFolder.Value ~= spawnRoomValue then
+				break
+			end
+
+			local activeChar = LocalPlayer.Character
+			local activeHRP = activeChar and (activeChar:FindFirstChild("HumanoidRootPart") or activeChar.PrimaryPart)
+			if not activeHRP or not dreadEntity.PrimaryPart then break end
+
+			local lookVector = CFrame.lookAt(dreadEntity.PrimaryPart.Position, activeHRP.Position - activeHRP.Velocity).LookVector
+			local magnitude = (dreadEntity.PrimaryPart.Position - activeHRP.Position).Magnitude
+			local proximityRatio = math.clamp(magnitude / 50, 0, 1)
+
+			dreadEntity.PrimaryPart.CFrame = CFrame.new(dreadEntity.PrimaryPart.Position + lookVector * (chaseSpeed * dt))
+
+			if dreadVignette then
+				dreadVignette.Rotation = math.random(0, 359)
+				dreadVignette.Position = UDim2.new(0.5 + math.random(-10, 10) / 1000, 0, 0.5 + math.random(-10, 10) / 1000, 0)
+				local swirl = dreadVignette:FindFirstChild("Swirl")
+				if swirl then
+					swirl.ImageTransparency = proximityRatio
+					swirl.Rotation = math.random(0, 359)
+					swirl.Size = UDim2.new(proximityRatio + 1, 0, proximityRatio + 1, 0)
+				end
+			end
+
+			if magnitude < 7 then
+				pcall(function()
+					if ReplicatedStorage:FindFirstChild("RemotesFolder") and ReplicatedStorage.RemotesFolder:FindFirstChild("Dread") then
+						ReplicatedStorage.RemotesFolder.Dread:FireServer()
+					end
+				end)
+
+				activeHRP.Anchored = true
+				activeChar:PivotTo(CFrame.new(activeHRP.Position, dreadEntity.PrimaryPart.Position))
+				controller.stopcam = true
+				Camera.CameraType = Enum.CameraType.Scriptable
+
+				for _, part in ipairs(dreadEntity:GetDescendants()) do
+					if part:IsA("ParticleEmitter") then
+						part:Emit(5)
+					end
+				end
+
+				if ambienceSound then 
+					ambienceSound:Stop() 
+				end
+
+				if dreadVignette then
+					dreadVignette.ImageColor3 = Color3.new(1, 1, 1)
+					TweenService:Create(dreadVignette, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+						ImageColor3 = Color3.new(0, 0, 0), Size = UDim2.new(5, 0, 5, 0)
+					}):Play()
+					if dreadVignette:FindFirstChild("Swirl") then
+						dreadVignette.Swirl.ImageTransparency = 1
+					end
+				end
+
+				if controller.cam then
+					local camCF = CFrame.new(controller.cam.CFrame.Position, dreadEntity.PrimaryPart.Position + Vector3.new(0, 1, 0))
+					local tween = TweenService:Create(controller.cam, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
+					tween:Play()
+					tween.Completed:Wait()
+				end
+
+				task.wait(2)
+
+				PlayDreadJumpscareUI(controller)
+
+				activeHRP.Anchored = false
+				controller.stopcam = false
+				break
+			end
+		end
+
+		isDreadActive = false
+		if ambienceSound then ambienceSound:Stop() end
+		if liveEq then liveEq:Destroy() end
+		if dreadVignette then dreadVignette.Visible = false end
+		if dreadEntity then dreadEntity:Destroy() end
+		if shake1 then shake1:StartFadeOut(0.1) end
+		if shake2 then shake2:StartFadeOut(0.1) end
+
+		Camera.CameraType = Enum.CameraType.Custom
+
+		if not controller.dead then
+			if ambienceEndSound then
+				ambienceEndSound.TimePosition = 0
+				ambienceEndSound.Volume = 0.8
+				ambienceEndSound:Play()
+			end
+
+			TweenService:Create(liveSanity, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Saturation = 0, Contrast = 0, Brightness = 0, TintColor = Color3.new(1, 1, 1)
+			}):Play()
+			task.wait(1)
+		end
+
+		liveSanity.Enabled = false
+	end
+end
+
+local controller = {
+	dead = false,
+	cam = workspace.CurrentCamera,
+	char = Character,
+	skybox = workspace,
+	stopcam = false,
+	camShaker = camShakerInstance,
+	deathtick = tick()
+}
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+	controller.char = newChar
+	controller.cam = workspace.CurrentCamera
+	controller.dead = false
+end)
+
+if Character:FindFirstChildOfClass("Humanoid") then
+	Character:FindFirstChildOfClass("Humanoid").Died:Connect(function()
+		controller.dead = true
+	end)
+end
+
+task.spawn(function()
+	RunDread(controller, "spawn")
+end)
