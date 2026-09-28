@@ -5,8 +5,8 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local PathfindingService = game:GetService("PathfindingService")
 
--- Require the custom Path module
 local PathModule = require(ReplicatedStorage:WaitForChild("ModulesShared"):WaitForChild("Path"))
 
 type MovementOptions = {
@@ -16,14 +16,13 @@ type MovementOptions = {
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
 	
-	-- Rebound System Options
 	Rebound: boolean?,
 	ReboundCount: number?,
 	ReboundTime: number?,
 	ReboundDelayTime: number?
 }
 
--- Disable Collisions on all entity parts
+-- Disable Collisions on entity parts
 local function disableCollision(instance: Instance)
 	if instance:IsA("BasePart") then
 		instance.CanCollide = false
@@ -35,7 +34,7 @@ local function disableCollision(instance: Instance)
 	end
 end
 
--- Stop playing audio on despawn
+-- Stop sounds on despawn
 local function stopEntitySounds(instance: Instance)
 	if not instance then return end
 	if instance:IsA("Sound") then instance:Stop() end
@@ -44,7 +43,7 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Searches for any folder matching path/node keywords using string.match
+-- Searches for any folder matching path/node keywords
 local function findNodesContainer(roomFolder: Instance): Instance?
 	for _, child in ipairs(roomFolder:GetChildren()) do
 		local name = string.lower(child.Name)
@@ -55,7 +54,7 @@ local function findNodesContainer(roomFolder: Instance): Instance?
 	return nil
 end
 
--- Extract vector positions strictly from the node/path container
+-- Extract vector positions from the node/path container
 local function getRoomNodes(roomFolder: Instance): {Vector3}
 	local nodes = {}
 	local nodesContainer = findNodesContainer(roomFolder)
@@ -63,7 +62,6 @@ local function getRoomNodes(roomFolder: Instance): {Vector3}
 	if nodesContainer then
 		local children = nodesContainer:GetChildren()
 		
-		-- Sort nodes numerically (1, 2, 3...) or alphabetically
 		table.sort(children, function(a, b)
 			local numA = tonumber(string.match(a.Name, "%d+"))
 			local numB = tonumber(string.match(b.Name, "%d+"))
@@ -85,53 +83,69 @@ local function getRoomNodes(roomFolder: Instance): {Vector3}
 	return nodes
 end
 
--- Dynamic Fan-Raycast: Scans surrounding angles to find an unblocked path around obstacles
-local function generateBypassPath(model: Instance, targetRoom: Instance): {Vector3}
-	local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-	local targetPos = targetRoom:GetPivot().Position
-
+-- Raycasts from Ceiling to Floor to check if objects in "Parts" folder block the room
+local function generateSmartPath(startPos: Vector3, targetPos: Vector3, model: Instance, currentRoom: Instance): {Vector3}
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { model }
 
+	local ceilingPart = currentRoom:FindFirstChild("Ceiling", true)
+	local floorPart = currentRoom:FindFirstChild("Floor", true)
+	local partsFolder = currentRoom:FindFirstChild("Parts")
+
+	local excludedInstances = { model }
+	if ceilingPart then table.insert(excludedInstances, ceilingPart) end
+	if floorPart then table.insert(excludedInstances, floorPart) end
+
+	raycastParams.FilterDescendantsInstances = excludedInstances
+
+	-- 1. Direct Horizontal Line-of-Sight Check
 	local directDirection = (targetPos - startPos)
-	local directHit = Workspace:Raycast(startPos, directDirection, raycastParams)
+	local wallHit = Workspace:Raycast(startPos, directDirection, raycastParams)
 
-	-- 1. If direct route is clear, return simple line
-	if not directHit then
-		return { startPos, targetPos }
-	end
+	-- 2. Vertical Ceiling-to-Floor Check for objects in "Parts" folder
+	local isPartsFolderBlocked = false
 
-	-- 2. Direct path blocked: Scan around in a fan pattern to find open space
-	local scanDist = directDirection.Magnitude
-	local baseCFrame = CFrame.lookAt(startPos, targetPos)
-	
-	local anglesToTest = { 15, -15, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90 }
-	local bestWaypoint = nil
+	if ceilingPart and floorPart and ceilingPart:IsA("BasePart") and floorPart:IsA("BasePart") then
+		local topPos = ceilingPart.Position
+		local bottomPos = floorPart.Position
+		local rayDirection = bottomPos - topPos
 
-	for _, angleDeg in ipairs(anglesToTest) do
-		local rotatedCFrame = baseCFrame * CFrame.Angles(0, math.rad(angleDeg), 0)
-		local rayDir = rotatedCFrame.LookVector * scanDist
-		local rayHit = Workspace:Raycast(startPos, rayDir, raycastParams)
+		local verticalHit = Workspace:Raycast(topPos, rayDirection, raycastParams)
 
-		-- Found an open corridor/doorway angle
-		if not rayHit then
-			local detourPoint = startPos + rayDir
-			-- Check if we can reach targetPos from this detour point
-			local secondHit = Workspace:Raycast(detourPoint, targetPos - detourPoint, raycastParams)
-			if not secondHit then
-				bestWaypoint = detourPoint
-				break
+		if verticalHit and verticalHit.Instance then
+			if partsFolder and verticalHit.Instance:IsDescendantOf(partsFolder) then
+				isPartsFolderBlocked = true
 			end
 		end
 	end
 
-	-- 3. Return sequence with intermediate detour waypoint (or hit point if totally trapped)
-	if bestWaypoint then
-		return { startPos, bestWaypoint, targetPos }
-	else
-		return { startPos, directHit.Position }
+	-- Clear path: No horizontal wall collision AND no "Parts" folder obstacle vertically
+	if not wallHit and not isPartsFolderBlocked then
+		return { startPos, targetPos }
 	end
+
+	-- 3. PathfindingService Fallback
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2,
+		AgentHeight = 5,
+		AgentCanJump = false,
+		WaypointSpacing = 4
+	})
+
+	local success, _ = pcall(function()
+		path:ComputeAsync(startPos, targetPos)
+	end)
+
+	if success and path.Status == Enum.PathStatus.Success then
+		local waypoints = path:GetWaypoints()
+		local vectorSequence = {}
+		for _, wp in ipairs(waypoints) do
+			table.insert(vectorSequence, wp.Position)
+		end
+		return vectorSequence
+	end
+
+	return { startPos, wallHit and wallHit.Position or targetPos }
 end
 
 -- Build full sequence across target room numbers
@@ -179,7 +193,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
-	-- Rebound Settings
 	local isRebound = options.Rebound or false
 	local targetReboundCount = options.ReboundCount or 1
 	local reboundTime = options.ReboundTime or 0
@@ -201,11 +214,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local latestRoomNumber = latestRoomValue.Value
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 
-	-- Instantiate custom Path Runner from Path module
 	local runner = PathModule.new()
 	runner.WalkSpeed = speed
 
-	-- Initial Entity Placement
 	local spawnSequence = buildSequenceForRooms(currentRooms, targetSpawnNumber, targetSpawnNumber, false)
 	if #spawnSequence > 0 then
 		local startPos = spawnSequence[1] + Vector3.new(0, heightOffset, 0)
@@ -222,7 +233,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local currentReboundState = 0
 
-	-- Step Callback to handle frame updates along sequence
 	runner.stepCallback = function(_, p1, p2, currentPos, _, _)
 		if not model or not model.Parent then return end
 
@@ -243,18 +253,18 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Main Loop
 	while model and model.Parent do
 		local endRoomNumber = latestRoomValue.Value + 1
 		local isReverse = (currentReboundState % 2 == 1)
 
 		local sequence = buildSequenceForRooms(currentRooms, targetSpawnNumber, endRoomNumber, isReverse)
 
-		-- Dynamic Obstacle Avoidance Fallback: If no node folder exists, generate an unblocked path around walls
 		if #sequence < 2 then
 			local targetRoom = currentRooms:FindFirstChild(tostring(endRoomNumber)) or currentRooms:FindFirstChild(tostring(latestRoomValue.Value))
 			if targetRoom then
-				sequence = generateBypassPath(model, targetRoom)
+				local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+				local targetPos = targetRoom:GetPivot().Position
+				sequence = generateSmartPath(startPos, targetPos, model, targetRoom)
 			else
 				break
 			end
@@ -283,7 +293,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		repeat task.wait() until finished or not model or not model.Parent
 
-		-- Handle Rebounds
 		if isRebound and currentReboundState < targetReboundCount then
 			currentReboundState += 1
 			if currentReboundState % 2 == 1 then
@@ -296,7 +305,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Despawn Animation
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
