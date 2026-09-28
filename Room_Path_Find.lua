@@ -11,7 +11,8 @@ local NodeObject = require(ReplicatedStorage:WaitForChild("NodeObject"))
 type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
-	HeightOffset: number?
+	HeightOffset: number?,
+	DelayTime: number?
 }
 
 local raycastParams = RaycastParams.new()
@@ -23,29 +24,6 @@ local function alignToFloor(position: Vector3, heightOffset: number): Vector3
 		return rayResult.Position + Vector3.new(0, heightOffset, 0)
 	end
 	return position
-end
-
-local function visualizePathSegment(p1: Vector3, p2: Vector3)
-	local visualizerFolder = Workspace:FindFirstChild("PathfindingVisualizer")
-	if not visualizerFolder then
-		visualizerFolder = Instance.new("Folder")
-		visualizerFolder.Name = "PathfindingVisualizer"
-		visualizerFolder.Parent = Workspace
-	end
-
-	local distance = (p2 - p1).Magnitude
-	if distance < 0.1 then return end
-
-	local linePart = Instance.new("Part")
-	linePart.Size = Vector3.new(0.3, 0.3, distance)
-	linePart.Material = Enum.Material.Neon
-	linePart.Color = Color3.fromRGB(0, 255, 255)
-	linePart.Transparency = 0.3
-	linePart.CanCollide = false
-	linePart.Anchored = true
-	linePart.CFrame = CFrame.new((p1 + p2) / 2, p2)
-	linePart.Name = "PathfindingLine"
-	linePart.Parent = visualizerFolder
 end
 
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
@@ -62,13 +40,8 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	end)
 
 	if success and path.Status == Enum.PathStatus.Success then
-		local waypoints = path:GetWaypoints()
-		for i = 1, #waypoints - 1 do
-			visualizePathSegment(waypoints[i].Position, waypoints[i + 1].Position)
-		end
-		return waypoints
+		return path:GetWaypoints()
 	else
-		visualizePathSegment(startPos, endPos)
 		return {
 			{ Position = startPos },
 			{ Position = endPos }
@@ -103,6 +76,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local speed = options.Speed or 60
 	local heightOffset = options.HeightOffset or 2.5
+	local delayTime = options.DelayTime or 0
+
+	-- Automatically parent model to Workspace if needed
+	if model.Parent ~= Workspace then
+		model.Parent = Workspace
+	end
 
 	local currentRooms = Workspace:WaitForChild("CurrentRooms", 10)
 	local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
@@ -175,12 +154,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		model.Position = initialPosition
 	end
 
+	-- Wait delay time before starting movement
+	if delayTime > 0 then
+		task.wait(delayTime)
+	end
+
 	-- Travel node by node
 	while currentNode do
-		if currentNode.visualizeNode then
-			currentNode:visualizeNode()
-		end
-
 		local nextNodes = currentNode:getAllNext()
 
 		if #nextNodes == 0 then
