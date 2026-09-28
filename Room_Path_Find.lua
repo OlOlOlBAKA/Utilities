@@ -16,7 +16,7 @@ type MovementOptions = {
 	SpawnOffsetRooms: number?
 }
 
--- Disables CanCollide on all parts of the entity
+-- Disable CanCollide on all parts of the entity
 local function disableCollision(instance: Instance)
 	if instance:IsA("BasePart") then
 		instance.CanCollide = false
@@ -28,28 +28,61 @@ local function disableCollision(instance: Instance)
 	end
 end
 
--- Align to floor inside room geometry (specifically inspecting "Parts" folders)
+-- Strictly aligns ONLY vertical Y height, with multi-level failsafes for floor detection
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
-	local filterTargets = {}
+	local floorTargets = {}
 
 	for _, room in ipairs(currentRooms:GetChildren()) do
 		local partsFolder = room:FindFirstChild("Parts")
-		if partsFolder then
-			table.insert(filterTargets, partsFolder)
-		else
-			table.insert(filterTargets, room)
+		local searchContainer = partsFolder or room
+
+		-- Primary search: Exact name "Floor"
+		for _, descendant in ipairs(searchContainer:GetDescendants()) do
+			if descendant:IsA("BasePart") and descendant.Name == "Floor" then
+				table.insert(floorTargets, descendant)
+			end
+		end
+
+		-- Secondary failsafe: Search for common floor keywords (case-insensitive)
+		if #floorTargets == 0 then
+			for _, descendant in ipairs(searchContainer:GetDescendants()) do
+				if descendant:IsA("BasePart") then
+					local lowerName = string.lower(descendant.Name)
+					if string.find(lowerName, "floor") or string.find(lowerName, "base") or string.find(lowerName, "ground") then
+						table.insert(floorTargets, descendant)
+					end
+				end
+			end
+		end
+
+		-- Tertiary failsafe: Find thin, horizontal ground parts (Size.Y <= 3)
+		if #floorTargets == 0 then
+			for _, descendant in ipairs(searchContainer:GetDescendants()) do
+				if descendant:IsA("BasePart") and descendant.Size.Y <= 3 then
+					table.insert(floorTargets, descendant)
+				end
+			end
+		end
+	end
+
+	-- Ultimate fallback: Include all room instances if no individual floor parts were detected
+	if #floorTargets == 0 then
+		for _, room in ipairs(currentRooms:GetChildren()) do
+			table.insert(floorTargets, room)
 		end
 	end
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	raycastParams.FilterDescendantsInstances = filterTargets
+	raycastParams.FilterDescendantsInstances = floorTargets
 
-	local startPos = position + Vector3.new(0, 2, 0)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -25, 0), raycastParams)
+	-- Start raycast downward from target position
+	local startPos = position + Vector3.new(0, 3, 0)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
 
 	if rayResult then
-		return rayResult.Position + Vector3.new(0, heightOffset, 0)
+		-- Keep original X and Z, adjust ONLY vertical Y height
+		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
 	end
 
 	return position
@@ -57,22 +90,23 @@ end
 
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	local path = PathfindingService:CreatePath({
-		AgentRadius = 2.5,
-		AgentHeight = 3,
+		AgentRadius = 1,      -- Keeps entity safe from doorframes
+		AgentHeight = 2.5,    -- Very low clearance for doorways and low ceilings
 		AgentCanJump = false,
-		WaypointSpacing = 3,
+		WaypointSpacing = 2,
 		Costs = {
 			Default = 1
 		}
 	})
 
-	local success = pcall(function()
+	local success, err = pcall(function()
 		path:ComputeAsync(startPos, endPos)
 	end)
 
 	if success and path.Status == Enum.PathStatus.Success then
 		return path:GetWaypoints()
 	else
+		warn("[PathfindingMovement] Pathfinding status: " .. tostring(path.Status) .. " | Reason: " .. tostring(err))
 		return {
 			{ Position = startPos },
 			{ Position = endPos }
@@ -105,7 +139,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Disable CanCollide on all entity parts
 	disableCollision(model)
 
 	local speed = options.Speed or 60
@@ -248,7 +281,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	roomAddedConnection:Disconnect()
 
-	-- Smooth gravity fall sequence before despawning
+	-- Gravity fall sequence before despawning
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
