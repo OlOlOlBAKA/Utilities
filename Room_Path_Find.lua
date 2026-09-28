@@ -15,9 +15,9 @@ type MovementOptions = {
 	
 	-- Rebound System Options
 	Rebound: boolean?,
-	ReboundCount: number?,
-	ReboundTime: number?,      -- Delay at the end before heading back
-	ReboundDelayTime: number?  -- Delay at the start/origin before starting return sweep
+	ReboundCount: number?,      -- Target count (0 = initial sweep only, 1 = back, 2 = forward, 3 = back, etc.)
+	ReboundTime: number?,       -- Delay at the end before returning
+	ReboundDelayTime: number?   -- Delay at the earliest room before sweeping forward
 }
 
 -- Types for global waypoint queue items
@@ -155,7 +155,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Rebound Settings
 	local isRebound = options.Rebound or false
-	local maxRebounds = options.ReboundCount or 1
+	local targetReboundCount = options.ReboundCount or 1
 	local reboundTime = options.ReboundTime or 0
 	local reboundDelayTime = options.ReboundDelayTime or 0
 
@@ -177,7 +177,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local globalQueue: {WaypointNode} = {}
 	local lastTargetPos: Vector3? = nil
-	local currentReboundCount = 0
 
 	local function appendMoveTarget(rawPos: Vector3)
 		local targetWithHeight = rawPos + Vector3.new(0, heightOffset, 0)
@@ -212,7 +211,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Backward Path Construction (Rebound)
+	-- Backward Path Construction
 	local function buildBackwardPath(startNum: number, endNum: number)
 		for roomNum = startNum, endNum, -1 do
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
@@ -226,34 +225,37 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Build initial sweep
+	-- State management for active rebound sweeps
+	local currentReboundState = 0
 	local endRoomNumber = latestRoomValue.Value + 1
+
+	-- Initial sweep (Rebound 0)
 	buildForwardPath(targetSpawnNumber, endRoomNumber)
 
-	if isRebound then
-		while currentReboundCount < maxRebounds do
-			currentReboundCount += 1
-			
-			-- Pause at RoomExit of latest room before going back
-			appendWait(reboundTime)
-			
-			-- Sweep backwards to earliest room entrance
-			buildBackwardPath(endRoomNumber, targetSpawnNumber)
-			
-			-- Pause at earliest room entrance before sweeping forward again (if multi-rebound)
-			if currentReboundCount < maxRebounds then
-				appendWait(reboundDelayTime)
-				buildForwardPath(targetSpawnNumber, endRoomNumber)
+	-- Dynamically append new rooms if player opens doors during movement
+	local roomAddedConnection
+	roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
+		local roomNum = tonumber(child.Name)
+		if roomNum and roomNum > endRoomNumber then
+			endRoomNumber = roomNum
+			-- If in forward mode or initial sweep, extend path into newly opened room
+			if currentReboundState % 2 == 0 then
+				local frontPos, backPos = getEntrancePositions(child)
+				if frontPos and backPos then
+					appendMoveTarget(frontPos)
+					appendMoveTarget(backPos)
+				end
 			end
 		end
-	end
+	end)
 
 	if #globalQueue == 0 then
 		warn("PathfindingMovement: No valid waypoints generated.")
+		if roomAddedConnection then roomAddedConnection:Disconnect() end
 		return
 	end
 
-	-- Position Entity at Initial Spawn Point
+	-- Position Entity at Spawn Point
 	local initialNode = globalQueue[1]
 	if initialNode and initialNode.Position then
 		if model:IsA("Model") then
@@ -267,21 +269,36 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Execute Queue Sequence
+	-- Continuous execution stream with dynamic Rebound iteration
 	local queueIndex = 2
 	local active = true
 
 	while active do
 		if queueIndex > #globalQueue then
-			active = false
-			break
+			-- Reached end of current queue segment
+			if isRebound and currentReboundState < targetReboundCount then
+				currentReboundState += 1
+				
+				if currentReboundState % 2 == 1 then
+					-- Rebound 1, 3, 5... (Going Backwards)
+					appendWait(reboundTime)
+					buildBackwardPath(endRoomNumber, targetSpawnNumber)
+				else
+					-- Rebound 2, 4, 6... (Going Forwards)
+					appendWait(reboundDelayTime)
+					buildForwardPath(targetSpawnNumber, endRoomNumber)
+				end
+			else
+				active = false
+				break
+			end
 		end
 
 		local node = globalQueue[queueIndex]
 
-		if node.Type == "WAIT" then
+		if node and node.Type == "WAIT" then
 			task.wait(node.WaitDuration or 0)
-		elseif node.Type == "MOVE" and node.Position then
+		elseif node and node.Type == "MOVE" and node.Position then
 			local targetPos = node.Position
 			local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 			local segmentDistance = (targetPos - currentPos).Magnitude
@@ -318,6 +335,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		queueIndex += 1
+	end
+
+	if roomAddedConnection then
+		roomAddedConnection:Disconnect()
 	end
 
 	-- Gravity fall sequence before despawning
