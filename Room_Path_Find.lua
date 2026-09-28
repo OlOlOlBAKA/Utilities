@@ -28,60 +28,50 @@ local function disableCollision(instance: Instance)
 	end
 end
 
--- Strictly aligns ONLY vertical Y height, with multi-level failsafes for floor detection
+-- Safely aligns Y height for multi-story / multi-floor rooms
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
-	local floorTargets = {}
+	local allCandidates = {}
 
+	-- Collect all candidate floor parts across active rooms
 	for _, room in ipairs(currentRooms:GetChildren()) do
 		local partsFolder = room:FindFirstChild("Parts")
 		local searchContainer = partsFolder or room
 
-		-- Primary search: Exact name "Floor"
 		for _, descendant in ipairs(searchContainer:GetDescendants()) do
-			if descendant:IsA("BasePart") and descendant.Name == "Floor" then
-				table.insert(floorTargets, descendant)
-			end
-		end
-
-		-- Secondary failsafe: Search for common floor keywords (case-insensitive)
-		if #floorTargets == 0 then
-			for _, descendant in ipairs(searchContainer:GetDescendants()) do
-				if descendant:IsA("BasePart") then
-					local lowerName = string.lower(descendant.Name)
-					if string.find(lowerName, "floor") or string.find(lowerName, "base") or string.find(lowerName, "ground") then
-						table.insert(floorTargets, descendant)
-					end
-				end
-			end
-		end
-
-		-- Tertiary failsafe: Find thin, horizontal ground parts (Size.Y <= 3)
-		if #floorTargets == 0 then
-			for _, descendant in ipairs(searchContainer:GetDescendants()) do
-				if descendant:IsA("BasePart") and descendant.Size.Y <= 3 then
-					table.insert(floorTargets, descendant)
+			if descendant:IsA("BasePart") then
+				local lowerName = string.lower(descendant.Name)
+				-- Detect floor parts by name or thin horizontal part properties
+				if lowerName == "floor" or string.find(lowerName, "floor") or string.find(lowerName, "base") or descendant.Size.Y <= 3 then
+					table.insert(allCandidates, descendant)
 				end
 			end
 		end
 	end
 
-	-- Ultimate fallback: Include all room instances if no individual floor parts were detected
-	if #floorTargets == 0 then
-		for _, room in ipairs(currentRooms:GetChildren()) do
-			table.insert(floorTargets, room)
+	-- Filter floor targets down to parts nearby vertically (prevents hitting upper multi-story floors)
+	local validFloorTargets = {}
+	for _, part in ipairs(allCandidates) do
+		local verticalDist = math.abs(part.Position.Y - position.Y)
+		if verticalDist <= 15 then -- Only include floors within 15 studs vertically
+			table.insert(validFloorTargets, part)
 		end
+	end
+
+	-- Fallback if no nearby floors match vertical range criteria
+	if #validFloorTargets == 0 then
+		validFloorTargets = #allCandidates > 0 and allCandidates or currentRooms:GetChildren()
 	end
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
-	raycastParams.FilterDescendantsInstances = floorTargets
+	raycastParams.FilterDescendantsInstances = validFloorTargets
 
-	-- Start raycast downward from target position
-	local startPos = position + Vector3.new(0, 3, 0)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
+	-- Start raycast slightly above the target position downward
+	local startPos = position + Vector3.new(0, 4, 0)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
 
 	if rayResult then
-		-- Keep original X and Z, adjust ONLY vertical Y height
+		-- Preserve original horizontal X and Z, adjust ONLY vertical Y position
 		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
 	end
 
@@ -90,8 +80,8 @@ end
 
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	local path = PathfindingService:CreatePath({
-		AgentRadius = 1,      -- Keeps entity safe from doorframes
-		AgentHeight = 2.5,    -- Very low clearance for doorways and low ceilings
+		AgentRadius = 1,      -- Keeps entity clear of doorframes
+		AgentHeight = 2.5,    -- Low clearance for multi-floor stairwells & low ceilings
 		AgentCanJump = false,
 		WaypointSpacing = 2,
 		Costs = {
