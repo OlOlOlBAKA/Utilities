@@ -6,8 +6,6 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 
-local NodeObject = require(ReplicatedStorage:WaitForChild("NodeObject"))
-
 type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
@@ -61,7 +59,6 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 		end
 	end
 
-	-- Filter floor targets down to parts nearby vertically (within 15 studs)
 	local validFloorTargets = {}
 	for _, part in ipairs(allCandidates) do
 		local verticalDist = math.abs(part.Position.Y - position.Y)
@@ -88,8 +85,8 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	return position
 end
 
--- Robust path calculation with retry mechanisms to prevent cascading failures
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
+-- Computes sub-waypoints between start and end positions
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -98,47 +95,33 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 		Costs = { Default = 1 }
 	})
 
-	local success, err = pcall(function()
+	local success, _ = pcall(function()
 		primaryPath:ComputeAsync(startPos, endPos)
 	end)
 
+	local rawWaypoints = {}
 	if success and primaryPath.Status == Enum.PathStatus.Success then
-		return primaryPath:GetWaypoints()
+		for _, wp in ipairs(primaryPath:GetWaypoints()) do
+			table.insert(rawWaypoints, wp.Position)
+		end
+		return rawWaypoints
 	end
 
-	-- Fallback with minimal radius
-	local secondaryPath = PathfindingService:CreatePath({
-		AgentRadius = 0.1,
-		AgentHeight = 1,
-		AgentCanJump = false,
-		WaypointSpacing = 3,
-		Costs = { Default = 1 }
-	})
-
-	local secondarySuccess, _ = pcall(function()
-		secondaryPath:ComputeAsync(startPos, endPos)
-	end)
-
-	if secondarySuccess and secondaryPath.Status == Enum.PathStatus.Success then
-		return secondaryPath:GetWaypoints()
-	end
-
-	-- Direct linear interpolation fallback
-	local waypoints = {}
+	-- Fallback linear interpolation points
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 4))
 
-	for i = 0, steps do
+	for i = 1, steps do
 		local alpha = i / steps
-		table.insert(waypoints, { Position = startPos:Lerp(endPos, alpha) })
+		table.insert(rawWaypoints, startPos:Lerp(endPos, alpha))
 	end
 
-	return waypoints
+	return rawWaypoints
 end
 
--- Returns both FRONT (+2.5 studs) and BEHIND (-2.5 studs) positions for doorway navigation
+-- Gets Front (+2.5 studs) and Behind (-2.5 studs) positions
 local function getEntrancePositions(roomFolder: Instance): (Vector3?, Vector3?)
-	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
+	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true) or roomFolder:FindFirstChild("RoomExit", true)
 	
 	if roomEntrance then
 		local cframe: CFrame?
@@ -156,7 +139,6 @@ local function getEntrancePositions(roomFolder: Instance): (Vector3?, Vector3?)
 		end
 	end
 
-	-- Fallback position if RoomEntrance doesn't exist
 	local fallbackPos: Vector3?
 	if roomFolder:IsA("Model") then
 		fallbackPos = roomFolder.PrimaryPart and roomFolder.PrimaryPart.Position or roomFolder:GetPivot().Position
@@ -199,55 +181,57 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local latestRoomNumber = latestRoomValue.Value
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 
-	local lastNode = nil
-	local firstNode = nil
+	local globalWaypointQueue: {Vector3} = {}
 	local highestProcessedRoom = -1
+	local lastTargetPos: Vector3? = nil
 
-	local function addRoomToPath(roomNum: number, isLastRoom: boolean)
+	local function appendTarget(rawPos: Vector3)
+		local adjustedPos = alignToFloor(rawPos, heightOffset, currentRooms)
+		if lastTargetPos then
+			local subPoints = computePathWaypoints(lastTargetPos, adjustedPos)
+			for _, pt in ipairs(subPoints) do
+				table.insert(globalWaypointQueue, pt)
+			end
+		else
+			table.insert(globalWaypointQueue, adjustedPos)
+		end
+		lastTargetPos = adjustedPos
+	end
+
+	local function addRoomToPath(roomNum: number)
 		local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 		if roomFolder then
 			local frontPos, backPos = getEntrancePositions(roomFolder)
 			
 			if frontPos and backPos then
-				-- 1. Node in FRONT of entrance
-				local frontNode = NodeObject.new(frontPos)
-				if not firstNode then firstNode = frontNode end
-				if lastNode then lastNode:setNext(frontNode) end
-				lastNode = frontNode
-
-				-- 2. Node BEHIND entrance (transitions through the doorway)
-				local backNode = NodeObject.new(backPos)
-				lastNode:setNext(backNode)
-				lastNode = backNode
-
+				appendTarget(frontPos)
+				appendTarget(backPos)
 				highestProcessedRoom = roomNum
 			end
 		end
 	end
 
 	for roomNum = targetSpawnNumber, latestRoomValue.Value + 1 do
-		addRoomToPath(roomNum, roomNum == latestRoomValue.Value + 1)
+		addRoomToPath(roomNum)
 	end
 
 	local roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
 		local roomNum = tonumber(child.Name)
 		if roomNum and roomNum > highestProcessedRoom then
-			if not child:FindFirstChild("RoomEntrance", true) then
-				child:WaitForChild("RoomEntrance", 2)
+			if not (child:FindFirstChild("RoomEntrance", true) or child:FindFirstChild("RoomExit", true)) then
+				task.wait(0.1)
 			end
-			addRoomToPath(roomNum, false)
+			addRoomToPath(roomNum)
 		end
 	end)
 
-	if not firstNode then
-		warn("PathfindingMovement: No valid rooms/nodes found.")
+	if #globalWaypointQueue == 0 then
+		warn("PathfindingMovement: No valid rooms/waypoints found.")
 		roomAddedConnection:Disconnect()
 		return
 	end
 
-	local currentNode = firstNode
-	local initialPosition = alignToFloor(currentNode:getPosition(), heightOffset, currentRooms)
-
+	local initialPosition = globalWaypointQueue[1]
 	if model:IsA("Model") then
 		model:PivotTo(CFrame.new(initialPosition))
 	elseif model:IsA("BasePart") then
@@ -258,60 +242,53 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Continuous execution loop without node pauses
-	while currentNode do
-		local nextNodes = currentNode:getAllNext()
+	-- Seamless execution stream across the pre-computed waypoint queue
+	local queueIndex = 2
+	local active = true
 
-		if #nextNodes == 0 then
+	while active do
+		if queueIndex > #globalWaypointQueue then
+			-- Brief wait to check if new rooms were added to the end of queue
 			task.wait(0.05)
-			nextNodes = currentNode:getAllNext()
-			if #nextNodes == 0 then break end
-		end
-
-		local nextNode = nextNodes[1]
-		local startPos = currentNode:getPosition()
-		local endPos = nextNode:getPosition()
-
-		local waypoints = computePathWaypoints(startPos, endPos)
-
-		-- Traverse all waypoints continuously
-		for i = 1, #waypoints do
-			local rawTargetPos = waypoints[i].Position
-			local targetPos = alignToFloor(rawTargetPos, heightOffset, currentRooms)
-
-			local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			local segmentDistance = (targetPos - currentPos).Magnitude
-
-			if segmentDistance > 0.05 then
-				local travelTime = segmentDistance / speed
-				local targetCFrame = CFrame.lookAt(targetPos, targetPos + (targetPos - currentPos).Unit)
-				local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
-
-				if model:IsA("BasePart") then
-					local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
-					tween:Play()
-					tween.Completed:Wait()
-				elseif model:IsA("Model") then
-					local CFrameValue = Instance.new("CFrameValue")
-					CFrameValue.Value = model:GetPivot()
-
-					local connection = CFrameValue.Changed:Connect(function(newCFrame)
-						if model and model.Parent then
-							model:PivotTo(newCFrame)
-						end
-					end)
-
-					local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
-					tween:Play()
-					tween.Completed:Wait()
-
-					connection:Disconnect()
-					CFrameValue:Destroy()
-				end
+			if queueIndex > #globalWaypointQueue then
+				active = false
+				break
 			end
 		end
 
-		currentNode = nextNode
+		local targetPos = globalWaypointQueue[queueIndex]
+		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+		local segmentDistance = (targetPos - currentPos).Magnitude
+
+		if segmentDistance > 0.05 then
+			local travelTime = segmentDistance / speed
+			local targetCFrame = CFrame.lookAt(targetPos, targetPos + (targetPos - currentPos).Unit)
+			local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+
+			if model:IsA("BasePart") then
+				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
+				tween:Play()
+				tween.Completed:Wait()
+			elseif model:IsA("Model") then
+				local CFrameValue = Instance.new("CFrameValue")
+				CFrameValue.Value = model:GetPivot()
+
+				local connection = CFrameValue.Changed:Connect(function(newCFrame)
+					if model and model.Parent then
+						model:PivotTo(newCFrame)
+					end
+				end)
+
+				local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
+				tween:Play()
+				tween.Completed:Wait()
+
+				connection:Disconnect()
+				CFrameValue:Destroy()
+			end
+		end
+
+		queueIndex += 1
 	end
 
 	roomAddedConnection:Disconnect()
@@ -350,7 +327,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			CFrameValue:Destroy()
 		end
 
-		-- Stop all entity sounds AFTER falling 300 studs
+		-- Stop entity sounds AFTER falling 300 studs
 		stopEntitySounds(model)
 
 		model:Destroy()
