@@ -28,6 +28,21 @@ local function disableCollision(instance: Instance)
 	end
 end
 
+-- Stops all playing audio tracks attached to the entity
+local function stopEntitySounds(instance: Instance)
+	if not instance then return end
+	
+	if instance:IsA("Sound") then
+		instance:Stop()
+	end
+
+	for _, descendant in ipairs(instance:GetDescendants()) do
+		if descendant:IsA("Sound") then
+			descendant:Stop()
+		end
+	end
+end
+
 -- Safely aligns Y height for multi-story / multi-floor rooms
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
 	local allCandidates = {}
@@ -40,7 +55,6 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 		for _, descendant in ipairs(searchContainer:GetDescendants()) do
 			if descendant:IsA("BasePart") then
 				local lowerName = string.lower(descendant.Name)
-				-- Detect floor parts by name or thin horizontal part properties
 				if lowerName == "floor" or string.find(lowerName, "floor") or string.find(lowerName, "base") or descendant.Size.Y <= 3 then
 					table.insert(allCandidates, descendant)
 				end
@@ -48,11 +62,11 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 		end
 	end
 
-	-- Filter floor targets down to parts nearby vertically (prevents hitting upper multi-story floors)
+	-- Filter floor targets down to parts nearby vertically (within 15 studs)
 	local validFloorTargets = {}
 	for _, part in ipairs(allCandidates) do
 		local verticalDist = math.abs(part.Position.Y - position.Y)
-		if verticalDist <= 15 then -- Only include floors within 15 studs vertically
+		if verticalDist <= 15 then
 			table.insert(validFloorTargets, part)
 		end
 	end
@@ -66,12 +80,11 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
 	raycastParams.FilterDescendantsInstances = validFloorTargets
 
-	-- Start raycast slightly above the target position downward
+	-- Start raycast downward from target position
 	local startPos = position + Vector3.new(0, 4, 0)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -35, 0), raycastParams)
 
 	if rayResult then
-		-- Preserve original horizontal X and Z, adjust ONLY vertical Y position
 		return Vector3.new(position.X, rayResult.Position.Y + heightOffset, position.Z)
 	end
 
@@ -80,8 +93,8 @@ end
 
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	local path = PathfindingService:CreatePath({
-		AgentRadius = 1,      -- Keeps entity clear of doorframes
-		AgentHeight = 2.5,    -- Low clearance for multi-floor stairwells & low ceilings
+		AgentRadius = 1,      -- Small radius to clear doorframes
+		AgentHeight = 2.5,    -- Low height for ceiling clearance
 		AgentCanJump = false,
 		WaypointSpacing = 2,
 		Costs = {
@@ -104,21 +117,31 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	end
 end
 
-local function getRoomEntrancePosition(roomFolder: Instance): Vector3?
+-- Offsets target position 2.5 studs IN FRONT of the RoomEntrance to avoid doorframe collision boxes
+local function getFrontOfEntrancePosition(roomFolder: Instance): Vector3?
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
+	
 	if roomEntrance then
+		local cframe: CFrame?
+		
 		if roomEntrance:IsA("BasePart") then
-			return roomEntrance.Position
+			cframe = roomEntrance.CFrame
 		elseif roomEntrance:IsA("Model") then
-			return roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.Position or roomEntrance:GetPivot().Position
+			cframe = roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()
+		end
+
+		if cframe then
+			return (cframe * CFrame.new(0, 0, -2.5)).Position
 		end
 	end
 
+	-- Fallback to model pivot/position if RoomEntrance isn't found
 	if roomFolder:IsA("Model") then
 		return roomFolder.PrimaryPart and roomFolder.PrimaryPart.Position or roomFolder:GetPivot().Position
 	elseif roomFolder:IsA("BasePart") then
 		return roomFolder.Position
 	end
+	
 	return nil
 end
 
@@ -161,7 +184,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function addRoomToPath(roomNum: number)
 		local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 		if roomFolder then
-			local entrancePos = getRoomEntrancePosition(roomFolder)
+			local entrancePos = getFrontOfEntrancePosition(roomFolder)
 			if entrancePos then
 				local newNode = NodeObject.new(entrancePos)
 
@@ -270,6 +293,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	roomAddedConnection:Disconnect()
+
+	-- Stop all entity sounds when path finishes
+	stopEntitySounds(model)
 
 	-- Gravity fall sequence before despawning
 	if model and model.Parent then
