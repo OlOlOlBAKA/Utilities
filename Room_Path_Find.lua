@@ -241,8 +241,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	if model then
 		local currentCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = currentCFrame - Vector3.new(0, 300, 0)
-		local fallTime = 300 / (speed * 1.5)
-		local fallTweenInfo = TweenInfo.new(fallTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		local fallTime = 300 / (speed * 2)
+		local fallTweenInfo = TweenInfo.new(fallTime, Enum.EasingStyle.Linear)
 
 		if model:IsA("BasePart") then
 			local fallTween = TweenService:Create(model, fallTweenInfo, { CFrame = fallTargetCFrame })
