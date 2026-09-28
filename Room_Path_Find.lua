@@ -47,7 +47,7 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Fast Raycast-based Floor Alignment with strict floor filtering
+-- Fast Raycast-based Floor Alignment with ceiling exclusion
 local roomFloorCache: { [Instance]: { BasePart } } = {}
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -59,8 +59,8 @@ local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	for _, descendant in ipairs(roomFolder:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			local name = string.lower(descendant.Name)
-			local isCeiling = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top") or string.find(name, "wall")
-			if not isCeiling then
+			local isForbidden = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top") or string.find(name, "wall") or string.find(name, "attic")
+			if not isForbidden then
 				table.insert(floorParts, descendant)
 			end
 		end
@@ -70,6 +70,7 @@ local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	return floorParts
 end
 
+-- Strictly aligns position to valid floor parts, ignoring high geometry
 local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vector3
 	if not roomFolder then return position end
 
@@ -80,9 +81,9 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
 	raycastParams.FilterDescendantsInstances = floorParts
 
-	-- Cast ray down from a slight height above current position to lock to ground level
-	local startPos = Vector3.new(position.X, position.Y + 5, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -20, 0), raycastParams)
+	-- Cast downwards from low clearance height to avoid picking up high geometry
+	local startPos = Vector3.new(position.X, position.Y + 2, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -15, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z)
@@ -91,7 +92,24 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path waypoints applying HeightOffset to all intermediate nodes
+-- Finds the base room floor elevation to enforce height ceiling
+local function getRoomBaseY(roomFolder: Instance?): number?
+	if not roomFolder then return nil end
+	local floorParts = getRoomFloorParts(roomFolder)
+	if #floorParts == 0 then return nil end
+
+	local minY = math.huge
+	for _, part in ipairs(floorParts) do
+		local topY = part.Position.Y + (part.Size.Y / 2)
+		if topY < minY then
+			minY = topY
+		end
+	end
+
+	return minY ~= math.huge and minY or nil
+end
+
+-- Computes path waypoints and hard-clamps vertical positions below roof level
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -105,16 +123,26 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		primaryPath:ComputeAsync(startPos, endPos)
 	end)
 
+	local baseY = getRoomBaseY(roomFolder)
+	local maxAllowedY = baseY and (baseY + 12) or math.huge -- Cap elevation max 12 studs above floor base
+
 	local rawWaypoints = {}
 	if success and primaryPath.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(primaryPath:GetWaypoints()) do
 			local groundPos = alignToFloorLevel(wp.Position, roomFolder)
-			table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+			local targetY = groundPos.Y + heightOffset
+
+			-- Prevent going onto roof
+			if targetY > maxAllowedY then
+				targetY = maxAllowedY
+			end
+
+			table.insert(rawWaypoints, Vector3.new(groundPos.X, targetY, groundPos.Z))
 		end
 		return rawWaypoints
 	end
 
-	-- Fallback linear calculation if pathfinding fails
+	-- Fallback linear path direct to ground position
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 5))
 
@@ -122,7 +150,13 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
 		local groundPos = alignToFloorLevel(interpolated, roomFolder)
-		table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+		local targetY = groundPos.Y + heightOffset
+
+		if targetY > maxAllowedY then
+			targetY = maxAllowedY
+		end
+
+		table.insert(rawWaypoints, Vector3.new(groundPos.X, targetY, groundPos.Z))
 	end
 
 	return rawWaypoints
@@ -141,7 +175,6 @@ local function getEntranceTargetPosition(roomFolder: Instance, heightOffset: num
 	end
 
 	if cf then
-		-- Position 3 studs in front along local Z-axis
 		local frontPos = (cf * CFrame.new(0, 0, 3)).Position
 		local groundPos = alignToFloorLevel(frontPos, roomFolder)
 		return groundPos + Vector3.new(0, heightOffset, 0)
@@ -150,7 +183,7 @@ local function getEntranceTargetPosition(roomFolder: Instance, heightOffset: num
 	return nil
 end
 
--- Rebound/Stop point strictly at floor level (unaffected by HeightOffset)
+-- Rebound/Stop point strictly at floor level
 local function getEntranceGroundPosition(roomFolder: Instance): Vector3?
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	if not roomEntrance then return nil end
@@ -254,7 +287,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Position Entity at Spawn Point (Ground level, unaffected by HeightOffset)
+	-- Position Entity at Spawn Point (Ground level)
 	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 	if spawnRoom then
 		local spawnPos = getEntranceGroundPosition(spawnRoom)
@@ -282,7 +315,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					task.wait(0.05) -- 0.05s buffer delay per room for path compute stability
+					task.wait(0.05)
 					local targetPos = getEntranceTargetPosition(roomFolder, heightOffset)
 					if targetPos then
 						local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
@@ -295,7 +328,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					task.wait(0.05) -- 0.05s buffer delay per room for path compute stability
+					task.wait(0.05)
 					local targetPos = getEntranceTargetPosition(roomFolder, heightOffset)
 					if targetPos then
 						local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
@@ -305,7 +338,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 		end
 
-		-- Rebound Stop Handlers (Ground level, unaffected by HeightOffset)
+		-- Rebound Stop Handlers
 		if isRebound and currentReboundState < targetReboundCount then
 			local stopRoomNum = (currentReboundState % 2 == 0) and endRoomNumber or targetSpawnNumber
 			local currentRoom = currentRooms:FindFirstChild(tostring(stopRoomNum))
