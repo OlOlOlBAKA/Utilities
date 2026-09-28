@@ -16,6 +16,18 @@ type MovementOptions = {
 	SpawnOffsetRooms: number?
 }
 
+-- Disables CanCollide on all parts of the entity
+local function disableCollision(instance: Instance)
+	if instance:IsA("BasePart") then
+		instance.CanCollide = false
+	end
+	for _, child in ipairs(instance:GetDescendants()) do
+		if child:IsA("BasePart") then
+			child.CanCollide = false
+		end
+	end
+end
+
 -- Align to floor inside room geometry (specifically inspecting "Parts" folders)
 local function alignToFloor(position: Vector3, heightOffset: number, currentRooms: Instance): Vector3
 	local filterTargets = {}
@@ -33,7 +45,6 @@ local function alignToFloor(position: Vector3, heightOffset: number, currentRoom
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
 	raycastParams.FilterDescendantsInstances = filterTargets
 
-	-- Start raycast from 2 studs above to stay below ceilings, raycasting down 25 studs
 	local startPos = position + Vector3.new(0, 2, 0)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -25, 0), raycastParams)
 
@@ -46,11 +57,13 @@ end
 
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3)
 	local path = PathfindingService:CreatePath({
-		AgentRadius = 2,
-		AgentHeight = 5,
+		AgentRadius = 2.5,
+		AgentHeight = 3,
 		AgentCanJump = false,
-		WaypointSpacing = 4,
-		Costs = { Default = 1 }
+		WaypointSpacing = 3,
+		Costs = {
+			Default = 1
+		}
 	})
 
 	local success = pcall(function()
@@ -92,15 +105,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
+	-- Disable CanCollide on all entity parts
+	disableCollision(model)
+
 	local speed = options.Speed or 60
 	local heightOffset = options.HeightOffset or 2.5
 	local delayTime = options.DelayTime or 0
 	
-	-- Clamp SpawnOffsetRooms to a maximum of 15
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
-	-- Auto-parent model to Workspace if not parented
 	if model.Parent ~= Workspace then
 		model.Parent = Workspace
 	end
@@ -142,12 +156,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Build initial node path based on SpawnOffsetRooms
 	for roomNum = targetSpawnNumber, latestRoomValue.Value + 1 do
 		addRoomToPath(roomNum)
 	end
 
-	-- Dynamic room listener connection
 	local roomAddedConnection = currentRooms.ChildAdded:Connect(function(child)
 		local roomNum = tonumber(child.Name)
 		if roomNum and roomNum > highestProcessedRoom then
@@ -164,7 +176,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Set initial position
 	local currentNode = firstNode
 	local initialPosition = alignToFloor(currentNode:getPosition(), heightOffset, currentRooms)
 
@@ -174,12 +185,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		model.Position = initialPosition
 	end
 
-	-- Optional delay before running
 	if delayTime > 0 then
 		task.wait(delayTime)
 	end
 
-	-- Travel node loop
 	while currentNode do
 		local nextNodes = currentNode:getAllNext()
 
@@ -205,9 +214,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 			local segmentDistance = (targetPos - currentPos).Magnitude
 
-			if segmentDistance > 0.1 then
+			if segmentDistance > 0.05 then
 				local travelTime = segmentDistance / speed
-				local targetCFrame = CFrame.lookAt(targetPos, targetPos + (targetPos - currentPos))
+				local targetCFrame = CFrame.lookAt(targetPos, targetPos + (targetPos - currentPos).Unit)
 				local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
 				if model:IsA("BasePart") then
@@ -219,7 +228,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					CFrameValue.Value = model:GetPivot()
 
 					local connection = CFrameValue.Changed:Connect(function(newCFrame)
-						model:PivotTo(newCFrame)
+						if model and model.Parent then
+							model:PivotTo(newCFrame)
+						end
 					end)
 
 					local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
@@ -237,12 +248,17 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	roomAddedConnection:Disconnect()
 
-	-- Perform 300 stud fall down animation before despawning
-	if model then
-		local currentCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
-		local fallTargetCFrame = currentCFrame - Vector3.new(0, 300, 0)
-		local fallTime = 300 / (speed * 2)
-		local fallTweenInfo = TweenInfo.new(fallTime, Enum.EasingStyle.Linear)
+	-- Smooth gravity fall sequence before despawning
+	if model and model.Parent then
+		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
+		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
+		local fallTime = math.max(0.5, 300 / (speed * 1.5))
+		
+		local fallTweenInfo = TweenInfo.new(
+			fallTime, 
+			Enum.EasingStyle.Quad, 
+			Enum.EasingDirection.In
+		)
 
 		if model:IsA("BasePart") then
 			local fallTween = TweenService:Create(model, fallTweenInfo, { CFrame = fallTargetCFrame })
@@ -250,10 +266,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fallTween.Completed:Wait()
 		elseif model:IsA("Model") then
 			local CFrameValue = Instance.new("CFrameValue")
-			CFrameValue.Value = currentCFrame
+			CFrameValue.Value = startCFrame
 
 			local connection = CFrameValue.Changed:Connect(function(newCFrame)
-				model:PivotTo(newCFrame)
+				if model and model.Parent then
+					model:PivotTo(newCFrame)
+				end
 			end)
 
 			local fallTween = TweenService:Create(CFrameValue, fallTweenInfo, { Value = fallTargetCFrame })
