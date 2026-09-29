@@ -228,6 +228,15 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
+-- Helper: Validates whether a room's entrance and exit distance is within the 200 stud limit
+local function isRoomDistanceValid(roomFolder: Instance, floorYOffset: number): boolean
+	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
+	if entBack and exitFront then
+		return (exitFront - entBack).Magnitude <= 200
+	end
+	return true
+end
+
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local model = options.Model
 	if not model then
@@ -381,7 +390,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local latestRoomNumber = latestRoomValue.Value
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
-	local endRoomNumber = latestRoomNumber + 1
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -431,13 +439,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Sequence motion along calculated nodes with fail-safe distance checks
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
-		-- Fail-Safe Check: Skip room if Entrance to Exit distance exceeds 200 studs
-		local roomDistance = (endPos - startPos).Magnitude
-		if roomDistance > 200 then
-			warn(string.format("PathfindingMovement: Room %s skipped. Entrance/Exit distance is too far (%.1f studs > 200 studs).", roomFolder and roomFolder.Name or "Unknown", roomDistance))
-			return
-		end
-
 		local heightVector = Vector3.new(0, heightOffset, 0)
 		local fullPathVisuals: Folder?
 
@@ -498,25 +499,57 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Navigation processing loop
 	while model and model.Parent do
-		endRoomNumber = latestRoomValue.Value + 1
-
 		if currentReboundState % 2 == 0 then
 			-- Forward direction pass
-			for roomNum = targetSpawnNumber, endRoomNumber do
-				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
+			local currentRoomIndex = targetSpawnNumber
+
+			while model and model.Parent do
+				local targetEndRoom = latestRoomValue.Value + 1
+
+				if currentRoomIndex > targetEndRoom then
+					break
+				end
+
+				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
+					-- Check current room validity
+					if not isRoomDistanceValid(roomFolder, floorYOffset) then
+						warn(string.format("PathfindingMovement: Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
+						currentRoomIndex += 1
+						continue
+					end
+
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
 					if entBack and exitFront then
 						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
 					end
 				end
+
+				currentRoomIndex += 1
+
+				-- Re-check for newly unlocked rooms at the current end bound
+				if currentRoomIndex > targetEndRoom then
+					local updatedEndRoom = latestRoomValue.Value + 1
+					if updatedEndRoom > targetEndRoom then
+						-- More rooms dynamically added during traversal; continue loop forward
+						targetEndRoom = updatedEndRoom
+					end
+				end
 			end
 		else
 			-- Rebound direction pass
+			local endRoomNumber = latestRoomValue.Value + 1
+
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
+					-- Check current rebound room validity
+					if not isRoomDistanceValid(roomFolder, floorYOffset) then
+						warn(string.format("PathfindingMovement: Rebound Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
+						continue
+					end
+
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
 					if exitFront and entBack then
