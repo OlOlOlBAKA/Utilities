@@ -294,8 +294,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, entBack, roomFolder) 
 					end
 					if entFront then
-						currentPos = entFront
-						-- moveAlongWaypoints(currentPos, entFront, roomFolder) 
+						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+						moveAlongWaypoints(currentPos, entFront, roomFolder) 
 					end
 				end
 				-- task.wait() -- Prevents frame spikes during room iteration
