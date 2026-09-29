@@ -6,16 +6,11 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 -- CameraShaker Integration
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-
-local shaker = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(shakeCFrame)
-	Camera.CFrame = Camera.CFrame * shakeCFrame
-end)
-shaker:Start()
 
 type MovementOptions = {
 	Model: Model | BasePart,
@@ -104,7 +99,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floor
 	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
 
-	if rayResult then
+	if rayResult me
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
 	end
 
@@ -266,16 +261,37 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local isMoving = false
 	local isMovementFinished = false
 
-	-- Setup Camera Shake Loop Thread
+	-- Setup Fixed Camera Shake System
 	if enableShake then
 		task.spawn(function()
+			local currentCamera = Workspace.CurrentCamera
+			local shaker = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(shakeCFrame)
+				local camera = Workspace.CurrentCamera
+				if camera then
+					camera.CFrame = camera.CFrame * shakeCFrame
+				end
+			end)
+			shaker:Start()
+
 			local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 8, 0.1, 0.2)
 			rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
 			rawShakeInstance.RotationInfluence = Vector3.new(1, 1, 1)
 			
 			local sustainedShake = shaker:ShakeSustain(rawShakeInstance)
 
-			while not isMovementFinished and model and model.Parent do
+			local renderConnection
+			renderConnection = RunService.RenderStepped:Connect(function(dt)
+				shaker:Update(dt)
+
+				if isMovementFinished or not model or not model.Parent then
+					sustainedShake:StartFadeOut(0.2)
+					task.delay(0.2, function()
+						shaker:Stop()
+						renderConnection:Disconnect()
+					end)
+					return
+				end
+
 				if isMoving then
 					local character = LocalPlayer.Character
 					if character and character:FindFirstChild("HumanoidRootPart") then
@@ -293,10 +309,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				else
 					sustainedShake.Magnitude = 0
 				end
-				task.wait()
-			end
-
-			sustainedShake:StartFadeOut(0.2)
+			end)
 		end)
 	end
 
