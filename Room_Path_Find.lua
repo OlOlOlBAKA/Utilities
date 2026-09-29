@@ -311,13 +311,19 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
--- Validates room distance from entrance -> entity -> exit (Threshold: 500 studs)
+-- Validates room distance separately for entrance -> entity and exit -> entity (Threshold: 500 studs each)
 local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
 		local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
-		local totalDistance = (entityPos - entBack).Magnitude + (exitFront - entityPos).Magnitude
-		return totalDistance <= 500
+		
+		-- First check: Entrance to entity
+		local entranceDistance = (entityPos - entBack).Magnitude
+		
+		-- Second check: Exit to entity
+		local exitDistance = (exitFront - entityPos).Magnitude
+
+		return (entranceDistance <= 500) and (exitDistance <= 500)
 	end
 	return true
 end
