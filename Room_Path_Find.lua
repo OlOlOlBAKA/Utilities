@@ -563,7 +563,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.spawn(callbacks.OnStartMoving, model)
 	end
 
-	-- FIX: Explicitly set currentRoomIndex to initialTargetIndex so the first pass starts exactly at the spawned room
 	local currentReboundState = 0
 	local currentRoomIndex = initialTargetIndex
 
@@ -662,10 +661,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Forward motion helper (Back -> Front)
 	local function runForwardPass()
 		while model and model.Parent do
-			local dynamicTargetEndRoom = latestRoomValue.Value + 1
-			if currentReboundState > 0 then
-				dynamicTargetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
-			end
+			local dynamicTargetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
 
 			if currentRoomIndex > dynamicTargetEndRoom then break end
 
@@ -687,12 +683,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Backward motion helper (Front -> Back)
 	local function runBackwardPass()
 		while model and model.Parent do
-			local dynamicTargetMinRoom = 0
-			if currentReboundState > 0 then
-				dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
-			end
+			local dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
 
-			if currentRoomIndex < dynamicTargetMinRoom then break end
+			if currentRoomIndex < dynamicTargetMinRoom then
+				currentRoomIndex = dynamicTargetMinRoom
+				break
+			end
 
 			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
@@ -703,6 +699,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
 					end
 				end
+			end
+
+			if currentRoomIndex == dynamicTargetMinRoom then
+				break
 			end
 
 			currentRoomIndex -= 1
