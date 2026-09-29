@@ -99,7 +99,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floor
 	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
 
-	if rayResult me
+	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
 	end
 
