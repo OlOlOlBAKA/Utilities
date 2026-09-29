@@ -510,13 +510,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Resolve target room based on latest room state
+	-- Resolve target room based on current state
 	local function resolveSpawnTarget(): (Instance?, number)
 		local currentLatest = latestRoomValue.Value
 		local targetNum = (attackType == "Front") and (currentLatest + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
 		local foundRoom: Instance? = currentRooms:FindFirstChild(tostring(targetNum))
 
-		-- Fall back downwards if the specific offset room folder isn't in Workspace yet
 		if not foundRoom then
 			for i = targetNum - 1, 0, -1 do
 				local candidate = currentRooms:FindFirstChild(tostring(i))
@@ -531,7 +530,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return foundRoom, targetNum
 	end
 
-	-- Apply entity positioning
+	-- Apply initial entity placement
 	local function applyPositionToRoom(targetRoom: Instance)
 		local entFront, _, _, exitBack = getRoomPositions(targetRoom, floorYOffset)
 		local spawnPos = (attackType == "Front" and exitBack or entFront)
@@ -545,30 +544,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- 1. WAIT FOR DELAY TIME BEFORE PLACING / CALCULATION
-	if delayTime > 0 then
-		isMoving = false
-		task.wait(delayTime)
-	end
-
-	-- 2. SPAWN & RESOLVE ROOM (EXACT MOMENT RUSH BEGINS)
-	local spawnRoom, finalTargetIndex = resolveSpawnTarget()
-	if spawnRoom then
-		applyPositionToRoom(spawnRoom)
+	-- ORIGINAL SPAWN PROCEDURE
+	local initialRoom, initialTargetIndex = resolveSpawnTarget()
+	if initialRoom then
+		applyPositionToRoom(initialRoom)
 	end
 
 	if callbacks.OnSpawned then
 		task.spawn(callbacks.OnSpawned, model)
 	end
 
+	if delayTime > 0 then
+		isMoving = false
+		task.wait(delayTime)
+	end
+
 	if callbacks.OnStartMoving then
 		task.spawn(callbacks.OnStartMoving, model)
 	end
 
-	-- Snapshot values so dynamic room creation during movement can't alter the rush origin
+	-- FIX: Explicitly set currentRoomIndex to initialTargetIndex so the first pass starts exactly at the spawned room
 	local currentReboundState = 0
-	local currentRoomIndex = finalTargetIndex
-	local lockedStartRoomIndex = finalTargetIndex
+	local currentRoomIndex = initialTargetIndex
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -662,7 +659,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Forward motion helper (Back -> Front) dynamically evaluates newly generated rooms
+	-- Forward motion helper (Back -> Front)
 	local function runForwardPass()
 		while model and model.Parent do
 			local dynamicTargetEndRoom = latestRoomValue.Value + 1
@@ -687,22 +684,17 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Backward motion helper (Front -> Back) strictly bounded by snapshot room
+	-- Backward motion helper (Front -> Back)
 	local function runBackwardPass()
-		local startRoom = (attackType == "Front" and currentReboundState == 0) and lockedStartRoomIndex or currentRoomIndex
-		local dynamicTargetMinRoom = 0
+		while model and model.Parent do
+			local dynamicTargetMinRoom = 0
+			if currentReboundState > 0 then
+				dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
+			end
 
-		if currentReboundState > 0 then
-			dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
-		end
+			if currentRoomIndex < dynamicTargetMinRoom then break end
 
-		-- Explicit capped iteration: ignores any rooms above startRoom created while running
-		for roomNum = startRoom, dynamicTargetMinRoom, -1 do
-			if not model or not model.Parent then break end
-
-			currentRoomIndex = roomNum
-			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
-
+			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
 				if isRoomDistanceValid(roomFolder, model, floorYOffset) then
 					triggerRoomEvents(roomFolder)
@@ -712,6 +704,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					end
 				end
 			end
+
+			currentRoomIndex -= 1
 		end
 	end
 
