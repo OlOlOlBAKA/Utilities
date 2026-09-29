@@ -199,7 +199,6 @@ local function checkAdvancedHitbox(
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { entityModel }
 
-	-- 1. Swept Spherecast Trajectory (Prevents tunneling between frames)
 	if lastEntityPosition then
 		local displacement = currentEntityPos - lastEntityPosition
 		if displacement.Magnitude > 0.1 then
@@ -210,7 +209,6 @@ local function checkAdvancedHitbox(
 		end
 	end
 
-	-- 2. Check Line of Sight to every character BasePart EXCEPT Head
 	local targetParts = {}
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("BasePart") and child.Name ~= "Head" then
@@ -310,7 +308,7 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
--- Validates room distance separately for entrance -> entity and exit -> entity (Threshold: 500 studs each)
+-- Validates room distance separately for entrance -> entity and exit -> entity (Updated failsafe to 1,000 studs)
 local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
@@ -512,40 +510,97 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Dynamically resolve live spawn room anchor
-	local liveLatestRoom = latestRoomValue.Value
-	local targetSpawnNumber = 0
+	-- Dynamically calculate spawn CFrame and resolve valid room
+	local function resolveSpawnTarget(): (Instance?, number)
+		local currentLatest = latestRoomValue.Value
+		local targetNum = (attackType == "Front") and (currentLatest + 1 + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
+		local searchIndex = targetNum
+		local foundRoom: Instance? = nil
 
-	if attackType == "Front" then
-		targetSpawnNumber = liveLatestRoom + 1 + spawnOffsetRooms
-	else
-		targetSpawnNumber = math.max(0, liveLatestRoom - spawnOffsetRooms)
+		if attackType == "Front" then
+			while searchIndex >= 0 do
+				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
+				if candidate then
+					foundRoom = candidate
+					break
+				end
+				searchIndex -= 1
+			end
+		else
+			while searchIndex <= currentLatest + 1 do
+				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
+				if candidate then
+					foundRoom = candidate
+					break
+				end
+				searchIndex += 1
+			end
+		end
+
+		return foundRoom, targetNum
 	end
 
-	local actualSpawnRoom: Instance? = nil
+	-- Apply entity positioning
+	local function applyPositionToRoom(targetRoom: Instance)
+		local entFront, _, _, exitBack = getRoomPositions(targetRoom, floorYOffset)
+		local spawnPos = (attackType == "Front" and exitBack or entFront)
+		if spawnPos then
+			spawnPos = spawnPos + Vector3.new(0, heightOffset, 0)
+			if model:IsA("Model") then
+				model:PivotTo(CFrame.new(spawnPos))
+			elseif model:IsA("BasePart") then
+				model.Position = spawnPos
+			end
+		end
+	end
 
-	if attackType == "Front" then
-		while targetSpawnNumber >= 0 do
-			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
-					actualSpawnRoom = candidateRoom
-					break
+	-- Initial placement
+	local initialRoom, initialTargetIndex = resolveSpawnTarget()
+	if initialRoom then
+		applyPositionToRoom(initialRoom)
+	end
+
+	if callbacks.OnSpawned then
+		task.spawn(callbacks.OnSpawned, model)
+	end
+
+	-- Listen for dynamic room generation during DelayTime
+	local roomChangedConnection: RBXScriptConnection?
+
+	if delayTime > 0 then
+		isMoving = false
+
+		-- If attackType == "Front", teleport ahead whenever a new room spawns
+		roomChangedConnection = latestRoomValue.Changed:Connect(function(newLatestRoom)
+			if attackType == "Front" then
+				local newTargetNum = newLatestRoom + 1 + spawnOffsetRooms
+				local candidateRoom = currentRooms:FindFirstChild(tostring(newTargetNum)) or currentRooms:FindFirstChild(tostring(newLatestRoom + 1))
+				
+				if candidateRoom then
+					applyPositionToRoom(candidateRoom)
 				end
 			end
-			targetSpawnNumber -= 1
+		end)
+
+		task.wait(delayTime)
+
+		if roomChangedConnection then
+			roomChangedConnection:Disconnect()
+			roomChangedConnection = nil
 		end
-	else
-		while targetSpawnNumber <= liveLatestRoom + 1 do
-			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
-					actualSpawnRoom = candidateRoom
-					break
-				end
-			end
-			targetSpawnNumber += 1
-		end
+	end
+
+	if callbacks.OnStartMoving then
+		task.spawn(callbacks.OnStartMoving, model)
+	end
+
+	-- Update starting index to live position after delay
+	local currentReboundState = 0
+	local finalSpawnRoom, finalTargetIndex = resolveSpawnTarget()
+	local currentRoomIndex = finalTargetIndex
+
+	if finalSpawnRoom then
+		applyPositionToRoom(finalSpawnRoom)
 	end
 
 	-- Move entity directly to target point
@@ -639,36 +694,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 		end
 	end
-
-	-- Entity spawn placement
-	if actualSpawnRoom then
-		local entFront, _, _, exitBack = getRoomPositions(actualSpawnRoom, floorYOffset)
-		local spawnPos = (attackType == "Front" and exitBack or entFront)
-		if spawnPos then
-			spawnPos = spawnPos + Vector3.new(0, heightOffset, 0)
-			if model:IsA("Model") then
-				model:PivotTo(CFrame.new(spawnPos))
-			elseif model:IsA("BasePart") then
-				model.Position = spawnPos
-			end
-		end
-	end
-
-	if callbacks.OnSpawned then
-		task.spawn(callbacks.OnSpawned, model)
-	end
-
-	if delayTime > 0 then
-		isMoving = false
-		task.wait(delayTime)
-	end
-
-	if callbacks.OnStartMoving then
-		task.spawn(callbacks.OnStartMoving, model)
-	end
-
-	local currentReboundState = 0
-	local currentRoomIndex = targetSpawnNumber -- Synchronize current room to calculated dynamic spawn target
 
 	-- Forward motion helper (Back -> Front) dynamically evaluates newly generated rooms
 	local function runForwardPass()
