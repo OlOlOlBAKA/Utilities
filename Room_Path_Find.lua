@@ -429,8 +429,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Sequence motion along calculated nodes
+	-- Sequence motion along calculated nodes with fail-safe distance checks
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
+		-- Fail-Safe Check: Skip room if Entrance to Exit distance exceeds 200 studs
+		local roomDistance = (endPos - startPos).Magnitude
+		if roomDistance > 200 then
+			warn(string.format("PathfindingMovement: Room %s skipped. Entrance/Exit distance is too far (%.1f studs > 200 studs).", roomFolder and roomFolder.Name or "Unknown", roomDistance))
+			return
+		end
+
 		local heightVector = Vector3.new(0, heightOffset, 0)
 		local fullPathVisuals: Folder?
 
