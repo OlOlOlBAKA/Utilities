@@ -269,19 +269,22 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function startCameraShake()
 		if not enableShake or renderConnection then return end
 
+		-- RenderPriority offset +2 allows non-interfering additive overlay with other camera shakers
 		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 2, function(shakeCFrame)
 			local camera = Workspace.CurrentCamera
 			if camera then
 				local posOffset = shakeCFrame.Position
 				local rx, ry, rz = shakeCFrame:ToOrientation()
+				-- Smooth additive CFrame combination (Position + Rotation)
 				camera.CFrame = camera.CFrame * CFrame.new(posOffset) * CFrame.Angles(rx, ry, rz)
 			end
 		end)
 		shakerInstance:Start()
 
-		local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 10, 0.1, 0.25)
-		rawShakeInstance.PositionInfluence = Vector3.new(0.25, 0.25, 0.25)
-		rawShakeInstance.RotationInfluence = Vector3.new(1.5, 1.5, 1.5)
+		-- Smooth, natural frequency shake preset
+		local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
+		rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
+		rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
 		
 		sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
 
@@ -292,12 +295,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 			-- Safety / Despawn disconnect handler
 			if isMovementFinished or not model or not model.Parent then
-				if sustainedShake then sustainedShake:StartFadeOut(0.1) end
+				if sustainedShake then sustainedShake:StartFadeOut(0.2) end
 				if renderConnection then
 					renderConnection:Disconnect()
 					renderConnection = nil
 				end
-				task.delay(0.1, function()
+				task.delay(0.2, function()
 					if shakerInstance then
 						shakerInstance:Stop()
 						shakerInstance = nil
@@ -306,23 +309,33 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				return
 			end
 
-			-- Dynamic proximity math
-			if isMoving then
+			-- Frame-rate independent smooth Lerp interpolation for proximity magnitude
+			if isMoving and sustainedShake then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
 					local hrpPos = character.HumanoidRootPart.Position
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
+					local targetMagnitude = 0
 					if distance <= shakeRadius then
 						local distanceRatio = 1 - (distance / shakeRadius)
-						sustainedShake.Magnitude = shakeAmount * (distanceRatio ^ 2)
-					else
-						sustainedShake.Magnitude = 0
+						targetMagnitude = shakeAmount * (distanceRatio ^ 2)
 					end
+
+					-- Smooth lerp transition to prevent sudden rigid magnitude jumps
+					sustainedShake.Magnitude = math.clamp(
+						sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1),
+						0,
+						shakeAmount
+					)
 				end
-			else
-				sustainedShake.Magnitude = 0
+			elseif sustainedShake then
+				sustainedShake.Magnitude = math.clamp(
+					sustainedShake.Magnitude + (0 - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1),
+					0,
+					shakeAmount
+				)
 			end
 		end)
 	end
@@ -330,15 +343,19 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function stopCameraShake()
 		isMovementFinished = true
 		if sustainedShake then
-			sustainedShake:StartFadeOut(0.1)
+			sustainedShake:StartFadeOut(0.2)
 		end
 		if renderConnection then
 			renderConnection:Disconnect()
 			renderConnection = nil
 		end
 		if shakerInstance then
-			shakerInstance:Stop()
-			shakerInstance = nil
+			task.delay(0.2, function()
+				if shakerInstance then
+					shakerInstance:Stop()
+					shakerInstance = nil
+				end
+			end)
 		end
 	end
 
