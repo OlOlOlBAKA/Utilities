@@ -315,7 +315,7 @@ end
 local function isRoomDistanceValid(roomFolder: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
-		return (exitFront - entBack).Magnitude <= 200
+		return (exitFront - entBack).Magnitude <= 500
 	end
 	return true
 end
