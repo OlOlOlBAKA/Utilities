@@ -7,13 +7,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 
--- Require CameraShaker module (Placed in ReplicatedStorage)
+-- CameraShaker Integration
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
-
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Global CameraShaker Instance Setup
 local shaker = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(shakeCFrame)
 	Camera.CFrame = Camera.CFrame * shakeCFrame
 end)
@@ -34,8 +32,8 @@ type MovementOptions = {
 
 	-- Camera Shake Options
 	EnableCameraShake: boolean?,
-	ShakeAmount: number?, -- Max magnitude near entity
-	ShakeRadius: number?   -- Max distance to feel shaking
+	ShakeAmount: number?, -- Base magnitude multiplier (default: 1.5)
+	ShakeRadius: number?   -- Distance in studs to feel shake (default: 120)
 }
 
 -- Disable CanCollide on all parts of the entity
@@ -108,7 +106,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand
+-- Computes path sub-waypoints on demand (HeightOffset strictly applied ONLY to path nodes)
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -198,32 +196,44 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakeAmount = options.ShakeAmount or 1.5
 	local shakeRadius = options.ShakeRadius or 120
 
-	-- Local Camera Shake Instance Setup
-	local activeShakeInstance = nil
+	-- State variables to manage camera shake life cycle
+	local isMoving = false
+	local isMovementFinished = false
+
+	-- Setup Camera Shake Thread
 	if enableShake then
-		local rawInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 8, 0.2, 0.5)
-		rawInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
-		rawInstance.RotationInfluence = Vector3.new(1, 1, 1)
-		activeShakeInstance = shaker:ShakeSustain(rawInstance)
-	end
+		task.spawn(function()
+			local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 8, 0.1, 0.2)
+			rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
+			rawShakeInstance.RotationInfluence = Vector3.new(1, 1, 1)
+			
+			local sustainedShake = shaker:ShakeSustain(rawShakeInstance)
 
-	-- Helper to dynamically adjust shake intensity based on distance
-	local function updateCameraShake()
-		if not enableShake or not activeShakeInstance or not model or not model.Parent then return end
+			while not isMovementFinished and model and model.Parent do
+				if isMoving then
+					local character = LocalPlayer.Character
+					if character and character:FindFirstChild("HumanoidRootPart") then
+						local hrpPos = character.HumanoidRootPart.Position
+						local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+						local distance = (hrpPos - entityPos).Magnitude
 
-		local character = LocalPlayer.Character
-		if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+						if distance <= shakeRadius then
+							local distanceRatio = 1 - (distance / shakeRadius)
+							sustainedShake.Magnitude = shakeAmount * (distanceRatio ^ 2)
+						else
+							sustainedShake.Magnitude = 0
+						end
+					end
+				else
+					-- Stop shake immediately when not actively moving
+					sustainedShake.Magnitude = 0
+				end
+				task.wait()
+			end
 
-		local hrpPos = character.HumanoidRootPart.Position
-		local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-		local distance = (hrpPos - entityPos).Magnitude
-
-		if distance <= shakeRadius then
-			local distanceRatio = 1 - (distance / shakeRadius)
-			activeShakeInstance.Magnitude = shakeAmount * (distanceRatio ^ 2)
-		else
-			activeShakeInstance.Magnitude = 0
-		end
+			-- Complete stop on finish/despawn
+			sustainedShake:StartFadeOut(0.2)
+		end)
 	end
 
 	if model.Parent ~= Workspace then
@@ -236,6 +246,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	if not currentRooms or not latestRoomValue then
 		warn("PathfindingMovement: CurrentRooms or GameData.LatestRoom missing!")
+		isMovementFinished = true
 		return
 	end
 
@@ -251,6 +262,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
 		if segmentDistance > 0.001 then
+			isMoving = true -- Signal shake thread that entity is actively moving
+
 			local travelTime = segmentDistance / speed
 			local direction = (targetPos - currentPos).Unit
 			local targetCFrame = CFrame.lookAt(targetPos, targetPos + direction)
@@ -259,13 +272,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if model:IsA("BasePart") then
 				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
 				tween:Play()
-
-				-- Real-time distance shake update loop while tweening
-				local elapsed = 0
-				while tween.PlaybackState == Enum.PlaybackState.Playing do
-					updateCameraShake()
-					task.wait()
-				end
+				tween.Completed:Wait()
 			elseif model:IsA("Model") then
 				local CFrameValue = Instance.new("CFrameValue")
 				CFrameValue.Value = model:GetPivot()
@@ -273,7 +280,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				local connection = CFrameValue.Changed:Connect(function(newCFrame)
 					if model and model.Parent then
 						model:PivotTo(newCFrame)
-						updateCameraShake()
 					end
 				end)
 
@@ -284,6 +290,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				connection:Disconnect()
 				CFrameValue:Destroy()
 			end
+
+			isMoving = false -- Active movement finished for this segment
 		end
 	end
 
@@ -309,6 +317,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	if delayTime > 0 then
+		isMoving = false
 		task.wait(delayTime)
 	end
 
@@ -339,28 +348,30 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, exitFront, roomFolder)
 					end
 				end
+				--task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
-			-- Backward Pass (Rebound) - Navigates only via exit points
+			-- Backward Pass (Rebound)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local _, _, exitFront, exitBack = getRoomPositions(roomFolder)
+					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-
-					if exitFront then 
-						moveAlongWaypoints(currentPos, exitFront, roomFolder) 
+					if entBack then 
+						moveAlongWaypoints(currentPos, entBack, roomFolder) 
 					end
-					if exitBack then 
+					if entFront then
 						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
+						moveAlongWaypoints(currentPos, entFront, roomFolder) 
 					end
 				end
+				-- task.wait() -- Prevents frame spikes during room iteration
 			end
 		end
 
 		-- Check for Rebound trigger
 		if isRebound and currentReboundState < targetReboundCount then
+			isMoving = false -- Ensure camera stops shaking during rebound delays
 			currentReboundState += 1
 			if currentReboundState % 2 == 1 then
 				if reboundTime > 0 then task.wait(reboundTime) end
@@ -372,10 +383,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Fade out camera shake prior to despawn
-	if activeShakeInstance then
-		activeShakeInstance:StartFadeOut(0.5)
-	end
+	-- Signal camera shake to completely stop before gravity fall/despawn
+	isMoving = false
+	isMovementFinished = true
 
 	-- Despawn Gravity Fall
 	if model and model.Parent then
