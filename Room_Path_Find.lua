@@ -38,6 +38,11 @@ type MovementOptions = {
 	SphereRadius: number?,  -- Thickness radius of the spherecast (default: 3.5)
 	Damage: number?,        -- Damage applied to player (default: 100)
 
+	-- Lighting Control Options
+	LightFlicker: boolean?, -- Enable light flickering effect
+	Duration: number?,      -- Duration for light flickering/effects
+	LightBreak: boolean?,   -- Permanently shatter/destroy lights on room entry
+
 	-- Custom Event Callbacks
 	Callbacks: EventCallbacks?,
 
@@ -344,6 +349,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local useRaycastHitbox = if options.RaycastHitbox ~= nil then options.RaycastHitbox else false
 	local sphereRadius = options.SphereRadius or 3.5
 	local damageAmount = options.Damage or 100
+
+	-- Lighting Options
+	local lightFlicker = if options.LightFlicker ~= nil then options.LightFlicker else false
+	local duration = options.Duration or 1
+	local lightBreak = if options.LightBreak ~= nil then options.LightBreak else false
 
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
