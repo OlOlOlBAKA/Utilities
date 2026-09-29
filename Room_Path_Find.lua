@@ -21,9 +21,13 @@ type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
 	HeightOffset: number?,
+	FloorYOffset: number?, -- Offset applied to floor level (default: -3)
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
 	
+	-- Debug / Visualization Options
+	ShowPath: boolean?, -- Visualize generated waypoints
+
 	-- Rebound System Options
 	Rebound: boolean?,
 	ReboundCount: number?,
@@ -86,11 +90,12 @@ local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	return floorParts
 end
 
-local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vector3
-	if not roomFolder then return position end
+local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floorYOffset: number): Vector3
+	local offsetVector = Vector3.new(0, floorYOffset, 0)
+	if not roomFolder then return position + offsetVector end
 
 	local floorParts = getRoomFloorParts(roomFolder)
-	if #floorParts == 0 then return position end
+	if #floorParts == 0 then return position + offsetVector end
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Include
@@ -100,14 +105,52 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
 
 	if rayResult then
-		return Vector3.new(position.X, rayResult.Position.Y, position.Z)
+		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
 	end
 
-	return position
+	return position + offsetVector
 end
 
--- Computes path sub-waypoints and filters nodes near doors (<5 studs) or near prior waypoints (<3 studs)
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
+-- Visualizes waypoints as small neon spheres in Workspace
+local function renderDebugWaypoints(waypoints: {Vector3}): Folder
+	local folder = Instance.new("Folder")
+	folder.Name = "PathDebugVisuals"
+
+	for i, pos in ipairs(waypoints) do
+		local part = Instance.new("Part")
+		part.Size = Vector3.new(1.2, 1.2, 1.2)
+		part.Shape = Enum.PartType.Ball
+		part.Material = Enum.Material.Neon
+		part.Color = Color3.fromRGB(0, 255, 170)
+		part.Transparency = 0.3
+		part.Anchored = true
+		part.CanCollide = false
+		part.Position = pos
+		part.Parent = folder
+
+		-- Draw connecting line to previous waypoint
+		if i > 1 then
+			local prevPos = waypoints[i - 1]
+			local dist = (pos - prevPos).Magnitude
+
+			local line = Instance.new("Part")
+			line.Size = Vector3.new(0.3, 0.3, dist)
+			line.CFrame = CFrame.lookAt(prevPos:Lerp(pos, 0.5), pos)
+			line.Material = Enum.Material.Neon
+			line.Color = Color3.fromRGB(255, 170, 0)
+			line.Transparency = 0.5
+			line.Anchored = true
+			line.CanCollide = false
+			line.Parent = folder
+		end
+	end
+
+	folder.Parent = Workspace
+	return folder
+end
+
+-- Computes path sub-waypoints and filters nodes near doors (<10 studs) or near prior waypoints (<10 studs)
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -123,24 +166,24 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local filteredWaypoints: {Vector3} = {}
 
 	local function processWaypointCandidate(pos: Vector3)
-		-- 1. Check distance to start (Entrance) and end (Exit) doors
+		-- 1. Door clearance threshold check (10-stud radius)
 		local distToStart = (pos - startPos).Magnitude
 		local distToEnd = (pos - endPos).Magnitude
-		if distToStart <= 5 or distToEnd <= 5 then
+		if distToStart <= 10 or distToEnd <= 10 then
 			return
 		end
 
-		-- 2. Check distance to the last accepted waypoint
+		-- 2. Waypoint density threshold check (10-stud spacing filter)
 		local lastPos = filteredWaypoints[#filteredWaypoints]
 		if lastPos then
 			local distToLast = (pos - lastPos).Magnitude
-			if distToLast < 3 then
+			if distToLast < 10 then
 				return
 			end
 		end
 
-		-- Ground align and save
-		local groundPos = alignToFloorLevel(pos, roomFolder)
+		-- Ground align with vertical offset floor adjustments
+		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
 		table.insert(filteredWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
 	end
 
@@ -151,9 +194,9 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return filteredWaypoints
 	end
 
-	-- Fallback linear path
+	-- Fallback linear path generator
 	local distance = (endPos - startPos).Magnitude
-	local steps = math.max(2, math.ceil(distance / 5))
+	local steps = math.max(2, math.ceil(distance / 10))
 
 	for i = 1, steps do
 		local alpha = i / steps
@@ -164,8 +207,8 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	return filteredWaypoints
 end
 
--- Get Door Positions without HeightOffset
-local function getRoomPositions(roomFolder: Instance): (Vector3?, Vector3?, Vector3?, Vector3?)
+-- Retrieves dynamic room entrance and exit locations
+local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Vector3?, Vector3?, Vector3?, Vector3?)
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	local roomExit = roomFolder:FindFirstChild("RoomExit", true) or roomEntrance
 
@@ -174,16 +217,16 @@ local function getRoomPositions(roomFolder: Instance): (Vector3?, Vector3?, Vect
 	if roomEntrance then
 		local cf = roomEntrance:IsA("BasePart") and roomEntrance.CFrame or (roomEntrance:IsA("Model") and (roomEntrance.PrimaryPart and roomEntrance.PrimaryPart.CFrame or roomEntrance:GetPivot()))
 		if cf then
-			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder)
-			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder)
+			entFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder, floorYOffset)
+			entBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder, floorYOffset)
 		end
 	end
 
 	if roomExit then
 		local cf = roomExit:IsA("BasePart") and roomExit.CFrame or (roomExit:IsA("Model") and (roomExit.PrimaryPart and roomExit.PrimaryPart.CFrame or roomExit:GetPivot()))
 		if cf then
-			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder)
-			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder)
+			exitFront = alignToFloorLevel((cf * CFrame.new(0, 0, 2.5)).Position, roomFolder, floorYOffset)
+			exitBack = alignToFloorLevel((cf * CFrame.new(0, 0, -2.5)).Position, roomFolder, floorYOffset)
 		end
 	end
 
@@ -201,7 +244,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local speed = options.Speed or 60
 	local heightOffset = options.HeightOffset or 2.5
+	local floorYOffset = options.FloorYOffset or -3
 	local delayTime = options.DelayTime or 0
+	local showPath = options.ShowPath or false
 	
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
@@ -217,7 +262,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakeAmount = options.ShakeAmount or 1.5
 	local shakeRadius = options.ShakeRadius or 120
 
-	-- State variables for camera shake management
+	-- Movement State
 	local isMoving = false
 	local isMovementFinished = false
 
@@ -273,7 +318,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 	local endRoomNumber = latestRoomNumber + 1
 
-	-- Helper to move directly to a target position
+	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
 		if not targetPos or not model or not model.Parent then return end
 		
@@ -314,34 +359,55 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Executes start-node move, filtered path computation, and end-node move
+	-- Sequence motion along calculated nodes
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
-		-- 1. Move to start node
-		if startNode then
-			moveDirectTo(startNode)
+		local heightVector = Vector3.new(0, heightOffset, 0)
+		local fullPathVisuals: Folder?
+
+		-- Calculate waypoints
+		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, floorYOffset, roomFolder)
+		
+		-- Optional Visual Path Render
+		if showPath then
+			local allNodes = {}
+			if startNode then table.insert(allNodes, startNode + heightVector) end
+			for _, wp in ipairs(waypoints) do table.insert(allNodes, wp) end
+			if endNode then table.insert(allNodes, endNode + heightVector) end
+
+			fullPathVisuals = renderDebugWaypoints(allNodes)
 		end
 
-		-- 2. Move along filtered path waypoints
-		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, roomFolder)
+		-- 1. Start door node move
+		if startNode then
+			moveDirectTo(startNode + heightVector)
+		end
+
+		-- 2. Waypoint traversal
 		for _, nodePos in ipairs(waypoints) do
 			moveDirectTo(nodePos)
 		end
 
-		-- 3. Move to end node
+		-- 3. Exit door node move
 		if endNode then
-			moveDirectTo(endNode)
+			moveDirectTo(endNode + heightVector)
+		end
+
+		-- Cleanup path visualization markers after segment completion
+		if fullPathVisuals then
+			fullPathVisuals:Destroy()
 		end
 	end
 
-	-- Setup spawn position
+	-- Entity spawn setup
 	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 	if spawnRoom then
-		local entFront = getRoomPositions(spawnRoom)
+		local entFront = getRoomPositions(spawnRoom, floorYOffset)
 		if entFront then
+			local spawnPos = entFront + Vector3.new(0, heightOffset, 0)
 			if model:IsA("Model") then
-				model:PivotTo(CFrame.new(entFront))
+				model:PivotTo(CFrame.new(spawnPos))
 			elseif model:IsA("BasePart") then
-				model.Position = entFront
+				model.Position = spawnPos
 			end
 		end
 	end
@@ -353,16 +419,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local currentReboundState = 0
 
-	-- Main Movement Loop
+	-- Navigation processing loop
 	while model and model.Parent do
 		endRoomNumber = latestRoomValue.Value + 1
 
 		if currentReboundState % 2 == 0 then
-			-- Forward Pass
+			-- Forward direction pass
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local _, entBack, exitFront = getRoomPositions(roomFolder)
+					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
 					if entBack and exitFront then
 						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
@@ -370,11 +436,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		else
-			-- Rebound (Backward Pass)
+			-- Rebound direction pass
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local _, entBack, exitFront = getRoomPositions(roomFolder)
+					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
 					if exitFront and entBack then
 						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
@@ -383,7 +449,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 		end
 
-		-- Check for Rebound trigger
+		-- Evaluate rebound parameters
 		if isRebound and currentReboundState < targetReboundCount then
 			isMoving = false
 			currentReboundState += 1
@@ -397,11 +463,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Turn off camera shake before despawning
 	isMoving = false
 	isMovementFinished = true
 
-	-- Despawn Gravity Fall
+	-- Gravity Fall Despawn logic
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
@@ -439,7 +504,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		model:Destroy()
 	end
 	
-	-- Clean cache when done
 	table.clear(roomFloorCache)
 end
 
