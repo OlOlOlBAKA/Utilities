@@ -5,6 +5,19 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
+local Players = game:GetService("Players")
+
+-- Require CameraShaker module (Placed in ReplicatedStorage)
+local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- Global CameraShaker Instance Setup
+local shaker = CameraShaker.new(Enum.RenderPriority.Camera.Value + 1, function(shakeCFrame)
+	Camera.CFrame = Camera.CFrame * shakeCFrame
+end)
+shaker:Start()
 
 type MovementOptions = {
 	Model: Model | BasePart,
@@ -17,7 +30,12 @@ type MovementOptions = {
 	Rebound: boolean?,
 	ReboundCount: number?,
 	ReboundTime: number?,
-	ReboundDelayTime: number?
+	ReboundDelayTime: number?,
+
+	-- Camera Shake Options
+	EnableCameraShake: boolean?,
+	ShakeAmount: number?, -- Max magnitude near entity
+	ShakeRadius: number?   -- Max distance to feel shaking
 }
 
 -- Disable CanCollide on all parts of the entity
@@ -90,7 +108,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand (HeightOffset strictly applied ONLY to path nodes)
+-- Computes path sub-waypoints on demand
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -175,6 +193,39 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local reboundTime = options.ReboundTime or 0
 	local reboundDelayTime = options.ReboundDelayTime or 0
 
+	-- Camera Shake Settings
+	local enableShake = if options.EnableCameraShake ~= nil then options.EnableCameraShake else true
+	local shakeAmount = options.ShakeAmount or 1.5
+	local shakeRadius = options.ShakeRadius or 120
+
+	-- Local Camera Shake Instance Setup
+	local activeShakeInstance = nil
+	if enableShake then
+		local rawInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 8, 0.2, 0.5)
+		rawInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
+		rawInstance.RotationInfluence = Vector3.new(1, 1, 1)
+		activeShakeInstance = shaker:ShakeSustain(rawInstance)
+	end
+
+	-- Helper to dynamically adjust shake intensity based on distance
+	local function updateCameraShake()
+		if not enableShake or not activeShakeInstance or not model or not model.Parent then return end
+
+		local character = LocalPlayer.Character
+		if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+		local hrpPos = character.HumanoidRootPart.Position
+		local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+		local distance = (hrpPos - entityPos).Magnitude
+
+		if distance <= shakeRadius then
+			local distanceRatio = 1 - (distance / shakeRadius)
+			activeShakeInstance.Magnitude = shakeAmount * (distanceRatio ^ 2)
+		else
+			activeShakeInstance.Magnitude = 0
+		end
+	end
+
 	if model.Parent ~= Workspace then
 		model.Parent = Workspace
 	end
@@ -199,7 +250,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
-		if segmentDistance > 0.001 then
+		if segmentDistance > 0.05 then
 			local travelTime = segmentDistance / speed
 			local direction = (targetPos - currentPos).Unit
 			local targetCFrame = CFrame.lookAt(targetPos, targetPos + direction)
@@ -208,7 +259,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if model:IsA("BasePart") then
 				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
 				tween:Play()
-				tween.Completed:Wait()
+
+				-- Real-time distance shake update loop while tweening
+				local elapsed = 0
+				while tween.PlaybackState == Enum.PlaybackState.Playing do
+					updateCameraShake()
+					task.wait()
+				end
 			elseif model:IsA("Model") then
 				local CFrameValue = Instance.new("CFrameValue")
 				CFrameValue.Value = model:GetPivot()
@@ -216,6 +273,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				local connection = CFrameValue.Changed:Connect(function(newCFrame)
 					if model and model.Parent then
 						model:PivotTo(newCFrame)
+						updateCameraShake()
 					end
 				end)
 
@@ -281,24 +339,23 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, exitFront, roomFolder)
 					end
 				end
-				--task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
-			-- Backward Pass (Rebound)
+			-- Backward Pass (Rebound) - Navigates only via exit points
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
+					local _, _, exitFront, exitBack = getRoomPositions(roomFolder)
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					if entBack then 
-						moveAlongWaypoints(currentPos, entBack, roomFolder) 
+
+					if exitFront then 
+						moveAlongWaypoints(currentPos, exitFront, roomFolder) 
 					end
-					if entFront then
+					if exitBack then 
 						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entFront, roomFolder) 
+						moveAlongWaypoints(currentPos, exitBack, roomFolder) 
 					end
 				end
-				-- task.wait() -- Prevents frame spikes during room iteration
 			end
 		end
 
@@ -313,6 +370,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		else
 			break
 		end
+	end
+
+	-- Fade out camera shake prior to despawn
+	if activeShakeInstance then
+		activeShakeInstance:StartFadeOut(0.5)
 	end
 
 	-- Despawn Gravity Fall
