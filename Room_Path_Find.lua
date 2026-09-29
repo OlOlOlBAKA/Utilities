@@ -510,34 +510,21 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Dynamically calculate spawn CFrame and resolve valid room
+	-- Resolve target room based on latest room state
 	local function resolveSpawnTarget(): (Instance?, number)
 		local currentLatest = latestRoomValue.Value
 		local targetNum = (attackType == "Front") and (currentLatest + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
-		local searchIndex = targetNum
-		local foundRoom: Instance? = nil
+		local foundRoom: Instance? = currentRooms:FindFirstChild(tostring(targetNum))
 
-		if attackType == "Front" then
-			-- Don't allow searchIndex to go higher than current targetNum
-			searchIndex = math.min(searchIndex, currentLatest + spawnOffsetRooms)
-			while searchIndex >= 0 do
-				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
+		-- Fall back downwards if the specific offset room folder isn't in Workspace yet
+		if not foundRoom then
+			for i = targetNum - 1, 0, -1 do
+				local candidate = currentRooms:FindFirstChild(tostring(i))
 				if candidate then
 					foundRoom = candidate
-					targetNum = searchIndex
+					targetNum = i
 					break
 				end
-				searchIndex -= 1
-			end
-		else
-			while searchIndex <= currentLatest + 1 do
-				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
-				if candidate then
-					foundRoom = candidate
-					targetNum = searchIndex
-					break
-				end
-				searchIndex += 1
 			end
 		end
 
@@ -558,53 +545,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Initial placement
-	local initialRoom, initialTargetIndex = resolveSpawnTarget()
-	if initialRoom then
-		applyPositionToRoom(initialRoom)
+	-- 1. WAIT FOR DELAY TIME BEFORE PLACING / CALCULATION
+	if delayTime > 0 then
+		isMoving = false
+		task.wait(delayTime)
+	end
+
+	-- 2. SPAWN & RESOLVE ROOM (EXACT MOMENT RUSH BEGINS)
+	local spawnRoom, finalTargetIndex = resolveSpawnTarget()
+	if spawnRoom then
+		applyPositionToRoom(spawnRoom)
 	end
 
 	if callbacks.OnSpawned then
 		task.spawn(callbacks.OnSpawned, model)
 	end
 
-	-- Listen for dynamic room generation during DelayTime
-	local roomChangedConnection: RBXScriptConnection?
-
-	if delayTime > 0 then
-		isMoving = false
-
-		roomChangedConnection = latestRoomValue.Changed:Connect(function(newLatestRoom)
-			if attackType == "Front" then
-				local newTargetNum = newLatestRoom + spawnOffsetRooms
-				local candidateRoom = currentRooms:FindFirstChild(tostring(newTargetNum))
-				if candidateRoom then
-					applyPositionToRoom(candidateRoom)
-				end
-			end
-		end)
-
-		task.wait(delayTime)
-
-		if roomChangedConnection then
-			roomChangedConnection:Disconnect()
-			roomChangedConnection = nil
-		end
-	end
-
 	if callbacks.OnStartMoving then
 		task.spawn(callbacks.OnStartMoving, model)
 	end
 
-	-- Finalize actual spawn room directly before movement starts
+	-- Snapshot values so dynamic room creation during movement can't alter the rush origin
 	local currentReboundState = 0
-	local finalSpawnRoom, finalTargetIndex = resolveSpawnTarget()
-
-	if finalSpawnRoom then
-		applyPositionToRoom(finalSpawnRoom)
-	end
-
-	-- Force currentRoomIndex to match the exact room the entity placed into
 	local currentRoomIndex = finalTargetIndex
 	local lockedStartRoomIndex = finalTargetIndex
 
@@ -725,22 +687,22 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Backward motion helper (Front -> Back) strictly bounded on initial spawn
+	-- Backward motion helper (Front -> Back) strictly bounded by snapshot room
 	local function runBackwardPass()
-		-- Enforce starting room cap on the very first pass for Front attack type
-		if attackType == "Front" and currentReboundState == 0 then
-			currentRoomIndex = lockedStartRoomIndex
+		local startRoom = (attackType == "Front" and currentReboundState == 0) and lockedStartRoomIndex or currentRoomIndex
+		local dynamicTargetMinRoom = 0
+
+		if currentReboundState > 0 then
+			dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
 		end
 
-		while model and model.Parent do
-			local dynamicTargetMinRoom = 0
-			if currentReboundState > 0 then
-				dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
-			end
+		-- Explicit capped iteration: ignores any rooms above startRoom created while running
+		for roomNum = startRoom, dynamicTargetMinRoom, -1 do
+			if not model or not model.Parent then break end
 
-			if currentRoomIndex < dynamicTargetMinRoom then break end
+			currentRoomIndex = roomNum
+			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 
-			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
 				if isRoomDistanceValid(roomFolder, model, floorYOffset) then
 					triggerRoomEvents(roomFolder)
@@ -750,8 +712,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					end
 				end
 			end
-
-			currentRoomIndex -= 1
 		end
 	end
 
