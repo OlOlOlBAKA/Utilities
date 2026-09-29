@@ -199,7 +199,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
-		if segmentDistance > 0.05 then
+		if segmentDistance > 0.001 then
 			local travelTime = segmentDistance / speed
 			local direction = (targetPos - currentPos).Unit
 			local targetCFrame = CFrame.lookAt(targetPos, targetPos + direction)
@@ -294,7 +294,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, entBack, roomFolder) 
 					end
 					if entFront then
-						currentPos = entFront.Position
+						currentPos = entFront
 						-- moveAlongWaypoints(currentPos, entFront, roomFolder) 
 					end
 				end
