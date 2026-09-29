@@ -281,7 +281,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, exitFront, roomFolder)
 					end
 				end
-				task.wait() -- Prevents frame spikes during room iteration
+				--task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
 			-- Backward Pass (Rebound)
@@ -293,12 +293,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if entBack then 
 						moveAlongWaypoints(currentPos, entBack, roomFolder) 
 					end
-					-- if entFront then
-						-- currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+					if entFront then
+						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 						-- moveAlongWaypoints(currentPos, entFront, roomFolder) 
-					-- end
+					end
 				end
-				task.wait() -- Prevents frame spikes during room iteration
+				--task.wait() -- Prevents frame spikes during room iteration
 			end
 		end
 
