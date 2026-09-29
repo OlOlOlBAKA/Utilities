@@ -106,7 +106,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand
+-- Computes path sub-waypoints and filters nodes near doors (<5 studs) or near prior waypoints (<3 studs)
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -120,13 +120,35 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		primaryPath:ComputeAsync(startPos, endPos)
 	end)
 
-	local rawWaypoints = {}
+	local filteredWaypoints: {Vector3} = {}
+
+	local function processWaypointCandidate(pos: Vector3)
+		-- 1. Check distance to start (Entrance) and end (Exit) doors
+		local distToStart = (pos - startPos).Magnitude
+		local distToEnd = (pos - endPos).Magnitude
+		if distToStart <= 5 or distToEnd <= 5 then
+			return
+		end
+
+		-- 2. Check distance to the last accepted waypoint
+		local lastPos = filteredWaypoints[#filteredWaypoints]
+		if lastPos then
+			local distToLast = (pos - lastPos).Magnitude
+			if distToLast < 3 then
+				return
+			end
+		end
+
+		-- Ground align and save
+		local groundPos = alignToFloorLevel(pos, roomFolder)
+		table.insert(filteredWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+	end
+
 	if success and primaryPath.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(primaryPath:GetWaypoints()) do
-			local groundPos = alignToFloorLevel(wp.Position, roomFolder)
-			table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+			processWaypointCandidate(wp.Position)
 		end
-		return rawWaypoints
+		return filteredWaypoints
 	end
 
 	-- Fallback linear path
@@ -136,11 +158,10 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	for i = 1, steps do
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
-		local groundPos = alignToFloorLevel(interpolated, roomFolder)
-		table.insert(rawWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
+		processWaypointCandidate(interpolated)
 	end
 
-	return rawWaypoints
+	return filteredWaypoints
 end
 
 -- Get Door Positions without HeightOffset
@@ -293,14 +314,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Executes start-node move, path computation, and end-node move
+	-- Executes start-node move, filtered path computation, and end-node move
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		-- 1. Move to start node
 		if startNode then
 			moveDirectTo(startNode)
 		end
 
-		-- 2. Move along computed path
+		-- 2. Move along filtered path waypoints
 		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, roomFolder)
 		for _, nodePos in ipairs(waypoints) do
 			moveDirectTo(nodePos)
@@ -337,31 +358,25 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		endRoomNumber = latestRoomValue.Value + 1
 
 		if currentReboundState % 2 == 0 then
-			-- Going to latest generated room (Forward Pass)
+			-- Forward Pass
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
 					local _, entBack, exitFront = getRoomPositions(roomFolder)
 
 					if entBack and exitFront then
-						-- 1. Entity move to entrance behind
-						-- 2. Entity move follow generated path (compute from entrance behind to exit front)
-						-- 3. Entity move to exit front
 						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
 					end
 				end
 			end
 		else
-			-- Rebounding (Backward Pass)
+			-- Rebound (Backward Pass)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
 					local _, entBack, exitFront = getRoomPositions(roomFolder)
 
 					if exitFront and entBack then
-						-- 1. Entity move to exit front
-						-- 2. Entity move follow generated path (compute from exit front to entrance behind)
-						-- 3. Entity move to entrance behind
 						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
 					end
 				end
@@ -370,7 +385,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		-- Check for Rebound trigger
 		if isRebound and currentReboundState < targetReboundCount then
-			isMoving = false -- Stops camera shaking during delays
+			isMoving = false
 			currentReboundState += 1
 			if currentReboundState % 2 == 1 then
 				if reboundTime > 0 then task.wait(reboundTime) end
