@@ -311,11 +311,13 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
--- Helper: Validates whether a room's entrance and exit distance is within the 200 stud limit
-local function isRoomDistanceValid(roomFolder: Instance, floorYOffset: number): boolean
+-- Validates room distance from entrance -> entity -> exit (Threshold: 500 studs)
+local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
-		return (exitFront - entBack).Magnitude <= 500
+		local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
+		local totalDistance = (entityPos - entBack).Magnitude + (exitFront - entityPos).Magnitude
+		return totalDistance <= 500
 	end
 	return true
 end
@@ -621,7 +623,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		while targetSpawnNumber >= 0 do
 			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, floorYOffset) then
+				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
 					actualSpawnRoom = candidateRoom
 					break
 				end
@@ -632,7 +634,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		while targetSpawnNumber <= latestRoomNumber + 1 do
 			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, floorYOffset) then
+				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
 					actualSpawnRoom = candidateRoom
 					break
 				end
@@ -668,17 +670,21 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local currentReboundState = 0
-	local currentRoomIndex = targetSpawnNumber -- Tracks current room position continuously
+	local currentRoomIndex = targetSpawnNumber -- Tracks current room position dynamically
 
-	-- Forward motion helper (Back -> Front)
+	-- Forward motion helper (Back -> Front) bounded by SpawnOffsetRooms during rebounds
 	local function runForwardPass()
+		local targetEndRoom = latestRoomValue.Value + 1
+		if currentReboundState > 0 then
+			targetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
+		end
+
 		while model and model.Parent do
-			local targetEndRoom = latestRoomValue.Value + 1
 			if currentRoomIndex > targetEndRoom then break end
 
 			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
-				if isRoomDistanceValid(roomFolder, floorYOffset) then
+				if isRoomDistanceValid(roomFolder, model, floorYOffset) then
 					triggerRoomEvents(roomFolder)
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 					if entBack and exitFront then
@@ -688,24 +694,23 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 
 			currentRoomIndex += 1
-			if currentRoomIndex > targetEndRoom then
-				local updatedEndRoom = latestRoomValue.Value + 1
-				if updatedEndRoom > targetEndRoom then
-					targetEndRoom = updatedEndRoom
-				end
-			end
 		end
-		currentRoomIndex = latestRoomValue.Value + 1
+		currentRoomIndex = targetEndRoom
 	end
 
-	-- Backward motion helper (Front -> Back)
+	-- Backward motion helper (Front -> Back) bounded by SpawnOffsetRooms during rebounds
 	local function runBackwardPass()
-		for roomNum = currentRoomIndex, 0, -1 do
+		local targetMinRoom = 0
+		if currentReboundState > 0 then
+			targetMinRoom = math.max(0, currentRoomIndex - spawnOffsetRooms)
+		end
+
+		for roomNum = currentRoomIndex, targetMinRoom, -1 do
 			if not (model and model.Parent) then break end
 			currentRoomIndex = roomNum
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 			if roomFolder then
-				if isRoomDistanceValid(roomFolder, floorYOffset) then
+				if isRoomDistanceValid(roomFolder, model, floorYOffset) then
 					triggerRoomEvents(roomFolder)
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 					if exitFront and entBack then
@@ -714,7 +719,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		end
-		currentRoomIndex = 0
+		currentRoomIndex = targetMinRoom
 	end
 
 	-- Navigation processing loop
