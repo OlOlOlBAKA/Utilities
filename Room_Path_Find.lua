@@ -1,4 +1,4 @@
-Local PathfindingMovement = {}
+local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
 local TweenService = game:GetService("TweenService")
