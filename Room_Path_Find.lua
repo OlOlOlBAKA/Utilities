@@ -308,7 +308,7 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
--- Validates room distance separately for entrance -> entity and exit -> entity (Updated failsafe to 1,000 studs)
+-- Validates room distance separately for entrance -> entity and exit -> entity
 local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
@@ -518,10 +518,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local foundRoom: Instance? = nil
 
 		if attackType == "Front" then
-			while searchIndex >= 0 do
+			-- Search downwards but stop if we go further than offset from current room
+			local minAllowedRoom = math.max(0, currentLatest - 1)
+			while searchIndex >= minAllowedRoom do
 				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
 				if candidate then
 					foundRoom = candidate
+					targetNum = searchIndex
 					break
 				end
 				searchIndex -= 1
@@ -531,6 +534,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
 				if candidate then
 					foundRoom = candidate
+					targetNum = searchIndex
 					break
 				end
 				searchIndex += 1
@@ -602,6 +606,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	if finalSpawnRoom then
 		applyPositionToRoom(finalSpawnRoom)
 	end
+
+	-- Store initial starting room cap for Front attacks on pass 1
+	local lockedStartRoomIndex = currentRoomIndex
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -720,8 +727,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Backward motion helper (Front -> Back) dynamically checks for newly generated rooms
+	-- Backward motion helper (Front -> Back) strictly bounded on initial spawn
 	local function runBackwardPass()
+		-- Prevent starting from a room higher than where the entity originally spawned
+		if attackType == "Front" and currentReboundState == 0 then
+			currentRoomIndex = math.min(currentRoomIndex, lockedStartRoomIndex)
+		end
+
 		while model and model.Parent do
 			local dynamicTargetMinRoom = 0
 			if currentReboundState > 0 then
