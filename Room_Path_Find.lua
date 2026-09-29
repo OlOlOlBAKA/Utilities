@@ -510,9 +510,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Movement complete: disconnect camera shake completely
-	stopCameraShake()
-
 	-- Gravity Fall Despawn logic
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
@@ -542,12 +539,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local fallTween = TweenService:Create(CFrameValue, fallTweenInfo, { Value = fallTargetCFrame })
 			fallTween:Play()
 			fallTween.Completed:Wait()
-
+			
+			stopCameraShake()
 			connection:Disconnect()
 			CFrameValue:Destroy()
 		end
 
 		stopEntitySounds(model)
+		task.wait(1)
 		model:Destroy()
 	end
 	
