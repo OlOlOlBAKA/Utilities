@@ -704,17 +704,18 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Backward motion helper (Front -> Back) bounded by SpawnOffsetRooms during rebounds
+	-- Backward motion helper (Front -> Back) dynamically checks for newly generated rooms
 	local function runBackwardPass()
-		local targetMinRoom = 0
-		if currentReboundState > 0 then
-			targetMinRoom = math.max(0, currentRoomIndex - spawnOffsetRooms)
-		end
+		while model and model.Parent do
+			local dynamicTargetMinRoom = 0
+			if currentReboundState > 0 then
+				-- Recalculate target floor based on latest room dynamically
+				dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
+			end
 
-		for roomNum = currentRoomIndex, targetMinRoom, -1 do
-			if not (model and model.Parent) then break end
-			currentRoomIndex = roomNum
-			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
+			if currentRoomIndex < dynamicTargetMinRoom then break end
+
+			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
 				if isRoomDistanceValid(roomFolder, model, floorYOffset) then
 					triggerRoomEvents(roomFolder)
@@ -724,8 +725,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					end
 				end
 			end
+
+			currentRoomIndex -= 1
 		end
-		currentRoomIndex = targetMinRoom
 	end
 
 	-- Navigation processing loop
