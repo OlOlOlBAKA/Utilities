@@ -319,7 +319,7 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 		local entranceDistance = (entityPos - entBack).Magnitude
 		local exitDistance = (exitFront - entityPos).Magnitude
 
-		return (entranceDistance <= 500) and (exitDistance <= 500)
+		return (entranceDistance <= 1000) and (exitDistance <= 1000)
 	end
 	return true
 end
