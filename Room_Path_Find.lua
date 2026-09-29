@@ -106,7 +106,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?): Vect
 	return position
 end
 
--- Computes path sub-waypoints on demand (HeightOffset strictly applied ONLY to path nodes)
+-- Computes path sub-waypoints on demand
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -196,11 +196,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakeAmount = options.ShakeAmount or 1.5
 	local shakeRadius = options.ShakeRadius or 120
 
-	-- State variables to manage camera shake life cycle
+	-- State variables for camera shake management
 	local isMoving = false
 	local isMovementFinished = false
 
-	-- Setup Camera Shake Thread
+	-- Setup Camera Shake Loop Thread
 	if enableShake then
 		task.spawn(function()
 			local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 8, 0.1, 0.2)
@@ -225,13 +225,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 				else
-					-- Stop shake immediately when not actively moving
 					sustainedShake.Magnitude = 0
 				end
 				task.wait()
 			end
 
-			-- Complete stop on finish/despawn
 			sustainedShake:StartFadeOut(0.2)
 		end)
 	end
@@ -254,15 +252,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 	local endRoomNumber = latestRoomNumber + 1
 
-	-- Helper to move smooth to target
-	local function moveDirectTo(targetPos: Vector3)
-		if not model or not model.Parent then return end
+	-- Helper to move directly to a target position
+	local function moveDirectTo(targetPos: Vector3?)
+		if not targetPos or not model or not model.Parent then return end
 		
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
-		if segmentDistance > 1 then
-			isMoving = true -- Signal shake thread that entity is actively moving
+		if segmentDistance > 0.001 then
+			isMoving = true
 
 			local travelTime = segmentDistance / speed
 			local direction = (targetPos - currentPos).Unit
@@ -272,7 +270,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if model:IsA("BasePart") then
 				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
 				tween:Play()
-				task.wait(travelTime)
+				tween.Completed:Wait()
 			elseif model:IsA("Model") then
 				local CFrameValue = Instance.new("CFrameValue")
 				CFrameValue.Value = model:GetPivot()
@@ -285,21 +283,32 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 				local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
 				tween:Play()
-				task.wait(travelTime)
+				tween.Completed:Wait()
 
 				connection:Disconnect()
 				CFrameValue:Destroy()
 			end
 
-			isMoving = false -- Active movement finished for this segment
+			isMoving = false
 		end
 	end
 
-	-- Move through a series of sub-nodes on demand
-	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?)
+	-- Executes start-node move, path computation, and end-node move
+	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
+		-- 1. Move to start node
+		if startNode then
+			moveDirectTo(startNode)
+		end
+
+		-- 2. Move along computed path
 		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, roomFolder)
 		for _, nodePos in ipairs(waypoints) do
 			moveDirectTo(nodePos)
+		end
+
+		-- 3. Move to end node
+		if endNode then
+			moveDirectTo(endNode)
 		end
 	end
 
@@ -323,55 +332,45 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local currentReboundState = 0
 
-	-- Main On-Demand Loop
+	-- Main Movement Loop
 	while model and model.Parent do
 		endRoomNumber = latestRoomValue.Value + 1
 
 		if currentReboundState % 2 == 0 then
-			-- Forward Pass
+			-- Going to latest generated room (Forward Pass)
 			for roomNum = targetSpawnNumber, endRoomNumber do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront = getRoomPositions(roomFolder)
-					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+					local _, entBack, exitFront = getRoomPositions(roomFolder)
 
-					if entFront then
-						moveAlongWaypoints(currentPos, entFront, roomFolder)
-					end
-					if entBack then
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entBack, roomFolder)
-					end
-
-					if roomNum == endRoomNumber and exitFront then
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, exitFront, roomFolder)
+					if entBack and exitFront then
+						-- 1. Entity move to entrance behind
+						-- 2. Entity move follow generated path (compute from entrance behind to exit front)
+						-- 3. Entity move to exit front
+						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
 					end
 				end
-				--task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
-			-- Backward Pass (Rebound)
+			-- Rebounding (Backward Pass)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					local entFront, entBack, exitFront, exitBack = getRoomPositions(roomFolder)
-					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					if entBack then 
-						moveAlongWaypoints(currentPos, entBack, roomFolder) 
-					end
-					if entFront then
-						currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-						moveAlongWaypoints(currentPos, entFront, roomFolder) 
+					local _, entBack, exitFront = getRoomPositions(roomFolder)
+
+					if exitFront and entBack then
+						-- 1. Entity move to exit front
+						-- 2. Entity move follow generated path (compute from exit front to entrance behind)
+						-- 3. Entity move to entrance behind
+						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
 					end
 				end
-				-- task.wait() -- Prevents frame spikes during room iteration
 			end
 		end
 
 		-- Check for Rebound trigger
 		if isRebound and currentReboundState < targetReboundCount then
-			isMoving = false -- Ensure camera stops shaking during rebound delays
+			isMoving = false -- Stops camera shaking during delays
 			currentReboundState += 1
 			if currentReboundState % 2 == 1 then
 				if reboundTime > 0 then task.wait(reboundTime) end
@@ -383,7 +382,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Signal camera shake to completely stop before gravity fall/despawn
+	-- Turn off camera shake before despawning
 	isMoving = false
 	isMovementFinished = true
 
