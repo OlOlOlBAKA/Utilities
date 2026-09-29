@@ -30,6 +30,7 @@ type MovementOptions = {
 	FloorYOffset: number?, -- Offset applied to floor level (default: -3)
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
+	AttackType: ("Back" | "Front")?, -- "Back" = Spawns behind & rushes forward | "Front" = Spawns ahead & rushes back
 	
 	-- Combat & Hitbox Options
 	HitboxRange: number?,   -- Distance in studs to trigger hit/kill (default: 5)
@@ -334,6 +335,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local floorYOffset = options.FloorYOffset or -3
 	local delayTime = options.DelayTime or 0
 	local showPath = options.ShowPath or false
+	local attackType = options.AttackType or "Back" -- "Back" or "Front"
 	
 	-- Hitbox & Combat Options
 	local hitboxRange = options.HitboxRange or 5
@@ -511,7 +513,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local latestRoomNumber = latestRoomValue.Value
-	local initialSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+	local initialSpawnNumber = 0
+
+	if attackType == "Front" then
+		-- Spawns ahead of player
+		initialSpawnNumber = latestRoomNumber + 1 + spawnOffsetRooms
+	else
+		-- Spawns behind player (default "Back")
+		initialSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+	end
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -609,23 +619,41 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local targetSpawnNumber = initialSpawnNumber
 	local actualSpawnRoom: Instance? = nil
 
-	while targetSpawnNumber <= latestRoomNumber + 1 do
-		local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-		if candidateRoom then
-			if isRoomDistanceValid(candidateRoom, floorYOffset) then
-				actualSpawnRoom = candidateRoom
-				break
-			else
-				warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying next room.", candidateRoom.Name))
+	if attackType == "Front" then
+		-- Find valid spawn room searching backward from target front spawn
+		while targetSpawnNumber >= 0 do
+			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
+			if candidateRoom then
+				if isRoomDistanceValid(candidateRoom, floorYOffset) then
+					actualSpawnRoom = candidateRoom
+					break
+				else
+					warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying previous room.", candidateRoom.Name))
+				end
 			end
+			targetSpawnNumber -= 1
 		end
-		targetSpawnNumber += 1
+	else
+		-- Find valid spawn room searching forward from target back spawn
+		while targetSpawnNumber <= latestRoomNumber + 1 do
+			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
+			if candidateRoom then
+				if isRoomDistanceValid(candidateRoom, floorYOffset) then
+					actualSpawnRoom = candidateRoom
+					break
+				else
+					warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying next room.", candidateRoom.Name))
+				end
+			end
+			targetSpawnNumber += 1
+		end
 	end
 
 	if actualSpawnRoom then
-		local entFront = getRoomPositions(actualSpawnRoom, floorYOffset)
-		if entFront then
-			local spawnPos = entFront + Vector3.new(0, heightOffset, 0)
+		local entFront, _, _, exitBack = getRoomPositions(actualSpawnRoom, floorYOffset)
+		local spawnPos = (attackType == "Front" and exitBack or entFront)
+		if spawnPos then
+			spawnPos = spawnPos + Vector3.new(0, heightOffset, 0)
 			if model:IsA("Model") then
 				model:PivotTo(CFrame.new(spawnPos))
 			elseif model:IsA("BasePart") then
@@ -651,69 +679,70 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	local currentReboundState = 0
 
+	-- Forward motion helper (Back -> Front)
+	local function runForwardPass()
+		local currentRoomIndex = targetSpawnNumber
+		while model and model.Parent do
+			local targetEndRoom = latestRoomValue.Value + 1
+			if currentRoomIndex > targetEndRoom then break end
+
+			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
+			if roomFolder then
+				if isRoomDistanceValid(roomFolder, floorYOffset) then
+					triggerRoomEvents(roomFolder)
+					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
+					if entBack and exitFront then
+						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
+					end
+				else
+					warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
+				end
+			end
+
+			currentRoomIndex += 1
+			if currentRoomIndex > targetEndRoom then
+				local updatedEndRoom = latestRoomValue.Value + 1
+				if updatedEndRoom > targetEndRoom then
+					targetEndRoom = updatedEndRoom
+				end
+			end
+		end
+	end
+
+	-- Backward motion helper (Front -> Back)
+	local function runBackwardPass()
+		local startRoomNum = math.max(targetSpawnNumber, latestRoomValue.Value + 1)
+		for roomNum = startRoomNum, 0, -1 do
+			if not (model and model.Parent) then break end
+			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
+			if roomFolder then
+				if isRoomDistanceValid(roomFolder, floorYOffset) then
+					triggerRoomEvents(roomFolder)
+					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
+					if exitFront and entBack then
+						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
+					end
+				else
+					warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
+				end
+			end
+		end
+	end
+
 	-- Navigation processing loop
 	while model and model.Parent do
 		hasHitPlayerThisPass = false
 		lastEntityPosition = nil
 
-		if currentReboundState % 2 == 0 then
-			-- Forward direction pass
-			local currentRoomIndex = targetSpawnNumber
+		local isForwardStep = (currentReboundState % 2 == 0)
+		if attackType == "Front" then
+			isForwardStep = not isForwardStep -- Invert motion sequence for Front spawns
+		end
 
-			while model and model.Parent do
-				local targetEndRoom = latestRoomValue.Value + 1
-
-				if currentRoomIndex > targetEndRoom then
-					break
-				end
-
-				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
-				if roomFolder then
-					if not isRoomDistanceValid(roomFolder, floorYOffset) then
-						warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
-						currentRoomIndex += 1
-						continue
-					end
-
-					triggerRoomEvents(roomFolder)
-
-					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
-
-					if entBack and exitFront then
-						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
-					end
-				end
-
-				currentRoomIndex += 1
-
-				if currentRoomIndex > targetEndRoom then
-					local updatedEndRoom = latestRoomValue.Value + 1
-					if updatedEndRoom > targetEndRoom then
-						targetEndRoom = updatedEndRoom
-					end
-				end
-			end
+		if isForwardStep then
+			runForwardPass()
 		else
-			-- Rebound direction pass
-			local endRoomNumber = latestRoomValue.Value + 1
-
-			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
-				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
-				if roomFolder then
-					if not isRoomDistanceValid(roomFolder, floorYOffset) then
-						warn(string.format("PathfindingMovement: Rebound Room %s skipped (>200 studs).", roomFolder.Name))
-						continue
-					end
-
-					triggerRoomEvents(roomFolder)
-
-					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
-
-					if exitFront and entBack then
-						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
-					end
-				end
-			end
+			runBackwardPass()
 		end
 
 		-- Evaluate rebound parameters
