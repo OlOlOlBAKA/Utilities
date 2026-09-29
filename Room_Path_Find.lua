@@ -516,10 +516,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local initialSpawnNumber = 0
 
 	if attackType == "Front" then
-		-- Spawns ahead of player
 		initialSpawnNumber = latestRoomNumber + 1 + spawnOffsetRooms
 	else
-		-- Spawns behind player (default "Back")
 		initialSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 	end
 
@@ -620,29 +618,23 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local actualSpawnRoom: Instance? = nil
 
 	if attackType == "Front" then
-		-- Find valid spawn room searching backward from target front spawn
 		while targetSpawnNumber >= 0 do
 			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 			if candidateRoom then
 				if isRoomDistanceValid(candidateRoom, floorYOffset) then
 					actualSpawnRoom = candidateRoom
 					break
-				else
-					warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying previous room.", candidateRoom.Name))
 				end
 			end
 			targetSpawnNumber -= 1
 		end
 	else
-		-- Find valid spawn room searching forward from target back spawn
 		while targetSpawnNumber <= latestRoomNumber + 1 do
 			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 			if candidateRoom then
 				if isRoomDistanceValid(candidateRoom, floorYOffset) then
 					actualSpawnRoom = candidateRoom
 					break
-				else
-					warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying next room.", candidateRoom.Name))
 				end
 			end
 			targetSpawnNumber += 1
@@ -662,7 +654,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Callback: OnSpawned
 	if callbacks.OnSpawned then
 		task.spawn(callbacks.OnSpawned, model)
 	end
@@ -672,16 +663,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(delayTime)
 	end
 
-	-- Callback: OnStartMoving
 	if callbacks.OnStartMoving then
 		task.spawn(callbacks.OnStartMoving, model)
 	end
 
 	local currentReboundState = 0
+	local currentRoomIndex = targetSpawnNumber -- Tracks current room position continuously
 
 	-- Forward motion helper (Back -> Front)
 	local function runForwardPass()
-		local currentRoomIndex = targetSpawnNumber
 		while model and model.Parent do
 			local targetEndRoom = latestRoomValue.Value + 1
 			if currentRoomIndex > targetEndRoom then break end
@@ -694,8 +684,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if entBack and exitFront then
 						moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
 					end
-				else
-					warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
 				end
 			end
 
@@ -707,13 +695,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		end
+		currentRoomIndex = latestRoomValue.Value + 1
 	end
 
 	-- Backward motion helper (Front -> Back)
 	local function runBackwardPass()
-		local startRoomNum = math.max(targetSpawnNumber, latestRoomValue.Value + 1)
-		for roomNum = startRoomNum, 0, -1 do
+		for roomNum = currentRoomIndex, 0, -1 do
 			if not (model and model.Parent) then break end
+			currentRoomIndex = roomNum
 			local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 			if roomFolder then
 				if isRoomDistanceValid(roomFolder, floorYOffset) then
@@ -722,11 +711,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if exitFront and entBack then
 						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
 					end
-				else
-					warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
 				end
 			end
 		end
+		currentRoomIndex = 0
 	end
 
 	-- Navigation processing loop
@@ -736,7 +724,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		local isForwardStep = (currentReboundState % 2 == 0)
 		if attackType == "Front" then
-			isForwardStep = not isForwardStep -- Invert motion sequence for Front spawns
+			isForwardStep = not isForwardStep
 		end
 
 		if isForwardStep then
@@ -750,7 +738,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			isMoving = false
 			currentReboundState += 1
 
-			-- Callback: OnStartRebounding
 			if callbacks.OnStartRebounding then
 				task.spawn(callbacks.OnStartRebounding, model, currentReboundState)
 			end
@@ -765,7 +752,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Callback: OnDespawn
 	if callbacks.OnDespawn then
 		task.spawn(callbacks.OnDespawn, model)
 	end
