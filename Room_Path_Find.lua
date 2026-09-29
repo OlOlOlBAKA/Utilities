@@ -513,14 +513,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Dynamically calculate spawn CFrame and resolve valid room
 	local function resolveSpawnTarget(): (Instance?, number)
 		local currentLatest = latestRoomValue.Value
-		local targetNum = (attackType == "Front") and (currentLatest + 1 + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
+		local targetNum = (attackType == "Front") and (currentLatest + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
 		local searchIndex = targetNum
 		local foundRoom: Instance? = nil
 
 		if attackType == "Front" then
-			-- Search downwards but stop if we go further than offset from current room
-			local minAllowedRoom = math.max(0, currentLatest - 1)
-			while searchIndex >= minAllowedRoom do
+			-- Don't allow searchIndex to go higher than current targetNum
+			searchIndex = math.min(searchIndex, currentLatest + spawnOffsetRooms)
+			while searchIndex >= 0 do
 				local candidate = currentRooms:FindFirstChild(tostring(searchIndex))
 				if candidate then
 					foundRoom = candidate
@@ -574,12 +574,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	if delayTime > 0 then
 		isMoving = false
 
-		-- If attackType == "Front", teleport ahead whenever a new room spawns
 		roomChangedConnection = latestRoomValue.Changed:Connect(function(newLatestRoom)
 			if attackType == "Front" then
-				local newTargetNum = newLatestRoom + 1 + spawnOffsetRooms
-				local candidateRoom = currentRooms:FindFirstChild(tostring(newTargetNum)) or currentRooms:FindFirstChild(tostring(newLatestRoom + 1))
-				
+				local newTargetNum = newLatestRoom + spawnOffsetRooms
+				local candidateRoom = currentRooms:FindFirstChild(tostring(newTargetNum))
 				if candidateRoom then
 					applyPositionToRoom(candidateRoom)
 				end
@@ -598,17 +596,17 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.spawn(callbacks.OnStartMoving, model)
 	end
 
-	-- Update starting index to live position after delay
+	-- Finalize actual spawn room directly before movement starts
 	local currentReboundState = 0
 	local finalSpawnRoom, finalTargetIndex = resolveSpawnTarget()
-	local currentRoomIndex = finalTargetIndex
 
 	if finalSpawnRoom then
 		applyPositionToRoom(finalSpawnRoom)
 	end
 
-	-- Store initial starting room cap for Front attacks on pass 1
-	local lockedStartRoomIndex = currentRoomIndex
+	-- Force currentRoomIndex to match the exact room the entity placed into
+	local currentRoomIndex = finalTargetIndex
+	local lockedStartRoomIndex = finalTargetIndex
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -729,9 +727,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Backward motion helper (Front -> Back) strictly bounded on initial spawn
 	local function runBackwardPass()
-		-- Prevent starting from a room higher than where the entity originally spawned
+		-- Enforce starting room cap on the very first pass for Front attack type
 		if attackType == "Front" and currentReboundState == 0 then
-			currentRoomIndex = math.min(currentRoomIndex, lockedStartRoomIndex)
+			currentRoomIndex = lockedStartRoomIndex
 		end
 
 		while model and model.Parent do
