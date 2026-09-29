@@ -184,24 +184,44 @@ local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	return false, nil
 end
 
--- Dedicated Hitbox Raycast validation
-local function checkRaycastHit(entityModel: Instance, character: Model): boolean
-	local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return false end
+-- Multi-target & Swept Line Raycast validation
+local function checkRaycastHit(entityModel: Instance, character: Model, prevEntityPos: Vector3?): boolean
+	local currentEntityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
+	
+	local targetParts = {
+		character:FindFirstChild("HumanoidRootPart"),
+		character:FindFirstChild("Head"),
+		character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	}
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { entityModel }
 
-	local direction = (hrp.Position - entityPos)
-	local rayResult = Workspace:Raycast(entityPos, direction, raycastParams)
+	-- Direct rays to key body parts
+	for _, part in ipairs(targetParts) do
+		if part and part:IsA("BasePart") then
+			local direction = (part.Position - currentEntityPos)
+			local rayResult = Workspace:Raycast(currentEntityPos, direction, raycastParams)
 
-	if rayResult then
-		return rayResult.Instance:IsDescendantOf(character)
+			if not rayResult or rayResult.Instance:IsDescendantOf(character) then
+				return true
+			end
+		end
 	end
 
-	return true
+	-- Swept trajectory check for fast-moving entities
+	if prevEntityPos then
+		local sweptDirection = (currentEntityPos - prevEntityPos)
+		if sweptDirection.Magnitude > 0.1 then
+			local rayResult = Workspace:Raycast(prevEntityPos, sweptDirection, raycastParams)
+			if rayResult and rayResult.Instance:IsDescendantOf(character) then
+				return true
+			end
+		end
+	end
+
+	return false
 end
 
 -- Computes path sub-waypoints and filters nodes near doors or prior waypoints
@@ -331,7 +351,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Movement State Flags
 	local isMoving = false
 	local isMovementFinished = false
-	local hasHitPlayerThisPass = false -- Tracks single hit per pass
+	local hasHitPlayerThisPass = false
+
+	-- Entity Velocity/Position Tracking
+	local lastEntityPosition: Vector3? = nil
 
 	-- Setup Cleanup & Lifecycle Handles for Isolated Local Shake
 	local renderConnection: RBXScriptConnection?
@@ -379,11 +402,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- Hitbox & Damage Check (Max 1 hit per pass)
-					if distance <= hitboxRange and not hasHitPlayerThisPass then
+					-- Check if player is hiding
+					local isHiding = character:GetAttribute("Hiding") == true
+
+					-- Hitbox & Damage Check (Ignored if player is hiding)
+					if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
-							canHit = checkRaycastHit(model, character)
+							canHit = checkRaycastHit(model, character, lastEntityPosition)
 						end
 
 						if canHit then
@@ -399,6 +425,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							end
 						end
 					end
+
+					-- Save position for trajectory raycasting on next frame
+					lastEntityPosition = entityPos
 
 					-- Check Line of Sight
 					if callbacks.OnSeePlayer then
@@ -617,8 +646,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Navigation processing loop
 	while model and model.Parent do
-		-- Reset hit status for the start of this pass (rush or rebound pass)
 		hasHitPlayerThisPass = false
+		lastEntityPosition = nil
 
 		if currentReboundState % 2 == 0 then
 			-- Forward direction pass
