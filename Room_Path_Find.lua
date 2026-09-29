@@ -12,6 +12,17 @@ local RunService = game:GetService("RunService")
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
 
+type EventCallbacks = {
+	OnSpawned: ((model: Model | BasePart) -> ())?,
+	OnStartMoving: ((model: Model | BasePart) -> ())?,
+	OnStartRebounding: ((model: Model | BasePart, reboundCount: number) -> ())?,
+	OnEnterRoom: ((model: Model | BasePart, roomFolder: Instance) -> ())?,
+	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance) -> ())?,
+	OnSeePlayer: ((model: Model | BasePart, playerCharacter: Model) -> ())?,
+	OnKillPlayer: ((model: Model | BasePart, playerCharacter: Model) -> ())?,
+	OnDespawn: ((model: Model | BasePart) -> ())?
+}
+
 type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
@@ -20,6 +31,14 @@ type MovementOptions = {
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
 	
+	-- Combat & Hitbox Options
+	HitboxRange: number?,   -- Distance in studs to trigger hit/kill (default: 5)
+	RaycastHitbox: boolean?, -- Require clean raycast connection to hit player
+	Damage: number?,        -- Damage applied to player (default: 100)
+
+	-- Custom Event Callbacks
+	Callbacks: EventCallbacks?,
+
 	-- Debug / Visualization Options
 	ShowPath: boolean?, -- Visualize generated waypoints
 
@@ -123,7 +142,6 @@ local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 		part.Position = pos
 		part.Parent = folder
 
-		-- Draw connecting line to previous waypoint
 		if i > 1 then
 			local prevPos = waypoints[i - 1]
 			local dist = (pos - prevPos).Magnitude
@@ -144,7 +162,49 @@ local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 	return folder
 end
 
--- Computes path sub-waypoints and filters nodes near doors (<10 studs) or near prior waypoints (<10 studs)
+-- Line of Sight Raycast check to local player
+local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
+	local character = LocalPlayer.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return false, nil end
+
+	local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
+	local playerPos = character.HumanoidRootPart.Position
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { entityModel, character }
+
+	local direction = (playerPos - entityPos)
+	local rayResult = Workspace:Raycast(entityPos, direction, raycastParams)
+
+	if not rayResult then
+		return true, character
+	end
+
+	return false, nil
+end
+
+-- Dedicated Hitbox Raycast validation
+local function checkRaycastHit(entityModel: Instance, character: Model): boolean
+	local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false end
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { entityModel }
+
+	local direction = (hrp.Position - entityPos)
+	local rayResult = Workspace:Raycast(entityPos, direction, raycastParams)
+
+	if rayResult then
+		return rayResult.Instance:IsDescendantOf(character)
+	end
+
+	return true
+end
+
+-- Computes path sub-waypoints and filters nodes near doors or prior waypoints
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
@@ -161,14 +221,12 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local filteredWaypoints: {Vector3} = {}
 
 	local function processWaypointCandidate(pos: Vector3)
-		-- 1. Door clearance threshold check (10-stud radius)
 		local distToStart = (pos - startPos).Magnitude
 		local distToEnd = (pos - endPos).Magnitude
 		if distToStart <= 10 or distToEnd <= 10 then
 			return
 		end
 
-		-- 2. Waypoint density threshold check (10-stud spacing filter)
 		local lastPos = filteredWaypoints[#filteredWaypoints]
 		if lastPos then
 			local distToLast = (pos - lastPos).Magnitude
@@ -177,7 +235,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 			end
 		end
 
-		-- Ground align with vertical offset floor adjustments
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
 		table.insert(filteredWaypoints, groundPos + Vector3.new(0, heightOffset, 0))
 	end
@@ -189,7 +246,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return filteredWaypoints
 	end
 
-	-- Fallback linear path generator
 	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 10))
 
@@ -246,12 +302,18 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	disableCollision(model)
 
+	local callbacks = options.Callbacks or {}
 	local speed = options.Speed or 60
 	local heightOffset = options.HeightOffset or 2.5
 	local floorYOffset = options.FloorYOffset or -3
 	local delayTime = options.DelayTime or 0
 	local showPath = options.ShowPath or false
 	
+	-- Hitbox & Combat Options
+	local hitboxRange = options.HitboxRange or 5
+	local useRaycastHitbox = if options.RaycastHitbox ~= nil then options.RaycastHitbox else false
+	local damageAmount = options.Damage or 100
+
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
@@ -269,6 +331,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Movement State Flags
 	local isMoving = false
 	local isMovementFinished = false
+	local hasHitPlayerThisPass = false -- Tracks single hit per pass
 
 	-- Setup Cleanup & Lifecycle Handles for Isolated Local Shake
 	local renderConnection: RBXScriptConnection?
@@ -276,10 +339,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local sustainedShake: any?
 
 	local function startCameraShake()
-		-- Ensure execution ONLY runs locally on the Client
 		if not RunService:IsClient() or not enableShake or renderConnection then return end
 
-		-- Isolated CameraShaker Instance bound cleanly without interfering with main camera
 		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
 			local camera = Workspace.CurrentCamera
 			if camera and camera.CameraSubject then
@@ -293,7 +354,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				shakerInstance:Update(dt)
 			end
 
-			-- Cleanup when entity is destroyed or movement ends
 			if isMovementFinished or not model or not model.Parent then
 				if sustainedShake then 
 					sustainedShake:StartFadeOut(0.2) 
@@ -312,7 +372,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				return
 			end
 
-			-- Distance check to conditionally enable shake ONLY within shakeRadius
 			if isMoving then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
@@ -320,8 +379,36 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
+					-- Hitbox & Damage Check (Max 1 hit per pass)
+					if distance <= hitboxRange and not hasHitPlayerThisPass then
+						local canHit = true
+						if useRaycastHitbox then
+							canHit = checkRaycastHit(model, character)
+						end
+
+						if canHit then
+							hasHitPlayerThisPass = true
+							
+							local humanoid = character:FindFirstChildOfClass("Humanoid")
+							if humanoid then
+								humanoid:TakeDamage(damageAmount)
+							end
+
+							if callbacks.OnKillPlayer then
+								task.spawn(callbacks.OnKillPlayer, model, character)
+							end
+						end
+					end
+
+					-- Check Line of Sight
+					if callbacks.OnSeePlayer then
+						local canSee, playerChar = checkLineOfSight(model)
+						if canSee and playerChar then
+							task.spawn(callbacks.OnSeePlayer, model, playerChar)
+						end
+					end
+
 					if distance <= shakeRadius then
-						-- Instantiate shake only when player enters radius
 						if not sustainedShake then
 							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
 							rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
@@ -338,7 +425,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							shakeAmount
 						)
 					else
-						-- Fade out and clear shake when outside radius
 						if sustainedShake then
 							sustainedShake:StartFadeOut(0.3)
 							sustainedShake = nil
@@ -399,7 +485,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
 		if segmentDistance > 0.001 then
-			-- Initialize local proximity listener on first movement segment
 			if enableShake and not renderConnection then
 				startCameraShake()
 			end
@@ -437,15 +522,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Sequence motion along calculated nodes with fail-safe distance checks
+	-- Sequence motion along calculated nodes
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
 		local fullPathVisuals: Folder?
 
-		-- Calculate waypoints
 		local waypoints = computePathWaypoints(startPos, endPos, heightOffset, floorYOffset, roomFolder)
 		
-		-- Optional Visual Path Render
 		if showPath then
 			local allNodes = {}
 			if startNode then table.insert(allNodes, startNode + heightVector) end
@@ -455,28 +538,38 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fullPathVisuals = renderDebugWaypoints(allNodes)
 		end
 
-		-- 1. Start door node move
 		if startNode then
 			moveDirectTo(startNode + heightVector)
 		end
 
-		-- 2. Waypoint traversal
 		for _, nodePos in ipairs(waypoints) do
 			moveDirectTo(nodePos)
 		end
 
-		-- 3. Exit door node move
 		if endNode then
 			moveDirectTo(endNode + heightVector)
 		end
 
-		-- Cleanup path visualization markers after segment completion
 		if fullPathVisuals then
 			fullPathVisuals:Destroy()
 		end
 	end
 
-	-- Entity spawn setup with room distance safety validation
+	-- Trigger Room Callbacks
+	local function triggerRoomEvents(roomFolder: Instance)
+		if callbacks.OnEnterRoom then
+			task.spawn(callbacks.OnEnterRoom, model, roomFolder)
+		end
+
+		if callbacks.OnEnterPlayerRoom then
+			local playerRoomNum = LocalPlayer:GetAttribute("CurrentRoom")
+			if playerRoomNum and tostring(playerRoomNum) == roomFolder.Name then
+				task.spawn(callbacks.OnEnterPlayerRoom, model, roomFolder)
+			end
+		end
+	end
+
+	-- Entity spawn setup
 	local targetSpawnNumber = initialSpawnNumber
 	local actualSpawnRoom: Instance? = nil
 
@@ -487,7 +580,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				actualSpawnRoom = candidateRoom
 				break
 			else
-				warn(string.format("PathfindingMovement: Cannot spawn in Room %s (entrance-to-exit distance > 200 studs). Trying next room.", candidateRoom.Name))
+				warn(string.format("PathfindingMovement: Cannot spawn in Room %s (>200 studs). Trying next room.", candidateRoom.Name))
 			end
 		end
 		targetSpawnNumber += 1
@@ -505,15 +598,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
+	-- Callback: OnSpawned
+	if callbacks.OnSpawned then
+		task.spawn(callbacks.OnSpawned, model)
+	end
+
 	if delayTime > 0 then
 		isMoving = false
 		task.wait(delayTime)
+	end
+
+	-- Callback: OnStartMoving
+	if callbacks.OnStartMoving then
+		task.spawn(callbacks.OnStartMoving, model)
 	end
 
 	local currentReboundState = 0
 
 	-- Navigation processing loop
 	while model and model.Parent do
+		-- Reset hit status for the start of this pass (rush or rebound pass)
+		hasHitPlayerThisPass = false
+
 		if currentReboundState % 2 == 0 then
 			-- Forward direction pass
 			local currentRoomIndex = targetSpawnNumber
@@ -527,12 +633,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
-					-- Check current room validity (skips consecutive invalid rooms)
 					if not isRoomDistanceValid(roomFolder, floorYOffset) then
-						warn(string.format("PathfindingMovement: Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
+						warn(string.format("PathfindingMovement: Room %s skipped (>200 studs).", roomFolder.Name))
 						currentRoomIndex += 1
 						continue
 					end
+
+					triggerRoomEvents(roomFolder)
 
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
@@ -543,11 +650,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 				currentRoomIndex += 1
 
-				-- Re-check for newly unlocked rooms at the current end bound
 				if currentRoomIndex > targetEndRoom then
 					local updatedEndRoom = latestRoomValue.Value + 1
 					if updatedEndRoom > targetEndRoom then
-						-- More rooms dynamically added during traversal; continue loop forward
 						targetEndRoom = updatedEndRoom
 					end
 				end
@@ -559,11 +664,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					-- Check current rebound room validity (skips consecutive invalid rooms)
 					if not isRoomDistanceValid(roomFolder, floorYOffset) then
-						warn(string.format("PathfindingMovement: Rebound Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
+						warn(string.format("PathfindingMovement: Rebound Room %s skipped (>200 studs).", roomFolder.Name))
 						continue
 					end
+
+					triggerRoomEvents(roomFolder)
 
 					local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 
@@ -578,6 +684,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		if isRebound and currentReboundState < targetReboundCount then
 			isMoving = false
 			currentReboundState += 1
+
+			-- Callback: OnStartRebounding
+			if callbacks.OnStartRebounding then
+				task.spawn(callbacks.OnStartRebounding, model, currentReboundState)
+			end
+
 			if currentReboundState % 2 == 1 then
 				if reboundTime > 0 then task.wait(reboundTime) end
 			else
@@ -586,6 +698,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		else
 			break
 		end
+	end
+
+	-- Callback: OnDespawn
+	if callbacks.OnDespawn then
+		task.spawn(callbacks.OnDespawn, model)
 	end
 
 	-- Gravity Fall Despawn logic
