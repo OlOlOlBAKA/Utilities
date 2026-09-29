@@ -281,7 +281,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(currentPos, exitFront, roomFolder)
 					end
 				end
-				--task.wait() -- Prevents frame spikes during room iteration
+				task.wait() -- Prevents frame spikes during room iteration
 			end
 		else
 			-- Backward Pass (Rebound)
@@ -298,7 +298,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						-- moveAlongWaypoints(currentPos, entFront, roomFolder) 
 					end
 				end
-				--task.wait() -- Prevents frame spikes during room iteration
+				task.wait() -- Prevents frame spikes during room iteration
 			end
 		end
 
