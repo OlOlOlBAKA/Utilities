@@ -521,12 +521,39 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local latestRoomNumber = latestRoomValue.Value
-	local initialSpawnNumber = 0
+	local targetSpawnNumber = 0
 
 	if attackType == "Front" then
-		initialSpawnNumber = latestRoomNumber + 1 + spawnOffsetRooms
+		targetSpawnNumber = latestRoomNumber + 1 + spawnOffsetRooms
 	else
-		initialSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+		targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+	end
+
+	-- Find closest valid room starting directly from calculated target offset
+	local actualSpawnRoom: Instance? = nil
+
+	if attackType == "Front" then
+		while targetSpawnNumber >= 0 do
+			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
+			if candidateRoom then
+				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
+					actualSpawnRoom = candidateRoom
+					break
+				end
+			end
+			targetSpawnNumber -= 1
+		end
+	else
+		while targetSpawnNumber <= latestRoomNumber + 1 do
+			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
+			if candidateRoom then
+				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
+					actualSpawnRoom = candidateRoom
+					break
+				end
+			end
+			targetSpawnNumber += 1
+		end
 	end
 
 	-- Move entity directly to target point
@@ -621,34 +648,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Entity spawn setup
-	local targetSpawnNumber = initialSpawnNumber
-	local actualSpawnRoom: Instance? = nil
-
-	if attackType == "Front" then
-		while targetSpawnNumber >= 0 do
-			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
-					actualSpawnRoom = candidateRoom
-					break
-				end
-			end
-			targetSpawnNumber -= 1
-		end
-	else
-		while targetSpawnNumber <= latestRoomNumber + 1 do
-			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-			if candidateRoom then
-				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
-					actualSpawnRoom = candidateRoom
-					break
-				end
-			end
-			targetSpawnNumber += 1
-		end
-	end
-
+	-- Entity spawn placement
 	if actualSpawnRoom then
 		local entFront, _, _, exitBack = getRoomPositions(actualSpawnRoom, floorYOffset)
 		local spawnPos = (attackType == "Front" and exitBack or entFront)
@@ -678,15 +678,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local currentReboundState = 0
 	local currentRoomIndex = targetSpawnNumber -- Tracks current room position dynamically
 
-	-- Forward motion helper (Back -> Front) bounded by SpawnOffsetRooms during rebounds
+	-- Forward motion helper (Back -> Front) dynamically evaluates newly generated rooms
 	local function runForwardPass()
-		local targetEndRoom = latestRoomValue.Value + 1
-		if currentReboundState > 0 then
-			targetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
-		end
-
 		while model and model.Parent do
-			if currentRoomIndex > targetEndRoom then break end
+			-- Dynamically check for newly opened/generated rooms every loop iteration
+			local dynamicTargetEndRoom = latestRoomValue.Value + 1
+			if currentReboundState > 0 then
+				dynamicTargetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
+			end
+
+			if currentRoomIndex > dynamicTargetEndRoom then break end
 
 			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
@@ -701,7 +702,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 			currentRoomIndex += 1
 		end
-		currentRoomIndex = targetEndRoom
 	end
 
 	-- Backward motion helper (Front -> Back) bounded by SpawnOffsetRooms during rebounds
