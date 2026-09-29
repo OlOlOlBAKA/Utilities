@@ -33,7 +33,8 @@ type MovementOptions = {
 	
 	-- Combat & Hitbox Options
 	HitboxRange: number?,   -- Distance in studs to trigger hit/kill (default: 5)
-	RaycastHitbox: boolean?, -- Require clean raycast connection to hit player
+	RaycastHitbox: boolean?, -- Require clean raycast/spherecast connection to hit player
+	SphereRadius: number?,  -- Thickness radius of the spherecast (default: 3.5)
 	Damage: number?,        -- Damage applied to player (default: 100)
 
 	-- Custom Event Callbacks
@@ -162,7 +163,7 @@ local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 	return folder
 end
 
--- Line of Sight Raycast check to local player
+-- Line of Sight check to local player
 local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	local character = LocalPlayer.Character
 	if not character or not character:FindFirstChild("HumanoidRootPart") then return false, nil end
@@ -184,40 +185,45 @@ local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	return false, nil
 end
 
--- Multi-target & Swept Line Raycast validation
-local function checkRaycastHit(entityModel: Instance, character: Model, prevEntityPos: Vector3?): boolean
+-- High-Speed Swept Spherecast + Every Body Part LoS Check (Excludes Head)
+local function checkAdvancedHitbox(
+	entityModel: Instance, 
+	character: Model, 
+	lastEntityPosition: Vector3?, 
+	sphereRadius: number
+): boolean
 	local currentEntityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
-	
-	local targetParts = {
-		character:FindFirstChild("HumanoidRootPart"),
-		character:FindFirstChild("Head"),
-		character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
-	}
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { entityModel }
 
-	-- Direct rays to key body parts
-	for _, part in ipairs(targetParts) do
-		if part and part:IsA("BasePart") then
-			local direction = (part.Position - currentEntityPos)
-			local rayResult = Workspace:Raycast(currentEntityPos, direction, raycastParams)
-
-			if not rayResult or rayResult.Instance:IsDescendantOf(character) then
+	-- 1. Swept Spherecast Trajectory (Prevents tunneling between frames)
+	if lastEntityPosition then
+		local displacement = currentEntityPos - lastEntityPosition
+		if displacement.Magnitude > 0.1 then
+			local sphereResult = Workspace:Spherecast(lastEntityPosition, sphereRadius, displacement, raycastParams)
+			if sphereResult and sphereResult.Instance:IsDescendantOf(character) then
 				return true
 			end
 		end
 	end
 
-	-- Swept trajectory check for fast-moving entities
-	if prevEntityPos then
-		local sweptDirection = (currentEntityPos - prevEntityPos)
-		if sweptDirection.Magnitude > 0.1 then
-			local rayResult = Workspace:Raycast(prevEntityPos, sweptDirection, raycastParams)
-			if rayResult and rayResult.Instance:IsDescendantOf(character) then
-				return true
-			end
+	-- 2. Check Line of Sight to every character BasePart EXCEPT Head
+	local targetParts = {}
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("BasePart") and child.Name ~= "Head" then
+			table.insert(targetParts, child)
+		end
+	end
+
+	for _, part in ipairs(targetParts) do
+		local direction = (part.Position - currentEntityPos)
+		local rayResult = Workspace:Raycast(currentEntityPos, direction, raycastParams)
+
+		-- Hit registers if ray connects directly to body part or character model
+		if rayResult and rayResult.Instance:IsDescendantOf(character) then
+			return true
 		end
 	end
 
@@ -332,6 +338,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Hitbox & Combat Options
 	local hitboxRange = options.HitboxRange or 5
 	local useRaycastHitbox = if options.RaycastHitbox ~= nil then options.RaycastHitbox else false
+	local sphereRadius = options.SphereRadius or 3.5
 	local damageAmount = options.Damage or 100
 
 	local rawOffset = options.SpawnOffsetRooms or 10
@@ -409,7 +416,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
-							canHit = checkRaycastHit(model, character, lastEntityPosition)
+							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
 						end
 
 						if canHit then
@@ -426,7 +433,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- Save position for trajectory raycasting on next frame
+					-- Save position for trajectory spherecasting on next frame
 					lastEntityPosition = entityPos
 
 					-- Check Line of Sight
