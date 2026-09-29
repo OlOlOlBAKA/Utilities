@@ -359,5 +359,3 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 end
 
 return PathfindingMovement
-
-This script the backward part "local entFront, entBack, exitFront, exitBack" keep only exitFront and exitBack
