@@ -222,7 +222,6 @@ local function checkAdvancedHitbox(
 		local direction = (part.Position - currentEntityPos)
 		local rayResult = Workspace:Raycast(currentEntityPos, direction, raycastParams)
 
-		-- Hit registers if ray connects directly to body part or character model
 		if rayResult and rayResult.Instance:IsDescendantOf(character) then
 			return true
 		end
@@ -317,10 +316,7 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	if entBack and exitFront then
 		local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
 		
-		-- First check: Entrance to entity
 		local entranceDistance = (entityPos - entBack).Magnitude
-		
-		-- Second check: Exit to entity
 		local exitDistance = (exitFront - entityPos).Magnitude
 
 		return (entranceDistance <= 500) and (exitDistance <= 500)
@@ -343,7 +339,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local floorYOffset = options.FloorYOffset or -3
 	local delayTime = options.DelayTime or 0
 	local showPath = options.ShowPath or false
-	local attackType = options.AttackType or "Back" -- "Back" or "Front"
+	local attackType = options.AttackType or "Back"
 	
 	-- Hitbox & Combat Options
 	local hitboxRange = options.HitboxRange or 5
@@ -419,10 +415,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- Check if player is hiding
 					local isHiding = character:GetAttribute("Hiding") == true
 
-					-- Hitbox & Damage Check (Ignored if player is hiding)
 					if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
@@ -443,10 +437,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- Save position for trajectory spherecasting on next frame
 					lastEntityPosition = entityPos
 
-					-- Check Line of Sight
 					if callbacks.OnSeePlayer then
 						local canSee, playerChar = checkLineOfSight(model)
 						if canSee and playerChar then
@@ -520,16 +512,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	local latestRoomNumber = latestRoomValue.Value
+	-- Dynamically resolve live spawn room anchor
+	local liveLatestRoom = latestRoomValue.Value
 	local targetSpawnNumber = 0
 
 	if attackType == "Front" then
-		targetSpawnNumber = latestRoomNumber + 1 + spawnOffsetRooms
+		targetSpawnNumber = liveLatestRoom + 1 + spawnOffsetRooms
 	else
-		targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+		targetSpawnNumber = math.max(0, liveLatestRoom - spawnOffsetRooms)
 	end
 
-	-- Find closest valid room starting directly from calculated target offset
 	local actualSpawnRoom: Instance? = nil
 
 	if attackType == "Front" then
@@ -544,7 +536,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			targetSpawnNumber -= 1
 		end
 	else
-		while targetSpawnNumber <= latestRoomNumber + 1 do
+		while targetSpawnNumber <= liveLatestRoom + 1 do
 			local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
 			if candidateRoom then
 				if isRoomDistanceValid(candidateRoom, model, floorYOffset) then
@@ -676,12 +668,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local currentReboundState = 0
-	local currentRoomIndex = targetSpawnNumber -- Tracks current room position dynamically
+	local currentRoomIndex = targetSpawnNumber -- Synchronize current room to calculated dynamic spawn target
 
 	-- Forward motion helper (Back -> Front) dynamically evaluates newly generated rooms
 	local function runForwardPass()
 		while model and model.Parent do
-			-- Dynamically check for newly opened/generated rooms every loop iteration
 			local dynamicTargetEndRoom = latestRoomValue.Value + 1
 			if currentReboundState > 0 then
 				dynamicTargetEndRoom = math.min(currentRoomIndex + spawnOffsetRooms, latestRoomValue.Value + 1)
@@ -709,7 +700,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		while model and model.Parent do
 			local dynamicTargetMinRoom = 0
 			if currentReboundState > 0 then
-				-- Recalculate target floor based on latest room dynamically
 				dynamicTargetMinRoom = math.max(0, latestRoomValue.Value - spawnOffsetRooms)
 			end
 
