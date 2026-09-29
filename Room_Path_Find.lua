@@ -261,7 +261,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
-		if segmentDistance > 0.001 then
+		if segmentDistance > 1 then
 			isMoving = true -- Signal shake thread that entity is actively moving
 
 			local travelTime = segmentDistance / speed
@@ -272,7 +272,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if model:IsA("BasePart") then
 				local tween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
 				tween:Play()
-				tween.Completed:Wait()
+				task.wait(travelTime)
 			elseif model:IsA("Model") then
 				local CFrameValue = Instance.new("CFrameValue")
 				CFrameValue.Value = model:GetPivot()
@@ -285,7 +285,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 				local tween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
 				tween:Play()
-				tween.Completed:Wait()
+				task.wait(travelTime)
 
 				connection:Disconnect()
 				CFrameValue:Destroy()
