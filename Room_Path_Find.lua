@@ -523,11 +523,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	-- Resolve target room based on current state
 	local function resolveSpawnTarget(): (Instance?, number)
 		local currentLatest = latestRoomValue.Value
-		local targetNum = (attackType == "Front") and (currentLatest + spawnOffsetRooms) or math.max(0, currentLatest - spawnOffsetRooms)
+		local targetNum = (attackType == "Front") 
+			and (currentLatest + spawnOffsetRooms) 
+			or math.max(0, currentLatest - spawnOffsetRooms)
+
 		local foundRoom: Instance? = currentRooms:FindFirstChild(tostring(targetNum))
 
 		if not foundRoom then
-			for i = targetNum - 1, 0, -1 do
+			local step = (attackType == "Front") and -1 or 1
+			local searchLimit = (attackType == "Front") and 0 or currentLatest
+			for i = targetNum, searchLimit, step do
 				local candidate = currentRooms:FindFirstChild(tostring(i))
 				if candidate then
 					foundRoom = candidate
@@ -542,8 +547,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 	-- Apply initial entity placement
 	local function applyPositionToRoom(targetRoom: Instance)
-		local entFront, _, _, exitBack = getRoomPositions(targetRoom, floorYOffset)
-		local spawnPos = (attackType == "Front" and exitBack or entFront)
+		local entFront, entBack, exitFront, exitBack = getRoomPositions(targetRoom, floorYOffset)
+		
+		local spawnPos
+		if attackType == "Front" then
+			spawnPos = exitBack or exitFront
+		else
+			spawnPos = entBack or entFront
+		end
+
 		if spawnPos then
 			spawnPos = spawnPos + Vector3.new(0, heightOffset, 0)
 			if model:IsA("Model") then
