@@ -389,7 +389,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local latestRoomNumber = latestRoomValue.Value
-	local targetSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
+	local initialSpawnNumber = math.max(0, latestRoomNumber - spawnOffsetRooms)
 
 	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?)
@@ -476,10 +476,25 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Entity spawn setup
-	local spawnRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
-	if spawnRoom then
-		local entFront = getRoomPositions(spawnRoom, floorYOffset)
+	-- Entity spawn setup with room distance safety validation
+	local targetSpawnNumber = initialSpawnNumber
+	local actualSpawnRoom: Instance? = nil
+
+	while targetSpawnNumber <= latestRoomNumber + 1 do
+		local candidateRoom = currentRooms:FindFirstChild(tostring(targetSpawnNumber))
+		if candidateRoom then
+			if isRoomDistanceValid(candidateRoom, floorYOffset) then
+				actualSpawnRoom = candidateRoom
+				break
+			else
+				warn(string.format("PathfindingMovement: Cannot spawn in Room %s (entrance-to-exit distance > 200 studs). Trying next room.", candidateRoom.Name))
+			end
+		end
+		targetSpawnNumber += 1
+	end
+
+	if actualSpawnRoom then
+		local entFront = getRoomPositions(actualSpawnRoom, floorYOffset)
 		if entFront then
 			local spawnPos = entFront + Vector3.new(0, heightOffset, 0)
 			if model:IsA("Model") then
@@ -512,7 +527,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
-					-- Check current room validity
+					-- Check current room validity (skips consecutive invalid rooms)
 					if not isRoomDistanceValid(roomFolder, floorYOffset) then
 						warn(string.format("PathfindingMovement: Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
 						currentRoomIndex += 1
@@ -544,7 +559,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			for roomNum = endRoomNumber, targetSpawnNumber, -1 do
 				local roomFolder = currentRooms:FindFirstChild(tostring(roomNum))
 				if roomFolder then
-					-- Check current rebound room validity
+					-- Check current rebound room validity (skips consecutive invalid rooms)
 					if not isRoomDistanceValid(roomFolder, floorYOffset) then
 						warn(string.format("PathfindingMovement: Rebound Room %s skipped due to entrance-to-exit distance > 200 studs.", roomFolder.Name))
 						continue
