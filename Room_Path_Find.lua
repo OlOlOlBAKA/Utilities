@@ -8,9 +8,13 @@ local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
--- CameraShaker Integration
+-- Module Requirements
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
+
+-- Module_Events Integration
+local ModulesClient = ReplicatedStorage:WaitForChild("ModulesClient")
+local Module_Events = require(ModulesClient:WaitForChild("Module_Events"))
 
 type MoveToConfig = {
 	Speed: number?,
@@ -24,7 +28,12 @@ type ActionsHandle = {
 	SkipRoom: () -> (),
 	SetSpeed: (newSpeed: number) -> (),
 	MoveTo: (target: Vector3 | BasePart | Model, config: MoveToConfig?) -> (),
-	Rebound: (roomOffset: number?, delayBefore: number?, delayAfter: number?) -> () -- Dynamic rebound action with customizable delay before/after
+	Rebound: (roomOffset: number?, delayBefore: number?, delayAfter: number?) -> (),
+	
+	-- Light Control Actions exposed through ActionsHandle
+	LightFlicker: (room: Instance | number, duration: number?, amount: number?) -> (),
+	LightBreak: (room: Instance | number, amount: number?, speed: number?) -> (),
+	ToggleLight: (room: Instance | number, state: boolean, ambientColor: Color3?) -> ()
 }
 
 type EventCallbacks = {
@@ -54,9 +63,11 @@ type MovementOptions = {
 	Damage: number?,        -- Damage applied to player (default: 100)
 
 	-- Lighting Control Options
-	LightFlicker: boolean?, -- Enable light flickering effect
-	Duration: number?,      -- Duration for light flickering/effects
-	LightBreak: boolean?,   -- Permanently shatter/destroy lights on room entry
+	LightFlicker: boolean?, -- Enable light flickering effect on room entry
+	Duration: number?,      -- Duration for light flickering/effects (default: 1)
+	LightBreak: boolean?,   -- Shatter/destroy lights on room entry
+	ToggleLightState: boolean?, -- Toggle room lights (true = ON, false = OFF)
+	TargetAmbient: Color3?, -- Custom ambient color applied when lights turn off/on
 
 	-- Custom Event Callbacks
 	Callbacks: EventCallbacks?,
@@ -75,6 +86,20 @@ type MovementOptions = {
 	ShakeAmount: number?, -- Base magnitude multiplier (default: 1.5)
 	ShakeRadius: number?   -- Distance in studs to feel shake (default: 120)
 }
+
+-- Lighting Helper Functions calling Module_Events
+local function triggerLightFlicker(room: Instance | number, duration: number?, lightAmount: number?)
+	Module_Events.flicker(room, duration or 1, lightAmount or 100)
+end
+
+local function triggerLightBreak(room: Instance | number, lightAmount: number?, breakSpeed: number?)
+	Module_Events.shatter(room, lightAmount or 100, breakSpeed or 60)
+end
+
+local function triggerToggleLight(room: Instance | number, state: boolean, ambientColor: Color3?)
+	local ambient = ambientColor or (state and Color3.fromRGB(67, 51, 56) or Color3.fromRGB(0, 0, 0))
+	Module_Events.toggle(room, state, ambient)
+end
 
 -- Disable CanCollide on all parts of the entity
 local function disableCollision(instance: Instance)
@@ -383,6 +408,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local lightFlicker = if options.LightFlicker ~= nil then options.LightFlicker else false
 	local duration = options.Duration or 1
 	local lightBreak = if options.LightBreak ~= nil then options.LightBreak else false
+	local toggleLightState = options.ToggleLightState
+	local targetAmbient = options.TargetAmbient
 
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
@@ -465,6 +492,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				currentTween:Cancel()
 				currentTween = nil
 			end
+		end,
+		LightFlicker = function(room: Instance | number, durationAmount: number?, amount: number?)
+			triggerLightFlicker(room, durationAmount or duration, amount)
+		end,
+		LightBreak = function(room: Instance | number, amount: number?, breakSpeed: number?)
+			triggerLightBreak(room, amount, breakSpeed)
+		end,
+		ToggleLight = function(room: Instance | number, state: boolean, ambientColor: Color3?)
+			triggerToggleLight(room, state, ambientColor)
 		end
 	}
 
@@ -863,8 +899,19 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Trigger Room Callbacks
+	-- Trigger Room Callbacks and Light Events
 	local function triggerRoomEvents(roomFolder: Instance)
+		-- Process Movement Options Light Effects
+		if lightBreak then
+			triggerLightBreak(roomFolder, 100, 60)
+		elseif lightFlicker then
+			triggerLightFlicker(roomFolder, duration, 100)
+		end
+
+		if toggleLightState ~= nil then
+			triggerToggleLight(roomFolder, toggleLightState, targetAmbient)
+		end
+
 		if callbacks.OnEnterRoom then
 			task.spawn(callbacks.OnEnterRoom, model, roomFolder, actionsHandle)
 		end
