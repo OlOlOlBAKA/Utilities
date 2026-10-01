@@ -63,11 +63,9 @@ type MovementOptions = {
 	Damage: number?,        -- Damage applied to player (default: 100)
 
 	-- Lighting Control Options
-	LightFlicker: boolean?, -- Enable light flickering effect on room entry
+	LightFlicker: boolean?, -- Enable light flickering effect (all rooms except LatestRoom + 1)
 	Duration: number?,      -- Duration for light flickering/effects (default: 1)
-	LightBreak: boolean?,   -- Shatter/destroy lights on room entry
-	ToggleLightState: boolean?, -- Toggle room lights (true = ON, false = OFF)
-	TargetAmbient: Color3?, -- Custom ambient color applied when lights turn off/on
+	LightBreak: boolean?,   -- Shatter/destroy lights on room entry (except LatestRoom + 1)
 
 	-- Custom Event Callbacks
 	Callbacks: EventCallbacks?,
@@ -408,8 +406,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local lightFlicker = if options.LightFlicker ~= nil then options.LightFlicker else false
 	local duration = options.Duration or 1
 	local lightBreak = if options.LightBreak ~= nil then options.LightBreak else false
-	local toggleLightState = options.ToggleLightState
-	local targetAmbient = options.TargetAmbient
 
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
@@ -707,6 +703,17 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		applyPositionToRoom(initialRoom)
 	end
 
+	-- Execute global LightFlicker for all existing rooms except (LatestRoom + 1)
+	if lightFlicker then
+		local excludedRoomNum = latestRoomValue.Value + 1
+		for _, room in ipairs(currentRooms:GetChildren()) do
+			local roomNum = tonumber(room.Name)
+			if roomNum and roomNum ~= excludedRoomNum then
+				triggerLightFlicker(room, duration, 100)
+			end
+		end
+	end
+
 	if callbacks.OnSpawned then
 		task.spawn(callbacks.OnSpawned, model)
 	end
@@ -803,7 +810,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				break
 			end
 
-			-- Only re-calculate path if target position shifted significantly or first iteration
 			if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
 				lastTargetPos = currentTargetPos
 
@@ -813,16 +819,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				for _, wp in ipairs(waypoints) do
 					if not isMoveToActive or skipCurrentRoom then break end
 
-					-- Check if target moved away while traversing waypoints
 					local freshTargetPos = resolveTargetPosition(target)
 					if freshTargetPos and (freshTargetPos - lastTargetPos).Magnitude > 4 then
-						break -- Break waypoint loop to recalculate fresh path
+						break
 					end
 
 					moveDirectTo(wp, moveSpeed)
 				end
 
-				-- Move final step directly to target
 				if isMoveToActive and not skipCurrentRoom then
 					local finalPos = resolveTargetPosition(target)
 					if finalPos then
@@ -838,7 +842,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 	end
 
-	-- Sequence motion along calculated nodes with Type 2 Path Regeneration support
+	-- Sequence motion along calculated nodes
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
 		local fullPathVisuals: Folder?
@@ -870,7 +874,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					fullPathVisuals:Destroy()
 				end
 
-				-- Re-calculate path from current position to destination endPos
 				local currentEntityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 				waypoints = computePathWaypoints(currentEntityPos, endPos, heightOffset, floorYOffset, roomFolder)
 				idx = 1
@@ -899,17 +902,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Trigger Room Callbacks and Light Events
+	-- Trigger Room Callbacks and Light Breakdown
 	local function triggerRoomEvents(roomFolder: Instance)
-		-- Process Movement Options Light Effects
-		if lightBreak then
-			triggerLightBreak(roomFolder, 100, 60)
-		elseif lightFlicker then
-			triggerLightFlicker(roomFolder, duration, 100)
-		end
+		local roomNum = tonumber(roomFolder.Name)
+		local excludedRoomNum = latestRoomValue.Value + 1
 
-		if toggleLightState ~= nil then
-			triggerToggleLight(roomFolder, toggleLightState, targetAmbient)
+		-- Light Break on room entry (skips LatestRoom + 1)
+		if lightBreak and roomNum ~= excludedRoomNum then
+			triggerLightBreak(roomFolder, 100, 60)
 		end
 
 		if callbacks.OnEnterRoom then
@@ -924,11 +924,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Executed when actions.Rebound(offset, delayBefore, delayAfter) is called dynamically
+	-- Executed when actions.Rebound() is called dynamically
 	local function processActionRebound(requestedOffset: number, delayBefore: number, delayAfter: number)
 		reboundRequestedOffset = nil
 		
-		-- Delay before beginning rebound motion
 		if delayBefore > 0 then
 			isMoving = false
 			task.wait(delayBefore)
@@ -938,7 +937,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		targetRoomIndex = math.clamp(targetRoomIndex, 0, latestRoomValue.Value + spawnOffsetRooms)
 
 		if requestedOffset == 0 then
-			-- Move directly to the Entrance of the current room
 			local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 			if roomFolder then
 				local _, entBack = getRoomPositions(roomFolder, floorYOffset)
@@ -948,7 +946,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		else
-			-- Run backward pass towards the requested target room index
 			while model and model.Parent and currentRoomIndex >= targetRoomIndex do
 				skipCurrentRoom = false
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
@@ -963,7 +960,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 		end
 
-		-- Delay after completing rebound motion
 		if delayAfter > 0 then
 			isMoving = false
 			task.wait(delayAfter)
