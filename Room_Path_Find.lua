@@ -37,14 +37,14 @@ type ActionsHandle = {
 }
 
 type EventCallbacks = {
-	OnSpawned: ((model: Model | BasePart) -> ())?,
+	OnSpawned: ((model: Model | BasePart, actions: ActionsHandle) -> ())?,
 	OnStartMoving: ((model: Model | BasePart, actions: ActionsHandle) -> ())?,
 	OnStartRebounding: ((model: Model | BasePart, reboundCount: number, actions: ActionsHandle) -> ())?,
 	OnEnterRoom: ((model: Model | BasePart, roomFolder: Instance, actions: ActionsHandle) -> ())?,
-	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance, actions: ActionsHandle) -> ())?,
+	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnSeePlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnKillPlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
-	OnDespawn: ((model: Model | BasePart) -> ())?
+	OnDespawn: ((model: Model | BasePart, actions: ActionsHandle) -> ())?
 }
 
 type MovementOptions = {
@@ -715,7 +715,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	if callbacks.OnSpawned then
-		task.spawn(callbacks.OnSpawned, model)
+		task.spawn(callbacks.OnSpawned, model, actionsHandle)
 	end
 
 	if delayTime > 0 then
@@ -919,7 +919,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		if callbacks.OnEnterPlayerRoom then
 			local playerRoomNum = LocalPlayer:GetAttribute("CurrentRoom")
 			if playerRoomNum and tostring(playerRoomNum) == roomFolder.Name then
-				task.spawn(callbacks.OnEnterPlayerRoom, model, roomFolder, actionsHandle)
+				local character = LocalPlayer.Character
+				task.spawn(callbacks.OnEnterPlayerRoom, model, roomFolder, character, actionsHandle)
 			end
 		end
 	end
@@ -1077,7 +1078,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	if callbacks.OnDespawn then
-		task.spawn(callbacks.OnDespawn, model)
+		task.spawn(callbacks.OnDespawn, model, actionsHandle)
 	end
 
 	-- Gravity Fall Despawn logic
