@@ -30,9 +30,9 @@ local lastProcessedRoom = -1
 local GLOBAL_BLACKLIST_ROOMS = {50, 100}
 
 local ENTITY_TABLE = {
-    {Name = "A-120",     Weight = 7, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
-    {Name = "Depth",    Weight = 15, MinRoom = 5, MaxRoom = 89, CanSpawnInDark = false},
-    {Name = "Rebound",  Weight = 5, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
+    {Name = "A-120",     Weight = 2, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
+    {Name = "Depth",    Weight = 5, MinRoom = 5, MaxRoom = 89, CanSpawnInDark = false},
+    {Name = "Rebound",  Weight = 1, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
 }
 
 local function isRoomBlacklisted(roomNumber)
