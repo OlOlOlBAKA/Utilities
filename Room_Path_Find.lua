@@ -24,13 +24,12 @@ type MoveToConfig = {
 
 type ActionsHandle = {
 	Stop: () -> (),
-	Resume: (resumeType: (1 | 2)?) -> (), -- 1 = Resume path, 2 = Regenerate path from current pos
+	Resume: (resumeType: (1 | 2)?) -> (),
 	SkipRoom: () -> (),
 	SetSpeed: (newSpeed: number) -> (),
 	MoveTo: (target: Vector3 | BasePart | Model, config: MoveToConfig?) -> (),
 	Rebound: (roomOffset: number?, delayBefore: number?, delayAfter: number?) -> (),
 	
-	-- Light Control Actions exposed through ActionsHandle
 	LightFlicker: (room: Instance | number, duration: number?, amount: number?) -> (),
 	LightBreak: (room: Instance | number, amount: number?, speed: number?) -> (),
 	ToggleLight: (room: Instance | number, state: boolean, ambientColor: Color3?) -> ()
@@ -51,41 +50,33 @@ type MovementOptions = {
 	Model: Model | BasePart,
 	Speed: number?,
 	HeightOffset: number?,
-	FloorYOffset: number?, -- Offset applied to floor level (default: -3)
+	FloorYOffset: number?,
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
-	AttackType: ("Back" | "Front")?, -- "Back" = Spawns behind & rushes forward | "Front" = Spawns ahead & rushes back
+	AttackType: ("Back" | "Front")?,
 	
-	-- Combat & Hitbox Options
-	HitboxRange: number?,   -- Distance in studs to trigger hit/kill (default: 5)
-	RaycastHitbox: boolean?, -- Require clean raycast/spherecast connection to hit player
-	SphereRadius: number?,  -- Thickness radius of the spherecast (default: 3.5)
-	Damage: number?,        -- Damage applied to player (default: 100)
+	HitboxRange: number?,
+	RaycastHitbox: boolean?,
+	SphereRadius: number?,
+	Damage: number?,
 
-	-- Lighting Control Options
-	LightFlicker: boolean?, -- Enable light flickering effect (all rooms except LatestRoom + 1)
-	Duration: number?,      -- Duration for light flickering/effects (default: 1)
-	LightBreak: boolean?,   -- Shatter/destroy lights on room entry (except LatestRoom + 1)
+	LightFlicker: boolean?,
+	Duration: number?,
+	LightBreak: boolean?,
 
-	-- Custom Event Callbacks
 	Callbacks: EventCallbacks?,
+	ShowPath: boolean?,
 
-	-- Debug / Visualization Options
-	ShowPath: boolean?, -- Visualize generated waypoints
-
-	-- Rebound System Options
 	Rebound: boolean?,
 	ReboundCount: number?,
 	ReboundTime: number?,
 	ReboundDelayTime: number?,
 
-	-- Camera Shake Options
 	EnableCameraShake: boolean?,
-	ShakeAmount: number?, -- Base magnitude multiplier (default: 1.5)
-	ShakeRadius: number?   -- Distance in studs to feel shake (default: 120)
+	ShakeAmount: number?,
+	ShakeRadius: number?
 }
 
--- Lighting Helper Functions calling Module_Events
 local function triggerLightFlicker(room: Instance | number, duration: number?, lightAmount: number?)
 	Module_Events.flicker(room, duration or 1, lightAmount or 100)
 end
@@ -99,7 +90,6 @@ local function triggerToggleLight(room: Instance | number, state: boolean, ambie
 	Module_Events.toggle(room, state, ambient)
 end
 
--- Disable CanCollide on all parts of the entity
 local function disableCollision(instance: Instance)
 	if instance:IsA("BasePart") then
 		instance.CanCollide = false
@@ -111,14 +101,11 @@ local function disableCollision(instance: Instance)
 	end
 end
 
--- Stops all playing audio tracks attached to the entity
 local function stopEntitySounds(instance: Instance)
 	if not instance then return end
-	
 	if instance:IsA("Sound") then
 		instance:Stop()
 	end
-
 	for _, descendant in ipairs(instance:GetDescendants()) do
 		if descendant:IsA("Sound") then
 			descendant:Stop()
@@ -126,7 +113,6 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
--- Fast Raycast-based Floor Alignment with Instance Caching
 local roomFloorCache: { [Instance]: { BasePart } } = {}
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -170,7 +156,6 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floor
 	return position + offsetVector
 end
 
--- Visualizes waypoints as small neon spheres in Workspace
 local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "PathDebugVisuals"
@@ -207,7 +192,6 @@ local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 	return folder
 end
 
--- Line of Sight check to local player
 local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	local character = LocalPlayer.Character
 	if not character or not character:FindFirstChild("HumanoidRootPart") then return false, nil end
@@ -229,7 +213,6 @@ local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	return false, nil
 end
 
--- High-Speed Swept Spherecast + Every Body Part LoS Check (Excludes Head)
 local function checkAdvancedHitbox(
 	entityModel: Instance, 
 	character: Model, 
@@ -271,8 +254,10 @@ local function checkAdvancedHitbox(
 	return false
 end
 
--- Computes path sub-waypoints and filters nodes near doors or prior waypoints
 local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
+	local distance = (endPos - startPos).Magnitude
+	if distance ~= distance or distance == 0 then return {} end
+
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
@@ -313,7 +298,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return filteredWaypoints
 	end
 
-	local distance = (endPos - startPos).Magnitude
 	local steps = math.max(2, math.ceil(distance / 10))
 
 	for i = 1, steps do
@@ -325,7 +309,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	return filteredWaypoints
 end
 
--- Helper to extract Vector3 position from Vector3, BasePart, or Model
 local function resolveTargetPosition(target: Vector3 | BasePart | Model): Vector3?
 	if typeof(target) == "Vector3" then
 		return target
@@ -339,7 +322,6 @@ local function resolveTargetPosition(target: Vector3 | BasePart | Model): Vector
 	return nil
 end
 
--- Retrieves dynamic room entrance and exit locations
 local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Vector3?, Vector3?, Vector3?, Vector3?)
 	local roomEntrance = roomFolder:FindFirstChild("RoomEntrance", true)
 	local roomExit = roomFolder:FindFirstChild("RoomExit", true) or roomEntrance
@@ -365,7 +347,6 @@ local function getRoomPositions(roomFolder: Instance, floorYOffset: number): (Ve
 	return entFront, entBack, exitFront, exitBack
 end
 
--- Validates room distance separately for entrance -> entity and exit -> entity
 local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, floorYOffset: number): boolean
 	local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 	if entBack and exitFront then
@@ -396,13 +377,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local showPath = options.ShowPath or false
 	local attackType = options.AttackType or "Back"
 	
-	-- Hitbox & Combat Options
 	local hitboxRange = options.HitboxRange or 5
 	local useRaycastHitbox = if options.RaycastHitbox ~= nil then options.RaycastHitbox else false
 	local sphereRadius = options.SphereRadius or 3.5
 	local damageAmount = options.Damage or 100
 
-	-- Lighting Options
 	local lightFlicker = if options.LightFlicker ~= nil then options.LightFlicker else false
 	local duration = options.Duration or 1
 	local lightBreak = if options.LightBreak ~= nil then options.LightBreak else false
@@ -410,34 +389,27 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local rawOffset = options.SpawnOffsetRooms or 10
 	local spawnOffsetRooms = math.clamp(rawOffset, 0, 15)
 
-	-- Rebound Settings
 	local isRebound = options.Rebound or false
 	local targetReboundCount = options.ReboundCount or 1
 	local reboundTime = options.ReboundTime or 0
 	local reboundDelayTime = options.ReboundDelayTime or 0
 
-	-- Camera Shake Settings
 	local enableShake = if options.EnableCameraShake ~= nil then options.EnableCameraShake else true
 	local shakeAmount = options.ShakeAmount or 1.5
 	local shakeRadius = options.ShakeRadius or 120
 
-	-- Internal Control Flags
 	local isStopped = false
 	local skipCurrentRoom = false
 	local regenPathRequested = false
 	local isMoveToActive = false
 	
-	-- Rebound Request Parameters
 	local reboundRequestedOffset: number? = nil
 	local reboundRequestedDelayBefore: number = 0
 	local reboundRequestedDelayAfter: number = 0
 
 	local currentTween: Tween? = nil
-
-	-- Helper declaration for MoveTo
 	local executeMoveTo: ((target: Vector3 | BasePart | Model, config: MoveToConfig?) -> ())?
 
-	-- Action Controller Handle
 	local actionsHandle: ActionsHandle = {
 		Stop = function()
 			isStopped = true
@@ -500,15 +472,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	}
 
-	-- Movement State Flags
 	local isMoving = false
 	local isMovementFinished = false
 	local hasHitPlayerThisPass = false
-
-	-- Entity Velocity/Position Tracking
 	local lastEntityPosition: Vector3? = nil
 
-	-- Setup Cleanup & Lifecycle Handles for Isolated Local Shake
 	local renderConnection: RBXScriptConnection?
 	local shakerInstance: any?
 	local sustainedShake: any?
@@ -651,7 +619,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return
 	end
 
-	-- Resolve target room based on current state
 	local function resolveSpawnTarget(): (Instance?, number)
 		local currentLatest = latestRoomValue.Value
 		local targetNum = (attackType == "Front") 
@@ -676,7 +643,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		return foundRoom, targetNum
 	end
 
-	-- Apply initial entity placement
 	local function applyPositionToRoom(targetRoom: Instance)
 		local entFront, entBack, exitFront, exitBack = getRoomPositions(targetRoom, floorYOffset)
 		
@@ -697,13 +663,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- INITIAL SPAWN PROCEDURE
 	local initialRoom, initialTargetIndex = resolveSpawnTarget()
 	if initialRoom then
 		applyPositionToRoom(initialRoom)
 	end
 
-	-- Execute global LightFlicker for all existing rooms except (LatestRoom + 1)
 	if lightFlicker then
 		local excludedRoomNum = latestRoomValue.Value + 1
 		for _, room in ipairs(currentRooms:GetChildren()) do
@@ -730,7 +694,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local currentReboundState = 0
 	local currentRoomIndex = initialTargetIndex
 
-	-- Move entity directly to target point
 	local function moveDirectTo(targetPos: Vector3?, customSpeed: number?)
 		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested then return end
 
@@ -742,7 +705,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
 
-		if segmentDistance > 0.001 then
+		if segmentDistance > 0.05 then
 			if enableShake and not renderConnection then
 				startCameraShake()
 			end
@@ -750,7 +713,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			isMoving = true
 
 			local moveSpeed = customSpeed or speed
-			local travelTime = segmentDistance / moveSpeed
+			local travelTime = math.max(0.01, segmentDistance / moveSpeed)
 			local direction = (targetPos - currentPos).Unit
 			local targetCFrame = CFrame.lookAt(targetPos, targetPos + direction)
 			local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
@@ -783,7 +746,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Implementation of custom MoveTo action with dynamic tracking loop
 	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
 		isMoveToActive = true
 		isStopped = false
@@ -842,7 +804,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 	end
 
-	-- Sequence motion along calculated nodes
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
 		local fullPathVisuals: Folder?
@@ -902,12 +863,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Trigger Room Callbacks and Light Breakdown
 	local function triggerRoomEvents(roomFolder: Instance)
 		local roomNum = tonumber(roomFolder.Name)
 		local excludedRoomNum = latestRoomValue.Value + 1
 
-		-- Light Break on room entry (skips LatestRoom + 1)
 		if lightBreak and roomNum ~= excludedRoomNum then
 			triggerLightBreak(roomFolder, 100, 60)
 		end
@@ -925,7 +884,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Executed when actions.Rebound() is called dynamically
 	local function processActionRebound(requestedOffset: number, delayBefore: number, delayAfter: number)
 		reboundRequestedOffset = nil
 		
@@ -958,6 +916,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 				if currentRoomIndex == targetRoomIndex then break end
 				currentRoomIndex -= 1
+				task.wait()
 			end
 		end
 
@@ -967,7 +926,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Forward motion helper (Back -> Front)
 	local function runForwardPass()
 		while model and model.Parent do
 			skipCurrentRoom = false
@@ -992,16 +950,19 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 						if entBack and exitFront then
 							moveAlongWaypoints(entBack, exitFront, roomFolder, entBack, exitFront)
+						else
+							task.wait()
 						end
 					end
 				end
+			else
+				task.wait()
 			end
 
 			currentRoomIndex += 1
 		end
 	end
 
-	-- Backward motion helper (Front -> Back)
 	local function runBackwardPass()
 		while model and model.Parent do
 			skipCurrentRoom = false
@@ -1029,9 +990,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						local _, entBack, exitFront = getRoomPositions(roomFolder, floorYOffset)
 						if exitFront and entBack then
 							moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
+						else
+							task.wait()
 						end
 					end
 				end
+			else
+				task.wait()
 			end
 
 			if currentRoomIndex == dynamicTargetMinRoom then
@@ -1042,7 +1007,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	-- Navigation processing loop
 	while model and model.Parent do
 		hasHitPlayerThisPass = false
 		lastEntityPosition = nil
@@ -1058,7 +1022,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			runBackwardPass()
 		end
 
-		-- Evaluate rebound parameters
 		if isRebound and currentReboundState < targetReboundCount then
 			isMoving = false
 			currentReboundState += 1
@@ -1081,7 +1044,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.spawn(callbacks.OnDespawn, model, actionsHandle)
 	end
 
-	-- Gravity Fall Despawn logic
 	if model and model.Parent then
 		local startCFrame = model:IsA("Model") and model:GetPivot() or model.CFrame
 		local fallTargetCFrame = startCFrame - Vector3.new(0, 300, 0)
