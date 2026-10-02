@@ -404,6 +404,8 @@ local function handleHardcoreRoom(roomNumber)
     end
 
     local isDarkRoom = false
+    local totalHidingSpots = nil
+
     local currentRoomsFolder = workspace:FindFirstChild("CurrentRooms")
     if currentRoomsFolder then
         local currentRoomModel = currentRoomsFolder:FindFirstChild(tostring(roomNumber))
@@ -411,14 +413,19 @@ local function handleHardcoreRoom(roomNumber)
             if currentRoomModel:GetAttribute("IsDark") == true then
                 isDarkRoom = true
             end
+            
+            totalHidingSpots = currentRoomModel:GetAttribute("TotalHidingSpots")
         end
     end
 
-    local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
-    
-    if safeRoomStreak >= 4 then
-        baseSpawnChance = 100
+    -- Verify that TotalHidingSpots exists AND is greater than the total player count
+    local playerCount = #Players:GetPlayers()
+    if not totalHidingSpots or totalHidingSpots <= playerCount then
+        safeRoomStreak = safeRoomStreak + 1
+        return
     end
+
+    local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
 
     local spawnRoll = math.random(1, 100)
     local weightRoll = math.random(1, 100)
@@ -453,9 +460,9 @@ local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 
 if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
-loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
 
-require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game).caption("The Hardcore Mode script is now running, Have fun!",true,3)
+    require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game).caption("The Hardcore Mode script is now running, Have fun!",true,3)
     latestRoom.Changed:Connect(function(newRoomNumber)
         handleHardcoreRoom(newRoomNumber)
     end)
