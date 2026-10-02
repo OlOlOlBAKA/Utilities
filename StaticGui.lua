@@ -17,7 +17,7 @@ local MAX_DETECTION_DIST = 200 -- Distance in studs where static starts ramping 
 local FADE_SPEED = 3 -- Speed multiplier for smooth transparency transition
 
 local MAX_ROTATION = 90
-local UPDATE_INTERVAL = 0.03
+local UPDATE_INTERVAL = 0.05
 local timeAccumulator = 0
 
 -- 2. Create Static Blur Effect in Lighting (Permanent Size 7)
