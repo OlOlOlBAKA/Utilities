@@ -13,9 +13,22 @@ local RunService = game:GetService("RunService")
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
 
--- Module_Events Integration
-local ModulesClient = ReplicatedStorage:WaitForChild("ModulesClient")
-local Module_Events = require(ModulesClient:WaitForChild("Module_Events"))
+-- Safe Module_Events Integration (Prevents crashing if Module_Events fails)
+local Module_Events = nil
+task.spawn(function()
+	local modulesClient = ReplicatedStorage:WaitForChild("ModulesClient", 5)
+	if modulesClient then
+		local moduleEventsScript = modulesClient:WaitForChild("Module_Events", 5)
+		if moduleEventsScript then
+			local success, result = pcall(require, moduleEventsScript)
+			if success then
+				Module_Events = result
+			else
+				warn("PathfindingMovement: Failed to load Module_Events ->", result)
+			end
+		end
+	end
+end)
 
 type MoveToConfig = {
 	Speed: number?,
