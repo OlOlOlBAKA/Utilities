@@ -13,7 +13,7 @@ local RunService = game:GetService("RunService")
 local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
 
--- Safe Module_Events Integration (Prevents crashing if Module_Events fails)
+-- Safe Module_Events Integration
 local Module_Events = nil
 task.spawn(function()
 	local modulesClient = ReplicatedStorage:WaitForChild("ModulesClient", 5)
@@ -630,10 +630,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function moveDirectTo(targetPos: Vector3?, customSpeed: number?)
 		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested then return end
 
-		while isStopped and not isMoveToActive do
-			task.wait(0.1)
-			if skipCurrentRoom or regenPathRequested then return end
+		-- Yield if MoveTo or Stop is active
+		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested do
+			task.wait(0.05)
 		end
+		if skipCurrentRoom or regenPathRequested then return end
 
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
@@ -675,9 +676,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
+		-- Instantly cancel active room tween
+		if currentTween then
+			currentTween:Cancel()
+			currentTween = nil
+		end
+
 		isMoveToActive = true
 		isStopped = false
-		if currentTween then currentTween:Cancel(); currentTween = nil end
 
 		local cfg = config or {}
 		local moveSpeed = cfg.Speed or speed
@@ -695,26 +701,43 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
 				lastTargetPos = currentTargetPos
 				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-				local waypoints = computePathWaypoints(entityPos, groundTargetPos, customHeight, floorYOffset, nil)
+				
+				-- Directly step toward target without invoking pathing loops
+				local dist = (groundTargetPos - entityPos).Magnitude
+				if dist > reachDistance then
+					local travelTime = math.max(0.01, dist / moveSpeed)
+					local direction = (groundTargetPos - entityPos).Unit
+					local targetCFrame = CFrame.lookAt(groundTargetPos, groundTargetPos + direction)
+					local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
-				for _, wp in ipairs(waypoints) do
-					if not isMoveToActive or skipCurrentRoom then break end
-					local freshTargetPos = resolveTargetPosition(target)
-					if freshTargetPos and (freshTargetPos - lastTargetPos).Magnitude > 4 then break end
-					moveDirectTo(wp, moveSpeed)
-				end
+					if model:IsA("BasePart") then
+						currentTween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
+						currentTween:Play()
+						currentTween.Completed:Wait()
+						currentTween = nil
+					elseif model:IsA("Model") then
+						local CFrameValue = Instance.new("CFrameValue")
+						CFrameValue.Value = model:GetPivot()
 
-				if isMoveToActive and not skipCurrentRoom then
-					local finalPos = resolveTargetPosition(target)
-					if finalPos then
-						local groundFinal = alignToFloorLevel(finalPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-						moveDirectTo(groundFinal, moveSpeed)
+						local connection = CFrameValue.Changed:Connect(function(newCFrame)
+							if model and model.Parent then model:PivotTo(newCFrame) end
+						end)
+
+						currentTween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
+						currentTween:Play()
+						currentTween.Completed:Wait()
+
+						connection:Disconnect()
+						CFrameValue:Destroy()
+						currentTween = nil
 					end
 				end
 			end
 			task.wait(0.05)
 		end
+
 		isMoveToActive = false
+		regenPathRequested = true -- Recalculate main room path after chasing finishes
 	end
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
@@ -739,6 +762,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local idx = 1
 		while idx <= #waypoints do
 			if skipCurrentRoom then break end
+
+			while isMoveToActive do
+				task.wait(0.05)
+				regenPathRequested = true
+			end
 
 			if regenPathRequested then
 				regenPathRequested = false
