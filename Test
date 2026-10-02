@@ -1,5 +1,4 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 
 local function getJobIdSeed()
@@ -16,37 +15,414 @@ local function getJobIdSeed()
 end
 
 local MASTER_SEED = getJobIdSeed()
+local safeRoomStreak = 0
+
+local GLOBAL_BLACKLIST_ROOMS = {50, 100}
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
+
+local ENTITY_TABLE = {
+    {Name = "A-120",     Weight = 7, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
+    {Name = "Depth",    Weight = 15, MinRoom = 5, MaxRoom = 89, CanSpawnInDark = false},
+    {Name = "Rebound",  Weight = 5, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
+}
+
+local function isRoomBlacklisted(roomNumber)
+    for _, blacklistedRoom in ipairs(GLOBAL_BLACKLIST_ROOMS) do
+        if roomNumber == blacklistedRoom then
+            return true
+        end
+    end
+    return false
+end
+
+local function selectWeightedEntity(availableEntities, roll)
+    local totalWeight = 0
+    for _, entity in ipairs(availableEntities) do
+        totalWeight = totalWeight + entity.Weight
+    end
+
+    local randomWeight = (roll / 100) * totalWeight
+    local currentWeight = 0
+
+    for _, entity in ipairs(availableEntities) do
+        currentWeight = currentWeight + entity.Weight
+        if randomWeight <= currentWeight then
+            return entity
+        end
+    end
+
+    return availableEntities[1]
+end
+
+local function spawnEntity(entityName, roomNumber)
+    if workspace:FindFirstChild(entityName) then return end
+    
+    if entityName == "A-120" then
+        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
+
+        local entityConfig = {
+            Model = game:GetObjects("rbxassetid://103020442987735")[1],
+            Speed = 60,
+            HeightOffset = 5,
+            FloorYOffset = -2,
+            DelayTime = 5,
+            SpawnOffsetRooms = 5,
+            AttackType = "Front",
+
+            HitboxRange = 25,
+            RaycastHitbox = true,
+            SphereRadius = 4,
+            Damage = 100,
+
+            LightFlicker = false,
+            Duration = 1.5,
+            LightBreak = false,
+
+            Rebound = false,
+            ReboundCount = 2,
+            ReboundTime = 1.5,
+            ReboundDelayTime = 1.0,
+
+            EnableCameraShake = true,
+            ShakeAmount = 2.5,
+            ShakeRadius = 30,
+
+            ShowPath = true,
+
+            Callbacks = {
+                OnSpawned = function(model, actions)
+                    model.Main.Name = "A120"
+                end,
+
+                OnStartMoving = function(model, actions)
+                end,
+
+                OnStartRebounding = function(model, reboundCount, actions)
+                end,
+
+                OnEnterRoom = function(model, roomFolder, actions)
+                end,
+
+                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
+                    if playerCharacter and playerCharacter.PrimaryPart then
+                        actions.Stop()
+                        task.wait(0.1)
+                        actions.MoveTo(playerCharacter.PrimaryPart, {
+                            Speed = 60,
+                            ReachDistance = 3,
+                            HeightOffset = 2
+                        })
+                        task.wait(0.1)
+                        actions.Resume(2)
+                    end
+                end,
+
+                OnSeePlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnKillPlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnDespawn = function(model, actions)
+                end
+            }
+        }
+
+        task.spawn(function()
+            PathfindingMovement.MoveThroughRooms(entityConfig)
+        end)
+
+    elseif entityName == "Depth" then
+        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
+
+        local entityConfig = {
+            Model = game:GetObjects("rbxassetid://136244113612044")[1],
+            Speed = 200,
+            HeightOffset = 5,
+            FloorYOffset = -2,
+            DelayTime = 6,
+            SpawnOffsetRooms = 5,
+            AttackType = "Back",
+
+            HitboxRange = 50,
+            RaycastHitbox = true,
+            SphereRadius = 4,
+            Damage = 150,
+
+            LightFlicker = false,
+            Duration = 1.5,
+            LightBreak = false,
+
+            Rebound = false,
+            ReboundCount = 2,
+            ReboundTime = 1.5,
+            ReboundDelayTime = 1.0,
+
+            EnableCameraShake = true,
+            ShakeAmount = 3.5,
+            ShakeRadius = 100,
+
+            ShowPath = true,
+
+            Callbacks = {
+                OnSpawned = function(model, actions)
+                    for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
+                        actions.ToggleLight(room, true, Color3.fromRGB(0, 150, 255))
+                    end
+                end,
+
+                OnStartMoving = function(model, actions)
+                end,
+
+                OnStartRebounding = function(model, reboundCount, actions)
+                end,
+
+                OnEnterRoom = function(model, roomFolder, actions)
+                    actions.ToggleLight(roomFolder, false)
+                end,
+
+                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
+                end,
+
+                OnSeePlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnKillPlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnDespawn = function(model, actions)
+                    model.Slam:Play()
+                end
+            }
+        }
+
+        task.spawn(function()
+            PathfindingMovement.MoveThroughRooms(entityConfig)
+        end)
+
+    elseif entityName == "Rebound" then
+        local ReSt = game:GetService("ReplicatedStorage")
+        local TS = game:GetService("TweenService")
+
+        task.wait(1)
+        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
+
+        local entityConfig = {
+            Model = game:GetObjects("rbxassetid://77366392445371")[1],
+            Speed = 60,
+            HeightOffset = 5,
+            FloorYOffset = -2,
+            DelayTime = 4,
+            SpawnOffsetRooms = 5,
+            AttackType = "Front",
+
+            HitboxRange = 70,
+            RaycastHitbox = true,
+            SphereRadius = 4,
+            Damage = 100,
+
+            LightFlicker = false,
+            Duration = 1.5,
+            LightBreak = false,
+
+            Rebound = false,
+            ReboundCount = 2,
+            ReboundTime = 1.5,
+            ReboundDelayTime = 1.0,
+
+            EnableCameraShake = true,
+            ShakeAmount = 5,
+            ShakeRadius = 100,
+
+            ShowPath = true,
+
+            Callbacks = {
+                OnSpawned = function(model, actions)
+                    for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
+                        actions.ToggleLight(room, true, Color3.fromRGB(0, 25, 255))
+                    end
+                    local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
+                    game:GetService("Debris"):AddItem(ReboundColor, 24)
+                    ReboundColor.Name = "Warn"
+                    ReboundColor.TintColor = Color3.fromRGB(65,138,255)
+                    ReboundColor.Saturation = -0.7
+                    ReboundColor.Contrast = 0.2
+                    TS:Create(ReboundColor, TweenInfo.new(15), {TintColor = Color3.new(1,1,1), Saturation = 0, Contrast = 0}):Play()
+                    
+                    task.spawn(function()
+                        task.wait(15)
+                        if ReboundColor then ReboundColor:Destroy() end
+                    end)
+                    
+                    model.Rebound_Cue:Play()
+                    model.Rebound_Cue2:Play()
+
+                    task.wait(3.5)
+                    model.Rebound_Cue.TimePosition = 0
+                    model.Rebound_Cue:Play()
+                end,
+
+                OnStartMoving = function(model, actions)
+                    for _,v in pairs(model.ReboundNew:GetChildren()) do
+                        if v:IsA("Sound") then
+                            v:Play()
+                        end
+                    end
+                end,
+
+                OnStartRebounding = function(model, reboundCount, actions)
+                end,
+
+                OnEnterRoom = function(model, roomFolder, actions)
+                end,
+
+                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
+                end,
+
+                OnSeePlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnKillPlayer = function(model, playerCharacter, actions)
+                end,
+
+                OnDespawn = function(model, actions)
+                end
+            }
+        }
+
+        task.spawn(function()
+            PathfindingMovement.MoveThroughRooms(entityConfig)
+        end)
+
+        ReSt.GameData.LatestRoom.Changed:Wait()
+
+        for i = 1, 3 do
+            task.wait(2)
+            local entityConfig2 = {
+                Model = game:GetObjects("rbxassetid://77366392445371")[1],
+                Speed = 60,
+                HeightOffset = 5,
+                FloorYOffset = -2,
+                DelayTime = 0.75,
+                SpawnOffsetRooms = 5,
+                AttackType = "Front",
+
+                HitboxRange = 70,
+                RaycastHitbox = true,
+                SphereRadius = 4,
+                Damage = 100,
+
+                LightFlicker = false,
+                Duration = 1.5,
+                LightBreak = false,
+
+                Rebound = false,
+                ReboundCount = 2,
+                ReboundTime = 1.5,
+                ReboundDelayTime = 1.0,
+
+                EnableCameraShake = true,
+                ShakeAmount = 5,
+                ShakeRadius = 100,
+
+                ShowPath = true,
+
+                Callbacks = {
+                    OnSpawned = function(model, actions)
+                        for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
+                            actions.ToggleLight(room, true, Color3.fromRGB(0, 25, 255))
+                        end
+
+                        model.Rebound_Cue.TimePosition = 0
+                        model.Rebound_Cue:Play()
+                    end,
+
+                    OnStartMoving = function(model, actions)
+                        for _,v in pairs(model.ReboundNew:GetChildren()) do
+                            if v:IsA("Sound") then
+                                v:Play()
+                            end
+                        end
+                    end,
+
+                    OnStartRebounding = function(model, reboundCount, actions)
+                    end,
+
+                    OnEnterRoom = function(model, roomFolder, actions)
+                    end,
+
+                    OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
+                    end,
+
+                    OnSeePlayer = function(model, playerCharacter, actions)
+                    end,
+
+                    OnKillPlayer = function(model, playerCharacter, actions)
+                    end,
+
+                    OnDespawn = function(model, actions)
+                    end
+                }
+            }
+
+            task.spawn(function()
+                PathfindingMovement.MoveThroughRooms(entityConfig2)
+            end)
+        end
+    end
+end
 
 local function handleHardcoreRoom(roomNumber)
     math.randomseed(MASTER_SEED + roomNumber)
-    
-    local spawnRoll = math.random(1, 100)
-    local entityTypeRoll = math.random(1, 100)
-    
-    if roomNumber > 2 and spawnRoll <= 50 then
-        local entityName = ""
-        local warningText = ""
-        
-        if entityTypeRoll <= 40 then
-            entityName = "A-60"
-            warningText = "Extreme speed! Hide in a closet immediately!"
-        elseif entityTypeRoll <= 75 then
-            entityName = "Depth"
-            warningText = "Sub-level entity detected! Stay quiet."
-        else
-            entityName = "Silence"
-            warningText = "Do not move or open doors!"
+
+    if isRoomBlacklisted(roomNumber) then
+        safeRoomStreak = safeRoomStreak + 1
+        return
+    end
+
+    local isDarkRoom = false
+    local currentRoomsFolder = workspace:FindFirstChild("CurrentRooms")
+    if currentRoomsFolder then
+        local currentRoomModel = currentRoomsFolder:FindFirstChild(tostring(roomNumber))
+        if currentRoomModel then
+            if currentRoomModel:GetAttribute("IsDark") == true then
+                isDarkRoom = true
+            end
         end
-        
-        print(string.format("[HARDCORE SYNC] Room %d: Spawning %s (Seed: %d)", roomNumber, entityName, MASTER_SEED + roomNumber))
-        
-        StarterGui:SetCore("SendNotification", {
-            Title = string.format("⚠️ ROOM %d: %s", roomNumber, entityName),
-            Text = warningText,
-            Duration = 5
-        })
+    end
+
+    local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
+    
+    if safeRoomStreak >= 4 then
+        baseSpawnChance = 100
+    end
+
+    local spawnRoll = math.random(1, 100)
+    local weightRoll = math.random(1, 100)
+
+    if roomNumber > 2 and spawnRoll <= baseSpawnChance then
+        local eligibleEntities = {}
+        for _, entity in ipairs(ENTITY_TABLE) do
+            local minRoomReq = roomNumber >= entity.MinRoom
+            local maxRoomReq = (not entity.MaxRoom) or (roomNumber <= entity.MaxRoom)
+            local darkReq = (not isDarkRoom) or entity.CanSpawnInDark
+            
+            if minRoomReq and maxRoomReq and darkReq then
+                table.insert(eligibleEntities, entity)
+            end
+        end
+
+        if #eligibleEntities > 0 then
+            safeRoomStreak = 0
+            local chosenEntity = selectWeightedEntity(eligibleEntities, weightRoll)
+
+            spawnEntity(chosenEntity.Name, roomNumber)
+        else
+            safeRoomStreak = safeRoomStreak + 1
+        end
     else
-        print(string.format("[HARDCORE SYNC] Room %d is safe.", roomNumber))
+        safeRoomStreak = safeRoomStreak + 1
     end
 end
 
@@ -54,17 +430,11 @@ local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 
 if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
-    
+
     latestRoom.Changed:Connect(function(newRoomNumber)
         handleHardcoreRoom(newRoomNumber)
     end)
-    
-    StarterGui:SetCore("SendNotification", {
-        Title = "Hardcore Mode Loaded",
-        Text = "Synced with party! Good luck.",
-        Duration = 4
-    })
-    
+
     if latestRoom.Value > 0 then
         handleHardcoreRoom(latestRoom.Value)
     end
