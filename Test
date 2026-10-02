@@ -30,9 +30,9 @@ local lastProcessedRoom = -1
 local GLOBAL_BLACKLIST_ROOMS = {50, 100}
 
 local ENTITY_TABLE = {
-    {Name = "A-120",     Weight = 2, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
-    {Name = "Depth",    Weight = 5, MinRoom = 5, MaxRoom = 89, CanSpawnInDark = false},
-    {Name = "Rebound",  Weight = 1, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
+    {Name = "A-120",     Weight = 0.5, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
+    {Name = "Depth",    Weight = 1, MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
+    {Name = "Rebound",  Weight = 0.25, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
 }
 
 local function isRoomBlacklisted(roomNumber)
@@ -44,13 +44,14 @@ local function isRoomBlacklisted(roomNumber)
     return false
 end
 
-local function selectWeightedEntity(availableEntities, roll)
+local function selectWeightedEntity(availableEntities, rng)
     local totalWeight = 0
     for _, entity in ipairs(availableEntities) do
         totalWeight = totalWeight + entity.Weight
     end
 
-    local randomWeight = (roll / 100) * totalWeight
+    -- Continuous floating-point pick supporting decimal weights (e.g. 0.25, 0.1)
+    local randomWeight = rng:NextNumber(0, totalWeight)
     local currentWeight = 0
 
     for _, entity in ipairs(availableEntities) do
@@ -350,7 +351,6 @@ local function spawnEntity(entityName, roomNumber)
 
                     Callbacks = {
                         OnSpawned = function(model, actions)
-
                             model.Rebound_Cue.TimePosition = 0
                             model.Rebound_Cue:Play()
                         end,
@@ -396,7 +396,8 @@ local function handleHardcoreRoom(roomNumber)
     if lastProcessedRoom == roomNumber then return end
     lastProcessedRoom = roomNumber
 
-    math.randomseed(MASTER_SEED + roomNumber)
+    -- Isolated RNG seed for multiplayer sync
+    local rng = Random.new(MASTER_SEED + roomNumber)
 
     if isRoomBlacklisted(roomNumber) then
         safeRoomStreak = safeRoomStreak + 1
@@ -427,8 +428,7 @@ local function handleHardcoreRoom(roomNumber)
 
     local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
 
-    local spawnRoll = math.random(1, 100)
-    local weightRoll = math.random(1, 100)
+    local spawnRoll = rng:NextNumber(1, 100)
 
     if roomNumber > 2 and spawnRoll <= baseSpawnChance then
         local eligibleEntities = {}
@@ -445,7 +445,7 @@ local function handleHardcoreRoom(roomNumber)
 
         if #eligibleEntities > 0 then
             safeRoomStreak = 0
-            local chosenEntity = selectWeightedEntity(eligibleEntities, weightRoll)
+            local chosenEntity = selectWeightedEntity(eligibleEntities, rng)
 
             spawnEntity(chosenEntity.Name, roomNumber)
         else
