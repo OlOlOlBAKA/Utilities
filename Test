@@ -86,7 +86,7 @@ local function spawnEntity(entityName, roomNumber)
             HitboxRange = 25,
             RaycastHitbox = true,
             SphereRadius = 4,
-            Damage = 40,
+            Damage = 100,
 
             LightFlicker = false,
             Duration = 1.5,
@@ -101,7 +101,7 @@ local function spawnEntity(entityName, roomNumber)
             ShakeAmount = 2.5,
             ShakeRadius = 30,
 
-            ShowPath = true,
+            ShowPath = false,
 
             Callbacks = {
                 OnSpawned = function(model, actions)
@@ -162,7 +162,7 @@ local function spawnEntity(entityName, roomNumber)
             HitboxRange = 50,
             RaycastHitbox = true,
             SphereRadius = 4,
-            Damage = 40,
+            Damage = 100,
 
             LightFlicker = false,
             Duration = 1.5,
@@ -177,7 +177,7 @@ local function spawnEntity(entityName, roomNumber)
             ShakeAmount = 3.5,
             ShakeRadius = 100,
 
-            ShowPath = true,
+            ShowPath = false,
 
             Callbacks = {
                 OnSpawned = function(model, actions)
@@ -237,7 +237,7 @@ local function spawnEntity(entityName, roomNumber)
             HitboxRange = 70,
             RaycastHitbox = true,
             SphereRadius = 4,
-            Damage = 40,
+            Damage = 100,
 
             LightFlicker = false,
             Duration = 1.5,
@@ -252,13 +252,10 @@ local function spawnEntity(entityName, roomNumber)
             ShakeAmount = 5,
             ShakeRadius = 100,
 
-            ShowPath = true,
+            ShowPath = false,
 
             Callbacks = {
                 OnSpawned = function(model, actions)
-                    for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
-                        actions.ToggleLight(room, true, Color3.fromRGB(0, 25, 255))
-                    end
                     local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
                     game:GetService("Debris"):AddItem(ReboundColor, 24)
                     ReboundColor.Name = "Warn"
@@ -334,7 +331,7 @@ local function spawnEntity(entityName, roomNumber)
                     HitboxRange = 70,
                     RaycastHitbox = true,
                     SphereRadius = 4,
-                    Damage = 40,
+                    Damage = 100,
 
                     LightFlicker = false,
                     Duration = 1.5,
@@ -353,9 +350,6 @@ local function spawnEntity(entityName, roomNumber)
 
                     Callbacks = {
                         OnSpawned = function(model, actions)
-                            for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
-                                actions.ToggleLight(room, true, Color3.fromRGB(0, 25, 255))
-                            end
 
                             model.Rebound_Cue.TimePosition = 0
                             model.Rebound_Cue:Play()
