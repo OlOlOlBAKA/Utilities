@@ -11,8 +11,8 @@ local random = Random.new()
 if playerGui:FindFirstChild("StaticScreenGui") then return end
 
 -- 1. Configuration Settings
-local BASE_TRANSPARENCY = 0.8 -- Default max transparency (faint/idle)
-local MIN_TRANSPARENCY = 0.3  -- Min transparency when monster is on top of player (heavy static)
+local BASE_TRANSPARENCY = 0.9 -- Default max transparency (faint/idle)
+local MIN_TRANSPARENCY = 0.5  -- Min transparency when monster is on top of player (heavy static)
 local MAX_DETECTION_DIST = 200 -- Distance in studs where static starts ramping up
 local FADE_SPEED = 3 -- Speed multiplier for smooth transparency transition
 
@@ -56,7 +56,7 @@ leftBorder.Name = "LeftBorder"
 leftBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 leftBorder.BackgroundTransparency = 0 -- Visible black frame
 leftBorder.Size = UDim2.new(1, 0, 1, 0)
-leftBorder.Position = UDim2.new(-0.85, 0, 0, 0)
+leftBorder.Position = UDim2.new(-0.9, 0, 0, 0)
 leftBorder.BorderSizePixel = 0
 leftBorder.Parent = screenGui
 
@@ -66,7 +66,7 @@ rightBorder.Name = "RightBorder"
 rightBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 rightBorder.BackgroundTransparency = 0 -- Visible black frame
 rightBorder.Size = UDim2.new(1, 0, 1, 0)
-rightBorder.Position = UDim2.new(0.85, 0, 0, 0)
+rightBorder.Position = UDim2.new(0.9, 0, 0, 0)
 rightBorder.BorderSizePixel = 0
 rightBorder.Parent = screenGui
 
@@ -101,7 +101,7 @@ local function getClosestMonsterDistance()
 	
 	-- Search Workspace for any object named RushMoving, AmbushMoving, or DepthMoving
 	for _, object in Workspace:GetDescendants() do
-		if object.Name == "RushMoving" or object.Name == "AmbushMoving" or object.Name == "DepthMoving" or object.Name == "Rebound" then
+		if object.Name == "RushMoving" or object.Name == "AmbushMoving" or object.Name == "DepthMoving" or object.Name == "Rebound" or object.Name == "A120" or object.Name == "A-120" then
 			local objectPos = nil
 			
 			if object:IsA("Model") then
