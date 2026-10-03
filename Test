@@ -1,6 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
+local Main_Game = require(Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+
 local function getJobIdSeed()
     local jobId = game.JobId
     if not jobId or jobId == "" then 
@@ -15,6 +17,8 @@ local function getJobIdSeed()
 end
 
 local MASTER_SEED = getJobIdSeed()
+print("[Hardcore Mode] Master Seed initialized:", MASTER_SEED)
+
 local safeRoomStreak = 0
 
 -- Track which specific entities are currently running to prevent duplicate spawns
@@ -24,6 +28,9 @@ local activeEntities = {
     ["Rebound"] = false
 }
 
+-- Counter to keep track of Rebound's despawns
+local reboundDespawnCount = 0
+
 -- Prevents the same room number from running the spawn logic multiple times
 local lastProcessedRoom = -1
 
@@ -31,8 +38,8 @@ local GLOBAL_BLACKLIST_ROOMS = {50, 100}
 
 local ENTITY_TABLE = {
     {Name = "A-120",     Weight = 0.75, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
-    {Name = "Depth",    Weight = 1.5, MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
-    {Name = "Rebound",  Weight = 0.5, MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
+    {Name = "Depth",    Weight = 1.5,  MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
+    {Name = "Rebound",  Weight = 0.5,  MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
 }
 
 local function isRoomBlacklisted(roomNumber)
@@ -50,7 +57,6 @@ local function selectWeightedEntity(availableEntities, rng)
         totalWeight = totalWeight + entity.Weight
     end
 
-    -- Continuous floating-point pick supporting decimal weights (e.g. 0.25, 0.1)
     local randomWeight = rng:NextNumber(0, totalWeight)
     local currentWeight = 0
 
@@ -65,339 +71,87 @@ local function selectWeightedEntity(availableEntities, rng)
 end
 
 local function spawnEntity(entityName, roomNumber)
-    -- Check if THIS specific entity is already active or exists in Workspace
+    -- Prevent duplicate spawns if active or already in Workspace
     if activeEntities[entityName] or workspace:FindFirstChild(entityName) then 
         return 
     end
 
     activeEntities[entityName] = true
 
-    if entityName == "A-120" then
-        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
+    -- 1. Run entity script via loadstring
+    task.spawn(function()
+        if entityName == "A-120" then
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/A-120.lua"))()
+        elseif entityName == "Depth" then
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Depth.lua"))()
+        elseif entityName == "Rebound" then
+            reboundDespawnCount = 0 -- Reset counter on new spawn
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Rebound.lua"))()
+        end
+    end)
 
-        local entityConfig = {
-            Model = game:GetObjects("rbxassetid://103020442987735")[1],
-            Speed = 60,
-            HeightOffset = 5,
-            FloorYOffset = -2,
-            DelayTime = 5,
-            SpawnOffsetRooms = 5,
-            AttackType = "Front",
-
-            HitboxRange = 25,
-            RaycastHitbox = true,
-            SphereRadius = 4,
-            Damage = 100,
-
-            LightFlicker = false,
-            Duration = 1.5,
-            LightBreak = false,
-
-            Rebound = false,
-            ReboundCount = 2,
-            ReboundTime = 1.5,
-            ReboundDelayTime = 1.0,
-
-            EnableCameraShake = true,
-            ShakeAmount = 2.5,
-            ShakeRadius = 30,
-
-            ShowPath = false,
-
-            Callbacks = {
-                OnSpawned = function(model, actions)
-                    model.Main.Name = "A120"
-                end,
-
-                OnStartMoving = function(model, actions)
-                end,
-
-                OnStartRebounding = function(model, reboundCount, actions)
-                end,
-
-                OnEnterRoom = function(model, roomFolder, actions)
-                end,
-
-                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
-                    if playerCharacter and playerCharacter.PrimaryPart then
-                        actions.Stop()
-                        task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart, {
-                            Speed = 60,
-                            ReachDistance = 3,
-                            HeightOffset = 2
-                        })
-                        task.wait(0.1)
-                        actions.Resume(2)
-                    end
-                end,
-
-                OnSeePlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnKillPlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnDespawn = function(model, actions)
-                    activeEntities["A-120"] = false
-                end
-            }
-        }
-
+    -- 2. Handle Despawns via workspace.ChildRemoved
+    if entityName == "Rebound" then
+        -- Track Rebound across 4 total despawns
         task.spawn(function()
-            PathfindingMovement.MoveThroughRooms(entityConfig)
-        end)
-
-    elseif entityName == "Depth" then
-        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
-
-        local entityConfig = {
-            Model = game:GetObjects("rbxassetid://136244113612044")[1],
-            Speed = 200,
-            HeightOffset = 5,
-            FloorYOffset = -2,
-            DelayTime = 6,
-            SpawnOffsetRooms = 5,
-            AttackType = "Back",
-
-            HitboxRange = 50,
-            RaycastHitbox = true,
-            SphereRadius = 4,
-            Damage = 100,
-
-            LightFlicker = false,
-            Duration = 1.5,
-            LightBreak = false,
-
-            Rebound = false,
-            ReboundCount = 2,
-            ReboundTime = 1.5,
-            ReboundDelayTime = 1.0,
-
-            EnableCameraShake = true,
-            ShakeAmount = 3.5,
-            ShakeRadius = 100,
-
-            ShowPath = false,
-
-            Callbacks = {
-                OnSpawned = function(model, actions)
-                    for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
-                        actions.ToggleLight(room, true, Color3.fromRGB(0, 150, 255))
-                    end
-                end,
-
-                OnStartMoving = function(model, actions)
-                end,
-
-                OnStartRebounding = function(model, reboundCount, actions)
-                end,
-
-                OnEnterRoom = function(model, roomFolder, actions)
-                    actions.ToggleLight(roomFolder, false)
-                end,
-
-                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
-                end,
-
-                OnSeePlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnKillPlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnDespawn = function(model, actions)
-                    if model:FindFirstChild("Slam") then
-                        model.Slam:Play()
-                    end
-                    activeEntities["Depth"] = false
-                end
-            }
-        }
-
-        task.spawn(function()
-            PathfindingMovement.MoveThroughRooms(entityConfig)
-        end)
-
-    elseif entityName == "Rebound" then
-        local ReSt = game:GetService("ReplicatedStorage")
-        local TS = game:GetService("TweenService")
-
-        task.wait(1)
-        local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
-
-        local entityConfig = {
-            Model = game:GetObjects("rbxassetid://77366392445371")[1],
-            Speed = 60,
-            HeightOffset = 5,
-            FloorYOffset = -2,
-            DelayTime = 4,
-            SpawnOffsetRooms = 5,
-            AttackType = "Front",
-
-            HitboxRange = 70,
-            RaycastHitbox = true,
-            SphereRadius = 4,
-            Damage = 100,
-
-            LightFlicker = false,
-            Duration = 1.5,
-            LightBreak = false,
-
-            Rebound = false,
-            ReboundCount = 2,
-            ReboundTime = 1.5,
-            ReboundDelayTime = 1.0,
-
-            EnableCameraShake = true,
-            ShakeAmount = 5,
-            ShakeRadius = 100,
-
-            ShowPath = false,
-
-            Callbacks = {
-                OnSpawned = function(model, actions)
-                    local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
-                    game:GetService("Debris"):AddItem(ReboundColor, 24)
-                    ReboundColor.Name = "Warn"
-                    ReboundColor.TintColor = Color3.fromRGB(65,138,255)
-                    ReboundColor.Saturation = -0.7
-                    ReboundColor.Contrast = 0.2
-                    TS:Create(ReboundColor, TweenInfo.new(15), {TintColor = Color3.new(1,1,1), Saturation = 0, Contrast = 0}):Play()
-                    
-                    task.spawn(function()
-                        task.wait(15)
-                        if ReboundColor then ReboundColor:Destroy() end
+            while activeEntities["Rebound"] do
+                local entityModel = workspace:WaitForChild("Rebound", 15)
+                
+                if entityModel then
+                    local connection
+                    connection = workspace.ChildRemoved:Connect(function(child)
+                        if child == entityModel then
+                            reboundDespawnCount = reboundDespawnCount + 1
+                            connection:Disconnect()
+                        end
                     end)
                     
-                    model.Rebound_Cue:Play()
-                    model.Rebound_Cue2:Play()
-
-                    task.wait(3.5)
-                    model.Rebound_Cue.TimePosition = 0
-                    model.Rebound_Cue:Play()
-                end,
-
-                OnStartMoving = function(model, actions)
-                    for _,v in pairs(model.ReboundNew:GetChildren()) do
-                        if v:IsA("Sound") then
-                            v:Play()
-                        end
+                    -- Wait until model is actually removed before looking for the next pass
+                    while entityModel and entityModel.Parent == workspace do
+                        task.wait(0.1)
                     end
-                end,
 
-                OnStartRebounding = function(model, reboundCount, actions)
-                end,
-
-                OnEnterRoom = function(model, roomFolder, actions)
-                end,
-
-                OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
-                end,
-
-                OnSeePlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnKillPlayer = function(model, playerCharacter, actions)
-                end,
-
-                OnDespawn = function(model, actions)
+                    -- If 4 despawns have occurred, unlock Rebound
+                    if reboundDespawnCount >= 4 then
+                        activeEntities["Rebound"] = false
+                        print("despawn testing")
+                        break
+                    end
+                else
+                    -- Safety unlock if model fails to load in workspace
+                    activeEntities["Rebound"] = false
+                    break
                 end
-            }
-        }
-
-        task.spawn(function()
-            PathfindingMovement.MoveThroughRooms(entityConfig)
-        end)
-
-        -- Handle the 3 room progression rebounds
-        task.spawn(function()
-            local reboundsLeft = 3
-            local latestRoom = ReSt.GameData.LatestRoom
-
-            while reboundsLeft > 0 do
-                latestRoom.Changed:Wait()
-                reboundsLeft = reboundsLeft - 1
-                task.wait(2.5)
-
-                local entityConfig2 = {
-                    Model = game:GetObjects("rbxassetid://77366392445371")[1],
-                    Speed = 60,
-                    HeightOffset = 5,
-                    FloorYOffset = -2,
-                    DelayTime = 0.75,
-                    SpawnOffsetRooms = 5,
-                    AttackType = "Front",
-
-                    HitboxRange = 70,
-                    RaycastHitbox = true,
-                    SphereRadius = 4,
-                    Damage = 100,
-
-                    LightFlicker = false,
-                    Duration = 1.5,
-                    LightBreak = false,
-
-                    Rebound = false,
-                    ReboundCount = 2,
-                    ReboundTime = 1.5,
-                    ReboundDelayTime = 1.0,
-
-                    EnableCameraShake = true,
-                    ShakeAmount = 5,
-                    ShakeRadius = 100,
-
-                    ShowPath = false,
-
-                    Callbacks = {
-                        OnSpawned = function(model, actions)
-                            model.Rebound_Cue.TimePosition = 0
-                            model.Rebound_Cue:Play()
-                        end,
-
-                        OnStartMoving = function(model, actions)
-                            for _,v in pairs(model.ReboundNew:GetChildren()) do
-                                if v:IsA("Sound") then
-                                    v:Play()
-                                end
-                            end
-                        end,
-
-                        OnStartRebounding = function(model, reboundCount, actions)
-                        end,
-
-                        OnEnterRoom = function(model, roomFolder, actions)
-                        end,
-
-                        OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
-                        end,
-
-                        OnSeePlayer = function(model, playerCharacter, actions)
-                        end,
-
-                        OnKillPlayer = function(model, playerCharacter, actions)
-                        end,
-
-                        OnDespawn = function(model, actions)
-                        end
-                    }
-                }
-
-                PathfindingMovement.MoveThroughRooms(entityConfig2)
             end
-
-            activeEntities["Rebound"] = false
+        end)
+    else
+        -- Standard single-despawn entities (A-120, Depth)
+        task.spawn(function()
+            local entityModel = workspace:WaitForChild(entityName, 15)
+            
+            if entityModel then
+                local connection
+                connection = workspace.ChildRemoved:Connect(function(child)
+                    if child == entityModel then
+                        activeEntities[entityName] = false
+                        connection:Disconnect()
+                    end
+                end)
+            else
+                activeEntities[entityName] = false
+            end
         end)
     end
 end
 
 local function handleHardcoreRoom(roomNumber)
-    -- Prevent executing the same room number multiple times
     if lastProcessedRoom == roomNumber then return end
     lastProcessedRoom = roomNumber
 
-    -- Isolated RNG seed for multiplayer sync
-    local rng = Random.new(MASTER_SEED + roomNumber)
+    local roomSeed = MASTER_SEED + roomNumber
+    print(string.format("[Hardcore Mode] Processing Room %d | Room Seed: %d", roomNumber, roomSeed))
+
+    local rng = Random.new(roomSeed)
 
     if isRoomBlacklisted(roomNumber) then
         safeRoomStreak = safeRoomStreak + 1
@@ -419,7 +173,6 @@ local function handleHardcoreRoom(roomNumber)
         end
     end
 
-    -- Verify that TotalHidingSpots exists AND is greater than the total player count
     local playerCount = #Players:GetPlayers()
     if not totalHidingSpots or totalHidingSpots <= playerCount then
         safeRoomStreak = safeRoomStreak + 1
@@ -462,7 +215,8 @@ if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
     loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
 
-    require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game).caption("The Hardcore Mode script is now running, Have fun!",true,3)
+    Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
+    
     latestRoom.Changed:Connect(function(newRoomNumber)
         handleHardcoreRoom(newRoomNumber)
     end)
