@@ -213,7 +213,7 @@ local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 
 if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
+    -- loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
 
     Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
     
