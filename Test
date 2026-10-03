@@ -169,18 +169,21 @@ local function handleHardcoreRoom(roomNumber)
                 isDarkRoom = true
             end
             
+            -- Fetch attribute (or check subfolders/children if your game puts lockers inside room models)
             totalHidingSpots = currentRoomModel:GetAttribute("TotalHidingSpots")
         end
     end
 
     local playerCount = #Players:GetPlayers()
-    if not totalHidingSpots or totalHidingSpots <= playerCount then
+
+    -- FIX: Rigorous check to prevent spawning in rooms with 0 or insufficient hiding spots
+    if not totalHidingSpots or totalHidingSpots <= 0 or totalHidingSpots < playerCount then
+        print(string.format("[Hardcore Mode] Room %d skipped (Hiding Spots: %s, Players: %d)", roomNumber, tostring(totalHidingSpots), playerCount))
         safeRoomStreak = safeRoomStreak + 1
         return
     end
 
     local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
-
     local spawnRoll = rng:NextNumber(1, 100)
 
     if roomNumber > 2 and spawnRoll <= baseSpawnChance then
@@ -208,6 +211,7 @@ local function handleHardcoreRoom(roomNumber)
         safeRoomStreak = safeRoomStreak + 1
     end
 end
+
 
 local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 
