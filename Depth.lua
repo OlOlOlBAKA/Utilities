@@ -33,12 +33,12 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                 OnSpawned = function(model, actions)
                     for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
                         if room ~= workspace.CurrentRooms:FindFirstChild(game.ReplicatedStorage.GameData.LatestRoom.Value + 1) then
-                            actions.ToggleLight(room, true, Color3.fromRGB(0, 30, 255))
+                            actions.ToggleLight(room, true, Color3.fromRGB(0, 100, 255))
                         end
                     end
                     for _,v in ipairs(model.DepthNew:GetChildren()) do
                         if v:IsA("Sound") then
-                            v.Volume = v.Volume * 1.5
+                            v.Volume = v.Volume * 1.25
                         end
                     end
                 end,
