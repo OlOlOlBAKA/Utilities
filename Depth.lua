@@ -36,7 +36,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                             actions.ToggleLight(room, true, Color3.fromRGB(0, 30, 255))
                         end
                     end
-                    for _,v in ipairs(model:FindFirstChildOfClass("BasePart"):GetChildren()) do
+                    for _,v in ipairs(model.DepthNew:GetChildren()) do
                         if v:IsA("Sound") then
                             v.Volume = v.Volume * 1.5
                         end
