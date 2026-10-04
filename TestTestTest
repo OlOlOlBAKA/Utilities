@@ -165,7 +165,6 @@ local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 	return false, nil
 end
 
--- Credit to Vynixu for the Repentance crucifixion system
 local function performCrucifixion(
 	entityModel: Instance, 
 	character: Model, 
@@ -212,7 +211,6 @@ local function performCrucifixion(
 		end
 	end
 
-	-- Always default to Guiding Light color
 	local typeData = CrucifixStorage.CrucifixTypes["guiding"]
 	local color = typeData.Color
 
@@ -229,7 +227,6 @@ local function performCrucifixion(
 		end
 	end
 
-	-- Attach and lock entity to Repentance anchor point during banishment
 	task.spawn(function()
 		while entityPart.Parent and entityModel and entityModel.Parent do
 			if entityModel:IsA("Model") then
@@ -279,7 +276,10 @@ local function performCrucifixion(
 	waitUntil(2.5)
 	TweenService:Create(entityPart, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { CFrame = entityPart.CFrame - Vector3.new(0, 50, 0) }):Play()
 
-	for _, s in ipairs(entityModel:GetDescendants()) do
+	local soundTargets = entityModel:GetDescendants()
+	if entityModel:IsA("Sound") then table.insert(soundTargets, entityModel) end
+
+	for _, s in ipairs(soundTargets) do
 		if s:IsA("Sound") and not s:GetAttribute("VolumeIgnore") then
 			TweenService:Create(s, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Volume = 0 }):Play()
 		end
@@ -298,7 +298,8 @@ local function performCrucifixion(
 	return true
 end
 
-local roomFloorCache: { [Instance]: { BasePart } } = {}
+-- Weak reference table to prevent memory leaks across multiple instances
+local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	if roomFloorCache[roomFolder] then
@@ -332,7 +333,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floor
 	raycastParams.FilterDescendantsInstances = floorParts
 
 	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -200, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
@@ -615,7 +616,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			reboundRequestedDelayAfter = delayAfter or 0
 			skipCurrentRoom = true
 			isMoveToActive = false
-			if currentTween me then currentTween:Cancel(); currentTween = nil end
+			if currentTween then currentTween:Cancel(); currentTween = nil end
 		end,
 		LightFlicker = function(room: Instance | number, durationAmount: number?, amount: number?)
 			triggerLightFlicker(room, durationAmount or duration, amount)
@@ -667,7 +668,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- Crucifix Trigger (Always enabled, fixed 40 studs range)
 					if distance <= 40 and not isBeingCrucified then
 						local hasCrucifix, tool = checkForEquippedCrucifix(character)
 						if hasCrucifix and tool then
@@ -687,7 +687,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- Damage Check
 					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass and not isBeingCrucified then
 						local canHit = true
 						if useRaycastHitbox then
@@ -1167,8 +1166,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(1)
 		if model and model.Parent then model:Destroy() end
 	end
-	
-	table.clear(roomFloorCache)
 end
 
 return PathfindingMovement
