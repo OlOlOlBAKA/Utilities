@@ -1,6 +1,7 @@
 local ReSt = game:GetService("ReplicatedStorage")
         local TS = game:GetService("TweenService")
 local isCrucified = false
+local isPresent = false
         task.wait(1)
         local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
 
@@ -35,6 +36,7 @@ local isCrucified = false
 
             Callbacks = {
                 OnSpawned = function(model, actions)
+			        isPresent = true
                     local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
                     game:GetService("Debris"):AddItem(ReboundColor, 24)
                     ReboundColor.Name = "Warn"
@@ -88,6 +90,7 @@ local isCrucified = false
 		        end,
 
                 OnDespawn = function(model, actions)
+					isPresent = false
                 end
             }
         }
@@ -107,6 +110,8 @@ local isCrucified = false
                     break
                 end
                 latestRoom.Changed:Wait()
+			    if isPresent == false then
+			    
                 reboundsLeft = reboundsLeft - 1
                 task.wait(2.5)
 
@@ -183,4 +188,7 @@ local isCrucified = false
 
                 PathfindingMovement.MoveThroughRooms(entityConfig2)
             end
+			    else
+				    print("Another Rebound is presenting, will appear next door")
+			    end
         end)
