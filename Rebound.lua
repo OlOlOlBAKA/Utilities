@@ -13,7 +13,7 @@ local ReSt = game:GetService("ReplicatedStorage")
             SpawnOffsetRooms = 5,
             AttackType = "Front",
 
-            HitboxRange = 70,
+            HitboxRange = 50,
             RaycastHitbox = true,
             SphereRadius = 4,
             Damage = 100,
@@ -47,9 +47,12 @@ local ReSt = game:GetService("ReplicatedStorage")
                         task.wait(15)
                         if ReboundColor then ReboundColor:Destroy() end
                     end)
-                    
+                    model.Rebound_Cue2.Volume = 0.5
                     model.Rebound_Cue:Play()
                     model.Rebound_Cue2:Play()
+                    model.ReboundNew.Close.Volume = 1.25
+                    model.ReboundNew.Idle.Volume = 1.25
+                    model.ReboundNew.Sound.Volume = 2.5
 
                     task.wait(3.5)
                     model.Rebound_Cue.TimePosition = 0
@@ -107,7 +110,7 @@ local ReSt = game:GetService("ReplicatedStorage")
                     SpawnOffsetRooms = 5,
                     AttackType = "Front",
 
-                    HitboxRange = 70,
+                    HitboxRange = 50,
                     RaycastHitbox = true,
                     SphereRadius = 4,
                     Damage = 100,
@@ -129,6 +132,9 @@ local ReSt = game:GetService("ReplicatedStorage")
 
                     Callbacks = {
                         OnSpawned = function(model, actions)
+                            model.ReboundNew.Close.Volume = 1.25
+                            model.ReboundNew.Idle.Volume = 1.25
+                            model.ReboundNew.Sound.Volume = 2.5
                             model.Rebound_Cue.TimePosition = 0
                             model.Rebound_Cue:Play()
                         end,
