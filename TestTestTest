@@ -682,6 +682,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakerInstance: any?
 	local sustainedShake: any?
 
+	-- Camera Shake Stop Function
+	local function stopCameraShake()
+		isMovementFinished = true
+		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+			sustainedShake:StartFadeOut(0.2)
+			sustainedShake = nil 
+		end
+		if renderConnection then 
+			renderConnection:Disconnect()
+			renderConnection = nil 
+		end
+		if shakerInstance and typeof(shakerInstance.Stop) == "function" then
+			task.delay(0.2, function()
+				if shakerInstance then 
+					shakerInstance:Stop()
+					shakerInstance = nil 
+				end
+			end)
+		end
+	end
+
+	-- Camera Shake Start Function
 	local function startCameraShake()
 		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
 
@@ -703,15 +725,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 
 			if isMovementFinished or not model or not model.Parent then
-				if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
-					sustainedShake:StartFadeOut(0.2); sustainedShake = nil 
-				end
-				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-				task.delay(0.2, function()
-					if shakerInstance and typeof(shakerInstance.Stop) == "function" then 
-						shakerInstance:Stop(); shakerInstance = nil 
-					end
-				end)
+				stopCameraShake()
 				return
 			end
 
@@ -722,28 +736,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- 1. CRUCIFIX CHECK HAS PRIORITY (Range check extends up to 50 studs)
-					if distance <= 50 and not isBeingCrucified then
-						local hasCrucifix, tool = checkForEquippedCrucifix(character)
-						if hasCrucifix and tool then
-							isBeingCrucified = true
-							isStopped = true
-							if currentTween then currentTween:Cancel(); currentTween = nil end
-							tool:Destroy()
-
-							if type(callbacks.OnCrucifixion) == "function" then
-								task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
-							end
-
-							task.spawn(function()
-								performCrucifixion(model, character, shakerInstance)
-								isMovementFinished = true
-							end)
-							return -- Stop all frame processing immediately
-						end
-					end
-
-					-- 2. DAMAGE / HITBOX CHECK (Blocked entirely if being crucified)
+					-- 1. HITBOX & DAMAGE / CRUCIFIX CHECK
 					if not isBeingCrucified and character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
@@ -751,19 +744,47 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 
 						if canHit then
-							hasHitPlayerThisPass = true
-							local humanoid = character:FindFirstChildOfClass("Humanoid")
-							if humanoid then humanoid:TakeDamage(damageAmount) end
+							-- First, confirm Line of Sight before processing damage or crucifix usage
+							local hasLoS = checkLineOfSight(model)
+							if hasLoS then
+								-- Line of Sight is confirmed; now check for crucifix
+								local hasCrucifix, tool = checkForEquippedCrucifix(character)
+								if hasCrucifix and tool then
+									-- CRUCIFIX ACTION: Prevent damage and trigger crucifixion sequence
+									isBeingCrucified = true
+									isStopped = true
+									if currentTween then currentTween:Cancel(); currentTween = nil end
+									tool:Destroy()
 
-							if type(callbacks.OnKillPlayer) == "function" then
-								task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									-- Stop camera shake immediately
+									stopCameraShake()
+
+									if type(callbacks.OnCrucifixion) == "function" then
+										task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
+									end
+
+									task.spawn(function()
+										performCrucifixion(model, character, shakerInstance)
+										isMovementFinished = true
+									end)
+									return
+								else
+									-- NO CRUCIFIX: Apply normal player damage
+									hasHitPlayerThisPass = true
+									local humanoid = character:FindFirstChildOfClass("Humanoid")
+									if humanoid then humanoid:TakeDamage(damageAmount) end
+
+									if type(callbacks.OnKillPlayer) == "function" then
+										task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									end
+								end
 							end
 						end
 					end
 
 					lastEntityPosition = entityPos
 
-					-- 3. LINE OF SIGHT CHECK (Blocked entirely if being crucified)
+					-- 2. STANDALONE LINE OF SIGHT CALLBACK CHECK
 					if not isBeingCrucified and type(callbacks.OnSeePlayer) == "function" then
 						local canSee, playerChar = checkLineOfSight(model)
 						if canSee and playerChar then
@@ -771,7 +792,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- 4. CAMERA SHAKE UPDATE
+					-- 3. CAMERA SHAKE UPDATE
 					if distance <= shakeRadius and shakerInstance then
 						if not sustainedShake and typeof(CameraShaker.CameraShakeInstance) == "table" then
 							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
@@ -799,19 +820,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		end)
-	end
-
-	local function stopCameraShake()
-		isMovementFinished = true
-		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
-			sustainedShake:StartFadeOut(0.2); sustainedShake = nil 
-		end
-		if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-		if shakerInstance and typeof(shakerInstance.Stop) == "function" then
-			task.delay(0.2, function()
-				if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
-			end)
-		end
 	end
 
 	if model.Parent ~= Workspace then model.Parent = Workspace end
