@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 -- Module Requirements
 local LocalPlayer = Players.LocalPlayer
@@ -65,10 +66,12 @@ local CrucifixAssets = {
 	Repentance = nil
 }
 
+-- Spawned in background so failure here NEVER crashes module load
 task.spawn(function()
-	if typeof(LoadCustomInstance) == "function" then
+	local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or LoadCustomInstance
+	if typeof(fetchFunc) == "function" then
 		pcall(function()
-			CrucifixAssets.Repentance = LoadCustomInstance(ROOT .. "/Assets/Repentance.rbxm")
+			CrucifixAssets.Repentance = fetchFunc(ROOT .. "/Assets/Repentance.rbxm")
 		end)
 	end
 end)
@@ -186,8 +189,14 @@ end
 
 local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 	local tool = character:FindFirstChildOfClass("Tool")
-	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
-		return true, tool
+	if tool then
+		local isCrucifix = tool.Name == "Crucifix" 
+			or tool:GetAttribute("IsCrucifix") == true
+			or CollectionService:HasTag(tool, "Crucifix")
+			
+		if isCrucifix then
+			return true, tool
+		end
 	end
 	return false, nil
 end
