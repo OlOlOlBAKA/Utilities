@@ -682,8 +682,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakerInstance: any?
 	local sustainedShake: any?
 
-	-- Camera Shake Stop Function
-	local function stopCameraShake()
+	-- Camera Shake Stop Function (Stops ONLY the entity's proximity shake, keeping shakerInstance available for crucifixion)
+	local function stopCameraShake(destroyShaker: boolean?)
 		isMovementFinished = true
 		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
 			sustainedShake:StartFadeOut(0.2)
@@ -693,7 +693,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			renderConnection:Disconnect()
 			renderConnection = nil 
 		end
-		if shakerInstance and typeof(shakerInstance.Stop) == "function" then
+		if destroyShaker and shakerInstance and typeof(shakerInstance.Stop) == "function" then
 			task.delay(0.2, function()
 				if shakerInstance then 
 					shakerInstance:Stop()
@@ -725,7 +725,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 
 			if isMovementFinished or not model or not model.Parent then
-				stopCameraShake()
+				stopCameraShake(true)
 				return
 			end
 
@@ -750,14 +750,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 								-- Line of Sight is confirmed; now check for crucifix
 								local hasCrucifix, tool = checkForEquippedCrucifix(character)
 								if hasCrucifix and tool then
-									-- CRUCIFIX ACTION: Prevent damage and trigger crucifixion sequence
+									-- CRUCIFIX ACTION: Stop entity movement and entity shake, but preserve shakerInstance for animation
 									isBeingCrucified = true
 									isStopped = true
 									if currentTween then currentTween:Cancel(); currentTween = nil end
 									tool:Destroy()
 
-									-- Stop camera shake immediately
-									stopCameraShake()
+									-- Stop entity proximity shake without destroying shakerInstance
+									stopCameraShake(false)
 
 									if type(callbacks.OnCrucifixion) == "function" then
 										task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
@@ -829,7 +829,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local latestRoomValue = gameData and gameData:WaitForChild("LatestRoom", 10)
 
 	if not currentRooms or not latestRoomValue then
-		stopCameraShake()
+		stopCameraShake(true)
 		return
 	end
 
@@ -1234,7 +1234,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fallTween:Play()
 			fallTween.Completed:Wait()
 			
-			stopCameraShake()
+			stopCameraShake(true)
 			connection:Disconnect()
 			CFrameValue:Destroy()
 		end
