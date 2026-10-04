@@ -1,5 +1,20 @@
 --!nocheck
-loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
+
+-- \\ Safe Global Function Loading // --
+local httpSuccess, rawCode = pcall(function()
+	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
+end)
+
+if httpSuccess and rawCode then
+	local loadedFunc, err = loadstring(rawCode)
+	if type(loadedFunc) == "function" then
+		pcall(loadedFunc)
+	else
+		warn("PathfindingMovement: Failed to compile HTTP code ->", err)
+	end
+else
+	warn("PathfindingMovement: Failed to fetch HTTP functions ->", rawCode)
+end
 
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
@@ -12,8 +27,20 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 -- Module Requirements
-local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
+local CameraShaker = nil
+
+task.spawn(function()
+	local csModule = ReplicatedStorage:WaitForChild("CameraShaker", 5)
+	if csModule then
+		local success, result = pcall(require, csModule)
+		if success then
+			CameraShaker = result
+		else
+			warn("PathfindingMovement: Failed to require CameraShaker ->", result)
+		end
+	end
+end)
 
 -- Safe Module_Events Integration
 local Module_Events = nil
@@ -193,7 +220,10 @@ local function performCrucifixion(
 	repentance.Parent = Workspace
 	sound:Play()
 
-	local theShake = shakerInstance and shakerInstance:StartShake(5, 20, 2, Vector3.zero)
+	local theShake = nil
+	if shakerInstance and typeof(shakerInstance.StartShake) == "function" then
+		theShake = shakerInstance:StartShake(5, 20, 2, Vector3.zero)
+	end
 
 	local function waitUntil(t: number)
 		repeat RunService.RenderStepped:Wait() until sound.TimePosition >= t
@@ -268,7 +298,7 @@ local function performCrucifixion(
 		TweenService:Create(handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
 
 		TweenService:Create(handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
-		if theShake then theShake:StartFadeOut(3) end
+		if theShake and typeof(theShake.StartFadeOut) == "function" then theShake:StartFadeOut(3) end
 		fadeOut()
 		TweenService:Create(handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
 	end)
@@ -292,13 +322,15 @@ local function performCrucifixion(
 	TweenService:Create(handle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
 
 	handle.ExplodeParticle:Emit(math.random(20, 30))
-	if shakerInstance then shakerInstance:ShakeOnce(7.5, 7.5, 0.25, 1.5) end
+	if shakerInstance and typeof(shakerInstance.ShakeOnce) == "function" then 
+		shakerInstance:ShakeOnce(7.5, 7.5, 0.25, 1.5) 
+	end
 
 	task.delay(5, repentance.Destroy, repentance)
 	return true
 end
 
--- Weak reference table to prevent memory leaks across multiple instances
+-- Weak table cache to automatically GC deleted room references
 local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -639,24 +671,34 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local sustainedShake: any?
 
 	local function startCameraShake()
-		if not RunService:IsClient() or not enableShake or renderConnection then return end
+		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
 
-		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
-			local camera = Workspace.CurrentCamera
-			if camera and camera.CameraSubject then
-				camera.CFrame = camera.CFrame * shakeCFrame
+		if typeof(CameraShaker) == "table" and typeof(CameraShaker.new) == "function" then
+			shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
+				local camera = Workspace.CurrentCamera
+				if camera and camera.CameraSubject then
+					camera.CFrame = camera.CFrame * shakeCFrame
+				end
+			end)
+			if shakerInstance and typeof(shakerInstance.Start) == "function" then
+				shakerInstance:Start()
 			end
-		end)
-		shakerInstance:Start()
+		end
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
-			if shakerInstance then shakerInstance:Update(dt) end
+			if shakerInstance and typeof(shakerInstance.Update) == "function" then 
+				shakerInstance:Update(dt) 
+			end
 
 			if isMovementFinished or not model or not model.Parent then
-				if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
+				if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+					sustainedShake:StartFadeOut(0.2); sustainedShake = nil 
+				end
 				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 				task.delay(0.2, function()
-					if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
+					if shakerInstance and typeof(shakerInstance.Stop) == "function" then 
+						shakerInstance:Stop(); shakerInstance = nil 
+					end
 				end)
 				return
 			end
@@ -713,32 +755,42 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					if distance <= shakeRadius then
-						if not sustainedShake then
+					if distance <= shakeRadius and shakerInstance then
+						if not sustainedShake and typeof(CameraShaker.CameraShakeInstance) == "table" then
 							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
 							rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
 							rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
-							sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							if typeof(shakerInstance.ShakeSustain) == "function" then
+								sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							end
 						end
 
-						local distanceRatio = 1 - (distance / shakeRadius)
-						local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
-						sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						if sustainedShake then
+							local distanceRatio = 1 - (distance / shakeRadius)
+							local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
+							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						end
 					else
-						if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+						if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+							sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
+						end
 					end
 				end
 			else
-				if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+				if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+					sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
+				end
 			end
 		end)
 	end
 
 	local function stopCameraShake()
 		isMovementFinished = true
-		if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
+		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+			sustainedShake:StartFadeOut(0.2); sustainedShake = nil 
+		end
 		if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-		if shakerInstance then
+		if shakerInstance and typeof(shakerInstance.Stop) == "function" then
 			task.delay(0.2, function()
 				if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
 			end)
