@@ -1,16 +1,5 @@
 --!nocheck
 -- CREDIT AND INSPIRED BY VYNIXU ENTITY SPAWNER
-local Utilities = nil
-local success, result = pcall(function()
-	return loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
-end)
-
-if success and result then
-	Utilities = result
-else
-	warn("PathfindingMovement: Failed to load RegularVynixu Utilities ->", result)
-end
-
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
@@ -42,26 +31,41 @@ task.spawn(function()
 	end
 end)
 
--- Asset Loader using RegularVynixu Utilities
+-- Custom Asset Loader Implementation
+local function LoadCustomInstance(name: string, url: string): Instance?
+	if isfile(name) then
+		delfile(name)
+	end
+	writefile(name, game:HttpGet(url))
+
+	local assetId = getcustomasset(name)
+	local success, result = pcall(function()
+		return game:GetObjects(assetId)[1]
+	end)
+
+	if not success then
+		warn("PathfindingMovement: GetObjects failed for asset " .. tostring(name) .. " ->", result)
+		return nil
+	end
+
+	return result
+end
+
+-- Asset Definitions
 local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
 local Assets = {
 	Repentance = nil
 }
 
 task.spawn(function()
-	local loadFn = (Utilities and Utilities.LoadCustomInstance) 
-		or (Utilities and Utilities.Functions and Utilities.Functions.LoadCustomInstance) 
-		or getgenv().LoadCustomInstance
+	local ok, customInst = pcall(function()
+		return LoadCustomInstance("RepentanceAsset.rbxm", REPENTANCE_URL)
+	end)
 
-	if type(loadFn) == "function" then
-		local ok, customInst = pcall(loadFn, REPENTANCE_URL)
-		if ok and customInst then
-			Assets.Repentance = customInst
-		else
-			warn("PathfindingMovement: Failed to load Repentance Asset ->", customInst)
-		end
+	if ok and customInst then
+		Assets.Repentance = customInst
 	else
-		warn("PathfindingMovement: Could not resolve LoadCustomInstance function.")
+		warn("PathfindingMovement: Failed to load Repentance Asset ->", customInst)
 	end
 end)
 
@@ -407,7 +411,7 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	return true
 end
 
--- CRUCIFIX HELPER FUNCTIONS
+-- Crucifix Helper Functions
 local function HasEquippedCrucifix(): (boolean, Tool?)
 	local character = LocalPlayer.Character
 	if not character then return false, nil end
@@ -660,7 +664,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- AUTOMATIC CRUCIFIX CHECK
+					-- Automatic Crucifix Detection
 					if distance <= 40 then
 						local hasTool, tool = HasEquippedCrucifix()
 						if hasTool and tool and not isBanished then
