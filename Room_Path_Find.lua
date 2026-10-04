@@ -1,7 +1,12 @@
 --!nocheck
 -- Load RegularVynixu Utilities Library
-local Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
-local LoadCustomInstance = (Utilities and Utilities.LoadCustomInstance) or getgenv().LoadCustomInstance
+local Utilities = nil
+pcall(function()
+	Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
+end)
+
+local LoadCustomInstance = (type(Utilities) == "table" and Utilities.LoadCustomInstance) 
+	or getgenv().LoadCustomInstance
 
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
@@ -14,10 +19,10 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
--- Module Requirements
+-- Safe CameraShaker Requirement
 local CameraShaker = nil
 pcall(function()
-	CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+	CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker", 5))
 end)
 
 local LocalPlayer = Players.LocalPlayer
@@ -32,22 +37,22 @@ task.spawn(function()
 			local success, result = pcall(require, moduleEventsScript)
 			if success then
 				Module_Events = result
-			else
-				warn("PathfindingMovement: Failed to load Module_Events ->", result)
 			end
 		end
 	end
 end)
 
 -- Asset Loader using RegularVynixu Utilities
-local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
+local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Entity-Spawner/raw/refs/heads/main/Assets/Repentance.rbxm"
 local Assets = {
 	Repentance = nil
 }
 
 task.spawn(function()
 	if type(LoadCustomInstance) == "function" then
-		Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
+		pcall(function()
+			Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
+		end)
 	end
 end)
 
@@ -127,6 +132,7 @@ local function triggerToggleLight(room: Instance | number, state: boolean, ambie
 end
 
 local function disableCollision(instance: Instance)
+	if not instance then return end
 	if instance:IsA("BasePart") then
 		instance.CanCollide = false
 	end
@@ -140,11 +146,11 @@ end
 local function stopEntitySounds(instance: Instance)
 	if not instance then return end
 	if instance:IsA("Sound") then
-		instance:Stop()
+		pcall(function() instance:Stop() end)
 	end
 	for _, descendant in ipairs(instance:GetDescendants()) do
 		if descendant:IsA("Sound") then
-			descendant:Stop()
+			pcall(function() descendant:Stop() end)
 		end
 	end
 end
@@ -265,7 +271,7 @@ local function checkAdvancedHitbox(
 		local displacement = currentEntityPos - lastEntityPosition
 		if displacement.Magnitude > 0.1 then
 			local sphereResult = Workspace:Spherecast(lastEntityPosition, sphereRadius, displacement, raycastParams)
-			if sphereResult and sphereResult.Instance:IsDescendantOf(character) then
+			if sphereResult and sphereResult.Instance and sphereResult.Instance:IsDescendantOf(character) then
 				return true
 			end
 		end
@@ -282,7 +288,7 @@ local function checkAdvancedHitbox(
 		local direction = (part.Position - currentEntityPos)
 		local rayResult = Workspace:Raycast(currentEntityPos, direction, raycastParams)
 
-		if rayResult and rayResult.Instance:IsDescendantOf(character) then
+		if rayResult and rayResult.Instance and rayResult.Instance:IsDescendantOf(character) then
 			return true
 		end
 	end
@@ -387,13 +393,19 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	return true
 end
 
--- CRUCIFIX HELPER FUNCTIONS
+-- SAFE CRUCIFIX HELPER FUNCTIONS
 local function HasEquippedCrucifix(): (boolean, Tool?)
 	local character = LocalPlayer.Character
 	if not character then return false, nil end
 	local tool = character:FindFirstChildOfClass("Tool")
-	if tool and (tool.Name == "Crucifix" or CollectionService:HasTag(tool, "Crucifix")) then
-		return true, tool
+	if tool then
+		local hasTag = false
+		pcall(function()
+			hasTag = CollectionService:HasTag(tool, "Crucifix")
+		end)
+		if tool.Name == "Crucifix" or hasTag then
+			return true, tool
+		end
 	end
 	return false, nil
 end
@@ -405,7 +417,7 @@ local function CrucifixEntity(model: Instance)
 	if not character then return end
 
 	local entityPivot = model:IsA("Model") and model:GetPivot() or model.CFrame
-	model:SetAttribute("BeingBanished", true)
+	pcall(function() model:SetAttribute("BeingBanished", true) end)
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -415,24 +427,31 @@ local function CrucifixEntity(model: Instance)
 	if not rayResult then return end
 
 	local Repentance = Assets.Repentance:Clone()
-	local Crucifix = Repentance.Crucifix
-	local Handle = Crucifix.Handle
-	local Pentagram = Repentance.Pentagram
-	local EntityPart = Repentance.Entity
-	local Sound = Handle.Sound
+	local Crucifix = Repentance:FindFirstChild("Crucifix")
+	if not Crucifix then return end
+
+	local Handle = Crucifix:FindFirstChild("Handle")
+	local Pentagram = Repentance:FindFirstChild("Pentagram")
+	local EntityPart = Repentance:FindFirstChild("Entity")
+	if not Handle or not Pentagram or not EntityPart then return end
+
+	local Sound = Handle:FindFirstChild("Sound")
 
 	Repentance:PivotTo(CFrame.new(rayResult.Position))
 	Crucifix:PivotTo(character:GetPivot())
 	EntityPart.CFrame = entityPivot
 	Repentance.Parent = Workspace
-	Sound:Play()
+
+	if Sound and typeof(Sound.Play) == "function" then
+		pcall(function() Sound:Play() end)
+	end
 
 	local function waitUntil(t: number)
-		repeat RunService.RenderStepped:Wait() until Sound.TimePosition >= t
+		repeat RunService.RenderStepped:Wait() until not Sound or Sound.TimePosition >= t
 	end
 
 	local function fadeOut()
-		for _, v in Pentagram:GetChildren() do
+		for _, v in ipairs(Pentagram:GetChildren()) do
 			if v.Name == "BeamFlat" or v.Name == "BeamChain" then
 				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
 			end
@@ -440,8 +459,10 @@ local function CrucifixEntity(model: Instance)
 	end
 
 	local Color = Color3.fromRGB(137, 207, 255)
-	for _, v in next, Repentance:GetDescendants() do
-		local hasTag = CollectionService:HasTag(v, "GiveMeColor")
+	for _, v in ipairs(Repentance:GetDescendants()) do
+		local hasTag = false
+		pcall(function() hasTag = CollectionService:HasTag(v, "GiveMeColor") end)
+
 		if v:IsA("Light") or v:IsA("BasePart") then
 			if v.Name == "GiveMeColor" or hasTag then v.Color = Color end
 		elseif v:IsA("ParticleEmitter") or v:IsA("Beam") then
@@ -461,18 +482,28 @@ local function CrucifixEntity(model: Instance)
 		if model and model.Parent then model:Destroy() end
 	end)
 
-	TweenService:Create(Pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = Pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
-	task.delay(2, Pentagram.Circle.Destroy, Pentagram.Circle)
+	if Pentagram:FindFirstChild("Circle") then
+		TweenService:Create(Pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = Pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
+		task.delay(2, function()
+			if Pentagram:FindFirstChild("Circle") then Pentagram.Circle:Destroy() end
+		end)
+	end
 
-	Handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
-	TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
+	if Handle:FindFirstChild("BodyPosition") then
+		Handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
+	end
+	if Handle:FindFirstChild("BodyAngularVelocity") then
+		TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
+	end
 
 	task.delay(3, function()
-		for _, shard in next, Handle.Shards:GetChildren() do
-			shard.CollisionGroup = "NoPlayer"
-			shard.CanCollide = true
-			if shard:FindFirstChild("Weld") then shard.Weld:Destroy() end
-			shard.AssemblyAngularVelocity = Vector3.zero
+		if Handle:FindFirstChild("Shards") then
+			for _, shard in ipairs(Handle.Shards:GetChildren()) do
+				shard.CollisionGroup = "NoPlayer"
+				shard.CanCollide = true
+				if shard:FindFirstChild("Weld") then shard.Weld:Destroy() end
+				shard.AssemblyAngularVelocity = Vector3.zero
+			end
 		end
 	end)
 
@@ -480,17 +511,27 @@ local function CrucifixEntity(model: Instance)
 
 	task.spawn(function()
 		waitUntil(2.625)
-		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 5, Range = 40 }):Play()
-		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 11.25, Range = 30 }):Play()
+		if Pentagram:FindFirstChild("Base") and Pentagram.Base:FindFirstChild("LightAttach") and Pentagram.Base.LightAttach:FindFirstChild("LightBright") then
+			TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 5, Range = 40 }):Play()
+		end
+		if Handle:FindFirstChild("Light") then
+			TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 11.25, Range = 30 }):Play()
+		end
 		
 		task.wait(1.5)
-		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
-		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+		if Pentagram:FindFirstChild("Base") and Pentagram.Base:FindFirstChild("LightAttach") and Pentagram.Base.LightAttach:FindFirstChild("LightBright") then
+			TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+		end
+		if Handle:FindFirstChild("Light") then
+			TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+			TweenService:Create(Handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
+		end
 
-		TweenService:Create(Handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
 		fadeOut()
 
-		TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
+		if Handle:FindFirstChild("BodyAngularVelocity") then
+			TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
+		end
 	end)
 
 	waitUntil(2.5)
@@ -499,12 +540,13 @@ local function CrucifixEntity(model: Instance)
 	stopEntitySounds(model)
 	waitUntil(6.75)
 
-	TweenService:Create(Handle.Glow, TweenInfo.new(1), { Size = Handle.Glow.Size * 3, Transparency = 1 }):Play()
-	TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
-	TweenService:Create(Handle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
-
+	if Handle:FindFirstChild("Glow") then
+		TweenService:Create(Handle.Glow, TweenInfo.new(1), { Size = Handle.Glow.Size * 3, Transparency = 1 }):Play()
+	end
 	if Handle:FindFirstChild("ExplodeParticle") then Handle.ExplodeParticle:Emit(math.random(20, 30)) end
-	task.delay(5, Repentance.Destroy, Repentance)
+	task.delay(5, function()
+		if Repentance and Repentance.Parent then Repentance:Destroy() end
+	end)
 end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
@@ -611,22 +653,24 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function startCameraShake()
 		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
 
-		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
-			local camera = Workspace.CurrentCamera
-			if camera and camera.CameraSubject then
-				camera.CFrame = camera.CFrame * shakeCFrame
-			end
+		pcall(function()
+			shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
+				local camera = Workspace.CurrentCamera
+				if camera and camera.CameraSubject then
+					camera.CFrame = camera.CFrame * shakeCFrame
+				end
+			end)
+			shakerInstance:Start()
 		end)
-		shakerInstance:Start()
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
 			if shakerInstance then shakerInstance:Update(dt) end
 
 			if isMovementFinished or isBanished or not model or not model.Parent then
-				if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
+				if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.2) end); sustainedShake = nil end
 				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 				task.delay(0.2, function()
-					if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
+					if shakerInstance then pcall(function() shakerInstance:Stop() end); shakerInstance = nil end
 				end)
 				return
 			end
@@ -655,7 +699,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
+					local isHiding = false
+					pcall(function() isHiding = (character:GetAttribute("Hiding") == true) end)
+
+					if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
 							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
@@ -681,10 +728,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					if distance <= shakeRadius then
+					if distance <= shakeRadius and shakerInstance then
 						if not sustainedShake then
 							local shakeInst = (CameraShaker.CameraShakeInstance and CameraShaker.CameraShakeInstance.new) 
-								or (require(ReplicatedStorage:WaitForChild("CameraShaker"):WaitForChild("CameraShakeInstance")).new)
+							if not shakeInst then
+								pcall(function()
+									shakeInst = require(ReplicatedStorage:WaitForChild("CameraShaker"):WaitForChild("CameraShakeInstance")).new
+								end)
+							end
 							
 							if shakeInst then
 								local rawShakeInstance = shakeInst(shakeAmount, 6, 0.2, 0.3)
@@ -700,22 +751,22 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
 						end
 					else
-						if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+						if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.3) end); sustainedShake = nil end
 					end
 				end
 			else
-				if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+				if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.3) end); sustainedShake = nil end
 			end
 		end)
 	end
 
 	local function stopCameraShake()
 		isMovementFinished = true
-		if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
+		if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.2) end); sustainedShake = nil end
 		if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 		if shakerInstance then
 			task.delay(0.2, function()
-				if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
+				if shakerInstance then pcall(function() shakerInstance:Stop() end); shakerInstance = nil end
 			end)
 		end
 	end
@@ -963,7 +1014,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		if type(callbacks.OnEnterPlayerRoom) == "function" then
-			local playerRoomNum = LocalPlayer:GetAttribute("CurrentRoom")
+			local playerRoomNum = nil
+			pcall(function() playerRoomNum = LocalPlayer:GetAttribute("CurrentRoom") end)
 			if playerRoomNum and tostring(playerRoomNum) == roomFolder.Name then
 				task.spawn(callbacks.OnEnterPlayerRoom, model, roomFolder, LocalPlayer.Character, actionsHandle)
 			end
@@ -1131,7 +1183,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		stopEntitySounds(model)
 		task.wait(1)
-		model:Destroy()
+		if model and model.Parent then model:Destroy() end
 	end
 	
 	table.clear(roomFloorCache)
