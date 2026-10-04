@@ -1167,7 +1167,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		if isForwardStep then runForwardPass() else runBackwardPass() end
 
-		if isRebound and currentReboundState < targetReboundCount and not isBeingCrucified do
+		if isRebound and currentReboundState < targetReboundCount and not isBeingCrucified then
 			isMoving = false
 			currentReboundState += 1
 
