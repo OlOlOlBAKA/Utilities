@@ -1,6 +1,7 @@
 --!nocheck
--- CREDIT AND INSPIRED BY VYNIXU ENTITIY SPAWNER
+-- Load RegularVynixu Utilities Library
 local Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
+local LoadCustomInstance = (Utilities and Utilities.LoadCustomInstance) or getgenv().LoadCustomInstance
 
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
@@ -11,9 +12,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 -- Module Requirements
-local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+local CameraShaker = nil
+pcall(function()
+	CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
+end)
+
 local LocalPlayer = Players.LocalPlayer
 
 -- Safe Module_Events Integration
@@ -40,8 +46,9 @@ local Assets = {
 }
 
 task.spawn(function()
-	-- LoadCustomInstance comes from Utilities library
-	Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
+	if type(LoadCustomInstance) == "function" then
+		Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
+	end
 end)
 
 type MoveToConfig = {
@@ -57,7 +64,6 @@ type ActionsHandle = {
 	SetSpeed: (newSpeed: number) -> (),
 	MoveTo: (target: Vector3 | BasePart | Model, config: MoveToConfig?) -> (),
 	Rebound: (roomOffset: number?, delayBefore: number?, delayAfter: number?) -> (),
-	
 	LightFlicker: (room: Instance | number, duration: number?, amount: number?) -> (),
 	LightBreak: (room: Instance | number, amount: number?, speed: number?) -> (),
 	ToggleLight: (room: Instance | number, state: boolean, ambientColor: Color3?) -> ()
@@ -83,24 +89,19 @@ type MovementOptions = {
 	DelayTime: number?,
 	SpawnOffsetRooms: number?,
 	AttackType: ("Back" | "Front")?,
-	
 	HitboxRange: number?,
 	RaycastHitbox: boolean?,
 	SphereRadius: number?,
 	Damage: number?,
-
 	LightFlicker: boolean?,
 	Duration: number?,
 	LightBreak: boolean?,
-
 	Callbacks: EventCallbacks?,
 	ShowPath: boolean?,
-
 	Rebound: boolean?,
 	ReboundCount: number?,
 	ReboundTime: number?,
 	ReboundDelayTime: number?,
-
 	EnableCameraShake: boolean?,
 	ShakeAmount: number?,
 	ShakeRadius: number?
@@ -391,7 +392,7 @@ local function HasEquippedCrucifix(): (boolean, Tool?)
 	local character = LocalPlayer.Character
 	if not character then return false, nil end
 	local tool = character:FindFirstChildOfClass("Tool")
-	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
+	if tool and (tool.Name == "Crucifix" or CollectionService:HasTag(tool, "Crucifix")) then
 		return true, tool
 	end
 	return false, nil
@@ -440,10 +441,11 @@ local function CrucifixEntity(model: Instance)
 
 	local Color = Color3.fromRGB(137, 207, 255)
 	for _, v in next, Repentance:GetDescendants() do
+		local hasTag = CollectionService:HasTag(v, "GiveMeColor")
 		if v:IsA("Light") or v:IsA("BasePart") then
-			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then v.Color = Color end
+			if v.Name == "GiveMeColor" or hasTag then v.Color = Color end
 		elseif v:IsA("ParticleEmitter") or v:IsA("Beam") then
-			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then
+			if v.Name == "GiveMeColor" or hasTag then
 				v.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color), ColorSequenceKeypoint.new(1, Color) })
 			end
 		end
@@ -607,7 +609,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local sustainedShake: any?
 
 	local function startCameraShake()
-		if not RunService:IsClient() or not enableShake or renderConnection then return end
+		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
 
 		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
 			local camera = Workspace.CurrentCamera
@@ -636,7 +638,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- AUTOMATIC CRUCIFIX CHECK
 					if distance <= 40 then
 						local hasTool, tool = HasEquippedCrucifix()
 						if hasTool and tool and not isBanished then
@@ -644,7 +645,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							isStopped = true
 							if currentTween then currentTween:Cancel(); currentTween = nil end
 
-							-- Trigger OnCrucified callback
 							if type(callbacks.OnCrucified) == "function" then
 								task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
 							end
@@ -683,15 +683,22 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 					if distance <= shakeRadius then
 						if not sustainedShake then
-							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
-							rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
-							rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
-							sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							local shakeInst = (CameraShaker.CameraShakeInstance and CameraShaker.CameraShakeInstance.new) 
+								or (require(ReplicatedStorage:WaitForChild("CameraShaker"):WaitForChild("CameraShakeInstance")).new)
+							
+							if shakeInst then
+								local rawShakeInstance = shakeInst(shakeAmount, 6, 0.2, 0.3)
+								rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
+								rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
+								sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							end
 						end
 
-						local distanceRatio = 1 - (distance / shakeRadius)
-						local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
-						sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						if sustainedShake then
+							local distanceRatio = 1 - (distance / shakeRadius)
+							local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
+							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						end
 					else
 						if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
 					end
@@ -919,7 +926,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				regenPathRequested = true
 			end
 
-			if regenPathRequested and not isBanished then
+			if regenPathRequested and not isBanished do
 				regenPathRequested = false
 				if fullPathVisuals then fullPathVisuals:Destroy() end
 
