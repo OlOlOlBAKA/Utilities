@@ -3,6 +3,11 @@ local Players = game:GetService("Players")
 
 local Main_Game = require(Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
 
+if ReplicatedStorage.GameData.LatestRoom.Value > 0 then
+    Main_Game.caption("You must run the script at door 0", true, 3)
+    return
+end
+
 local function getJobIdSeed()
     local jobId = game.JobId
     if not jobId or jobId == "" then 
@@ -41,6 +46,23 @@ local ENTITY_TABLE = {
     {Name = "Depth",    Weight = 1.5,  MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
     {Name = "Rebound",  Weight = 0.5,  MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
 }
+
+-- Counts hiding spots inside Room.Assets ("Wardrobe", "Locker", "Bed")
+local function countHidingSpots(roomModel)
+    local count = 0
+    local assets = roomModel:FindFirstChild("Assets")
+    
+    if assets then
+        for _, child in ipairs(assets:GetChildren()) do
+            -- Checks for Wardrobes or other standard hiding spot model names
+            if child.Name == "Wardrobe" or child.Name == "Locker" or child.Name == "Bed" then
+                count = count + 1
+            end
+        end
+    end
+    
+    return count
+end
 
 local function isRoomBlacklisted(roomNumber)
     for _, blacklistedRoom in ipairs(GLOBAL_BLACKLIST_ROOMS) do
@@ -159,7 +181,7 @@ local function handleHardcoreRoom(roomNumber)
     end
 
     local isDarkRoom = false
-    local totalHidingSpots = nil
+    local totalHidingSpots = 0
 
     local currentRoomsFolder = workspace:FindFirstChild("CurrentRooms")
     if currentRoomsFolder then
@@ -169,16 +191,16 @@ local function handleHardcoreRoom(roomNumber)
                 isDarkRoom = true
             end
             
-            -- Fetch attribute (or check subfolders/children if your game puts lockers inside room models)
-            totalHidingSpots = currentRoomModel:GetAttribute("TotalHidingSpots")
+            -- Count actual hiding spot models in Room.Assets
+            totalHidingSpots = countHidingSpots(currentRoomModel)
         end
     end
 
     local playerCount = #Players:GetPlayers()
 
-    -- FIX: Rigorous check to prevent spawning in rooms with 0 or insufficient hiding spots
-    if not totalHidingSpots or totalHidingSpots <= 0 or totalHidingSpots < playerCount then
-        print(string.format("[Hardcore Mode] Room %d skipped (Hiding Spots: %s, Players: %d)", roomNumber, tostring(totalHidingSpots), playerCount))
+    -- Check if total hiding spots are fewer than the player count
+    if totalHidingSpots < playerCount then
+        print(string.format("[Hardcore Mode] Room %d skipped (Hiding Spots: %d, Players: %d)", roomNumber, totalHidingSpots, playerCount))
         safeRoomStreak = safeRoomStreak + 1
         return
     end
@@ -212,13 +234,11 @@ local function handleHardcoreRoom(roomNumber)
     end
 end
 
-
 local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 
 if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
-    -- loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/StaticGui.lua"))()
-
+    
     Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
     
     latestRoom.Changed:Connect(function(newRoomNumber)
