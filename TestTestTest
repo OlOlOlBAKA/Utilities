@@ -188,14 +188,17 @@ local function stopEntitySounds(instance: Instance)
 end
 
 local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
-	local tool = character:FindFirstChildOfClass("Tool")
-	if tool then
-		local isCrucifix = tool.Name == "Crucifix" 
-			or tool:GetAttribute("IsCrucifix") == true
-			or CollectionService:HasTag(tool, "Crucifix")
-			
-		if isCrucifix then
-			return true, tool
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			local toolName = string.lower(child.Name)
+			local isCrucifix = string.find(toolName, "crucifix") ~= nil 
+				or child:GetAttribute("IsCrucifix") == true
+				or CollectionService:HasTag(child, "Crucifix")
+				or child:FindFirstChild("Crucifix") ~= nil
+				
+			if isCrucifix then
+				return true, child
+			end
 		end
 	end
 	return false, nil
@@ -719,7 +722,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					if distance <= 40 and not isBeingCrucified then
+					-- 1. CRUCIFIX CHECK HAS PRIORITY (Range check extends up to 50 studs)
+					if distance <= 50 and not isBeingCrucified then
 						local hasCrucifix, tool = checkForEquippedCrucifix(character)
 						if hasCrucifix and tool then
 							isBeingCrucified = true
@@ -735,10 +739,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 								performCrucifixion(model, character, shakerInstance)
 								isMovementFinished = true
 							end)
+							return -- Stop all frame processing immediately
 						end
 					end
 
-					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass and not isBeingCrucified then
+					-- 2. DAMAGE / HITBOX CHECK (Blocked entirely if being crucified)
+					if not isBeingCrucified and character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
 							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
@@ -757,13 +763,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 					lastEntityPosition = entityPos
 
-					if type(callbacks.OnSeePlayer) == "function" then
+					-- 3. LINE OF SIGHT CHECK (Blocked entirely if being crucified)
+					if not isBeingCrucified and type(callbacks.OnSeePlayer) == "function" then
 						local canSee, playerChar = checkLineOfSight(model)
 						if canSee and playerChar then
 							task.spawn(callbacks.OnSeePlayer, model, playerChar, actionsHandle)
 						end
 					end
 
+					-- 4. CAMERA SHAKE UPDATE
 					if distance <= shakeRadius and shakerInstance then
 						if not sustainedShake and typeof(CameraShaker.CameraShakeInstance) == "table" then
 							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
@@ -880,7 +888,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		while (isStopped or isMoveToActive or isBeingCrucified) and not skipCurrentRoom and not regenPathRequested do
 			task.wait(0.05)
 		end
-		if skipCurrentRoom or regenPathRequested or not model or not model.Parent then return end
+		if skipCurrentRoom or regenPathRequested or not model or not model.Parent or isBeingCrucified then return end
 
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
