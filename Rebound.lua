@@ -1,6 +1,6 @@
 local ReSt = game:GetService("ReplicatedStorage")
         local TS = game:GetService("TweenService")
-
+local isCrucified = false
         task.wait(1)
         local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
 
@@ -82,6 +82,10 @@ local ReSt = game:GetService("ReplicatedStorage")
                 OnKillPlayer = function(model, playerCharacter, actions)
                 end,
 
+                OnCrucifixion = function(model: Model | BasePart, actions)
+		    isCrucified = true
+		end
+
                 OnDespawn = function(model, actions)
                 end
             }
@@ -97,6 +101,9 @@ local ReSt = game:GetService("ReplicatedStorage")
             local latestRoom = ReSt.GameData.LatestRoom
 
             while reboundsLeft > 0 do
+                if isCrucified == true then
+                    break
+                end
                 latestRoom.Changed:Wait()
                 reboundsLeft = reboundsLeft - 1
                 task.wait(2.5)
@@ -161,6 +168,10 @@ local ReSt = game:GetService("ReplicatedStorage")
 
                         OnKillPlayer = function(model, playerCharacter, actions)
                         end,
+
+                        OnCrucifixion = function(model: Model | BasePart, actions)
+			    isCrucified = true
+		        end
 
                         OnDespawn = function(model, actions)
                         end
