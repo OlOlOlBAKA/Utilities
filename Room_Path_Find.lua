@@ -1,5 +1,4 @@
 --!nocheck
--- CREDIT AND INSPIRED BY VYNIXU ENTITY SPAWNER
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
@@ -21,67 +20,13 @@ task.spawn(function()
 	if modulesClient then
 		local moduleEventsScript = modulesClient:WaitForChild("Module_Events", 5)
 		if moduleEventsScript then
-			local ok, res = pcall(require, moduleEventsScript)
-			if ok then
-				Module_Events = res
+			local success, result = pcall(require, moduleEventsScript)
+			if success then
+				Module_Events = result
 			else
-				warn("PathfindingMovement: Failed to load Module_Events ->", res)
+				warn("PathfindingMovement: Failed to load Module_Events ->", result)
 			end
 		end
-	end
-end)
-
--- Custom Asset Loader Implementation
--- Custom Asset Loader Implementation
-local function LoadCustomInstance(name: string, url: string): Instance?
-    if isfile(name) then
-        delfile(name)
-    end
-    
-    writefile(name, game:HttpGet(url))
-
-    -- If your getcustomasset returns the object/function directly:
-    local customAsset = getcustomasset(name)
-
-    -- Case 1: getcustomasset returns the loaded Instance directly
-    if typeof(customAsset) == "Instance" then
-        return customAsset
-    end
-
-    -- Case 2: getcustomasset returns a table or function wrapper
-    if type(customAsset) == "function" then
-        return customAsset()
-    end
-
-    -- Case 3: Standard executor fallback (returns string path like "rbxasset://...")
-    if type(customAsset) == "string" then
-        local success, result = pcall(function()
-            return game:GetObjects(customAsset)[1]
-        end)
-        if success and result then
-            return result
-        end
-    end
-
-    return nil
-end
-
-
--- Asset Definitions
-local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
-local Assets = {
-	Repentance = nil
-}
-
-task.spawn(function()
-	local ok, customInst = pcall(function()
-		return LoadCustomInstance("RepentanceAsset.rbxm", REPENTANCE_URL)
-	end)
-
-	if ok and customInst then
-		Assets.Repentance = customInst
-	else
-		warn("PathfindingMovement: Failed to load Repentance Asset ->", customInst)
 	end
 end)
 
@@ -186,6 +131,125 @@ local function stopEntitySounds(instance: Instance)
 		if descendant:IsA("Sound") then
 			descendant:Stop()
 		end
+	end
+end
+
+-- Safely check if local player holds a crucifix tool
+local function hasEquippedCrucifix(): (boolean, Tool?)
+	local character = LocalPlayer.Character
+	if not character then return false, nil end
+	local tool = character:FindFirstChildOfClass("Tool")
+	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
+		return true, tool
+	end
+	return false, nil
+end
+
+-- Custom Asset Loader for Repentance Model File
+local function loadCustomRepentanceModel(): Instance?
+	local fileName = "RepentanceCrucifix.rbxm"
+	local assetUrl = "https://github.com/OlOlOlBAKA/Utilities/raw/main/RepentanceCrucifix.rbxm"
+
+	if isfile and isfile(fileName) and delfile then
+		delfile(fileName)
+	end
+
+	if writefile and getcustomasset and game:HttpGet then
+		local success, err = pcall(function()
+			writefile(fileName, game:HttpGet(assetUrl))
+		end)
+
+		if success then
+			local customAssetId = getcustomasset(fileName)
+			local loadedObjects = game:GetObjects(customAssetId)
+			
+			if delfile then
+				delfile(fileName)
+			end
+
+			if loadedObjects and #loadedObjects > 0 then
+				return loadedObjects[1]
+			end
+		else
+			warn("Failed downloading custom Repentance model:", err)
+		end
+	end
+
+	return nil
+end
+
+-- Custom Asset Repentance Execution
+local function executeRepentanceCrucifix(entityModel: Instance)
+	local character = LocalPlayer.Character
+	if not character then return end
+
+	entityModel:SetAttribute("BeingBanished", true)
+	stopEntitySounds(entityModel)
+
+	local entityPivot = entityModel:IsA("Model") and entityModel:GetPivot() or entityModel.CFrame
+	local repentanceModel = loadCustomRepentanceModel()
+
+	if repentanceModel then
+		repentanceModel.Parent = Workspace
+		if repentanceModel:IsA("Model") then
+			repentanceModel:PivotTo(entityPivot)
+		elseif repentanceModel:IsA("BasePart") then
+			repentanceModel.CFrame = entityPivot
+		end
+
+		-- Play embedded animation or sound tracks inside the custom asset if available
+		for _, descendant in ipairs(repentanceModel:GetDescendants()) do
+			if descendant:IsA("Sound") then
+				descendant:Play()
+			elseif descendant:IsA("AnimationTrack") then
+				descendant:Play()
+			end
+		end
+
+		-- Lift and sink animation using the imported custom model
+		task.spawn(function()
+			local liftCF = entityPivot + Vector3.new(0, 5, 0)
+			local dragCF = entityPivot - Vector3.new(0, 50, 0)
+
+			local liftTween = TweenService:Create(
+				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
+				TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ CFrame = liftCF }
+			)
+			liftTween:Play()
+			liftTween.Completed:Wait()
+
+			task.wait(1)
+
+			local sinkTween = TweenService:Create(
+				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
+				TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{ CFrame = dragCF }
+			)
+			sinkTween:Play()
+			sinkTween.Completed:Wait()
+
+			repentanceModel:Destroy()
+			if entityModel and entityModel.Parent then
+				entityModel:Destroy()
+			end
+		end)
+	else
+		-- Fallback smooth banishment in case the asset link fails
+		task.spawn(function()
+			local dragCF = entityPivot - Vector3.new(0, 50, 0)
+			local sinkTween = TweenService:Create(
+				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
+				TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{ CFrame = dragCF }
+			)
+			sinkTween:Play()
+			sinkTween.Completed:Wait()
+
+			if entityModel and entityModel.Parent then
+				entityModel:Destroy()
+			end
+		end)
 	end
 end
 
@@ -427,131 +491,9 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	return true
 end
 
--- Crucifix Helper Functions
-local function HasEquippedCrucifix(): (boolean, Tool?)
-	local character = LocalPlayer.Character
-	if not character then return false, nil end
-	local tool = character:FindFirstChildOfClass("Tool")
-	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
-		return true, tool
-	end
-	return false, nil
-end
-
-local function CrucifixEntity(model: Instance)
-	if not Assets.Repentance then return end
-
-	local character = LocalPlayer.Character
-	if not character then return end
-
-	local entityPivot = model:IsA("Model") and model:GetPivot() or model.CFrame
-	model:SetAttribute("BeingBanished", true)
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character, model }
-
-	local rayResult = Workspace:Raycast(entityPivot.Position, Vector3.new(0, -1000, 0), params)
-	if not rayResult then return end
-
-	local Repentance = Assets.Repentance:Clone()
-	local Crucifix = Repentance.Crucifix
-	local Handle = Crucifix.Handle
-	local Pentagram = Repentance.Pentagram
-	local EntityPart = Repentance.Entity
-	local Sound = Handle.Sound
-
-	Repentance:PivotTo(CFrame.new(rayResult.Position))
-	Crucifix:PivotTo(character:GetPivot())
-	EntityPart.CFrame = entityPivot
-	Repentance.Parent = Workspace
-	Sound:Play()
-
-	local function waitUntil(t: number)
-		repeat RunService.RenderStepped:Wait() until Sound.TimePosition >= t
-	end
-
-	local function fadeOut()
-		for _, v in Pentagram:GetChildren() do
-			if v.Name == "BeamFlat" or v.Name == "BeamChain" then
-				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
-			end
-		end
-	end
-
-	local Color = Color3.fromRGB(137, 207, 255)
-	for _, v in next, Repentance:GetDescendants() do
-		if v:IsA("Light") or v:IsA("BasePart") then
-			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then v.Color = Color end
-		elseif v:IsA("ParticleEmitter") or v:IsA("Beam") then
-			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then
-				v.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color), ColorSequenceKeypoint.new(1, Color) })
-			end
-		end
-	end
-
-	task.spawn(function()
-		while EntityPart and EntityPart.Parent do
-			if model and model.Parent then
-				if model:IsA("Model") then model:PivotTo(EntityPart.CFrame) elseif model:IsA("BasePart") then model.CFrame = EntityPart.CFrame end
-			end
-			RunService.RenderStepped:Wait()
-		end
-		if model and model.Parent then model:Destroy() end
-	end)
-
-	TweenService:Create(Pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = Pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
-	task.delay(2, Pentagram.Circle.Destroy, Pentagram.Circle)
-
-	Handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
-	TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
-
-	task.delay(3, function()
-		for _, shard in next, Handle.Shards:GetChildren() do
-			shard.CollisionGroup = "NoPlayer"
-			shard.CanCollide = true
-			if shard:FindFirstChild("Weld") then shard.Weld:Destroy() end
-			shard.AssemblyAngularVelocity = Vector3.zero
-		end
-	end)
-
-	TweenService:Create(EntityPart, TweenInfo.new(3, Enum.EasingStyle.Elastic, Enum.EasingDirection.In), { CFrame = EntityPart.CFrame + Vector3.new(0, 2, 0) }):Play()
-
-	task.spawn(function()
-		waitUntil(2.625)
-		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 5, Range = 40 }):Play()
-		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 11.25, Range = 30 }):Play()
-		
-		task.wait(1.5)
-		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
-		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
-
-		TweenService:Create(Handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
-		fadeOut()
-
-		TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
-	end)
-
-	waitUntil(2.5)
-	TweenService:Create(EntityPart, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { CFrame = EntityPart.CFrame - Vector3.new(0, 50, 0) }):Play()
-
-	stopEntitySounds(model)
-	waitUntil(6.75)
-
-	TweenService:Create(Handle.Glow, TweenInfo.new(1), { Size = Handle.Glow.Size * 3, Transparency = 1 }):Play()
-	TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
-	TweenService:Create(Handle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
-
-	if Handle:FindFirstChild("ExplodeParticle") then Handle.ExplodeParticle:Emit(math.random(20, 30)) end
-	task.delay(5, Repentance.Destroy, Repentance)
-end
-
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local model = options.Model
-	if not model then 
-		warn("PathfindingMovement: Missing options.Model!")
-		return 
-	end
+	if not model then return end
 
 	disableCollision(model)
 
@@ -633,8 +575,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		LightFlicker = function(room: Instance | number, durationAmount: number?, amount: number?)
 			triggerLightFlicker(room, durationAmount or duration, amount)
 		end,
-		LightBreak = function(room: Instance | number, amount: number?, speedAmount: number?)
-			triggerLightBreak(room, amount, speedAmount)
+		LightBreak = function(room: Instance | number, amount: number?, breakSpeed: number?)
+			triggerLightBreak(room, amount, breakSpeed)
 		end,
 		ToggleLight = function(room: Instance | number, state: boolean, ambientColor: Color3?)
 			triggerToggleLight(room, state, ambientColor)
@@ -680,9 +622,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					-- Automatic Crucifix Detection
-					if distance <= 40 then
-						local hasTool, tool = HasEquippedCrucifix()
+					-- Crucifix Collision Check
+					if distance <= 35 then
+						local hasTool, tool = hasEquippedCrucifix()
 						if hasTool and tool and not isBanished then
 							isBanished = true
 							isStopped = true
@@ -693,7 +635,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							end
 
 							tool:Destroy()
-							CrucifixEntity(model)
+							executeRepentanceCrucifix(model)
 							return
 						end
 					end
@@ -762,14 +704,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 	local latestRoomValue = gameData and gameData:WaitForChild("LatestRoom", 10)
 
-	if not currentRooms then
-		warn("PathfindingMovement: 'Workspace.CurrentRooms' not found. Ensure DOORS has fully loaded.")
-		stopCameraShake()
-		return
-	end
-
-	if not latestRoomValue then
-		warn("PathfindingMovement: 'ReplicatedStorage.GameData.LatestRoom' not found.")
+	if not currentRooms or not latestRoomValue then
 		stopCameraShake()
 		return
 	end
