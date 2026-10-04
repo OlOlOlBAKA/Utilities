@@ -57,7 +57,6 @@ type EventCallbacks = {
 	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnSeePlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnKillPlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
-	OnCrucified: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnDespawn: ((model: Model | BasePart, actions: ActionsHandle) -> ())?
 }
 
@@ -131,125 +130,6 @@ local function stopEntitySounds(instance: Instance)
 		if descendant:IsA("Sound") then
 			descendant:Stop()
 		end
-	end
-end
-
--- Safely check if local player holds a crucifix tool
-local function hasEquippedCrucifix(): (boolean, Tool?)
-	local character = LocalPlayer.Character
-	if not character then return false, nil end
-	local tool = character:FindFirstChildOfClass("Tool")
-	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
-		return true, tool
-	end
-	return false, nil
-end
-
--- Custom Asset Loader for Repentance Model File
-local function loadCustomRepentanceModel(): Instance?
-	local fileName = "RepentanceCrucifix.rbxm"
-	local assetUrl = "https://github.com/OlOlOlBAKA/Utilities/raw/main/RepentanceCrucifix.rbxm"
-
-	if isfile and isfile(fileName) and delfile then
-		delfile(fileName)
-	end
-
-	if writefile and getcustomasset and game:HttpGet then
-		local success, err = pcall(function()
-			writefile(fileName, game:HttpGet(assetUrl))
-		end)
-
-		if success then
-			local customAssetId = getcustomasset(fileName)
-			local loadedObjects = game:GetObjects(customAssetId)
-			
-			if delfile then
-				delfile(fileName)
-			end
-
-			if loadedObjects and #loadedObjects > 0 then
-				return loadedObjects[1]
-			end
-		else
-			warn("Failed downloading custom Repentance model:", err)
-		end
-	end
-
-	return nil
-end
-
--- Custom Asset Repentance Execution
-local function executeRepentanceCrucifix(entityModel: Instance)
-	local character = LocalPlayer.Character
-	if not character then return end
-
-	entityModel:SetAttribute("BeingBanished", true)
-	stopEntitySounds(entityModel)
-
-	local entityPivot = entityModel:IsA("Model") and entityModel:GetPivot() or entityModel.CFrame
-	local repentanceModel = loadCustomRepentanceModel()
-
-	if repentanceModel then
-		repentanceModel.Parent = Workspace
-		if repentanceModel:IsA("Model") then
-			repentanceModel:PivotTo(entityPivot)
-		elseif repentanceModel:IsA("BasePart") then
-			repentanceModel.CFrame = entityPivot
-		end
-
-		-- Play embedded animation or sound tracks inside the custom asset if available
-		for _, descendant in ipairs(repentanceModel:GetDescendants()) do
-			if descendant:IsA("Sound") then
-				descendant:Play()
-			elseif descendant:IsA("AnimationTrack") then
-				descendant:Play()
-			end
-		end
-
-		-- Lift and sink animation using the imported custom model
-		task.spawn(function()
-			local liftCF = entityPivot + Vector3.new(0, 5, 0)
-			local dragCF = entityPivot - Vector3.new(0, 50, 0)
-
-			local liftTween = TweenService:Create(
-				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
-				TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ CFrame = liftCF }
-			)
-			liftTween:Play()
-			liftTween.Completed:Wait()
-
-			task.wait(1)
-
-			local sinkTween = TweenService:Create(
-				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
-				TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-				{ CFrame = dragCF }
-			)
-			sinkTween:Play()
-			sinkTween.Completed:Wait()
-
-			repentanceModel:Destroy()
-			if entityModel and entityModel.Parent then
-				entityModel:Destroy()
-			end
-		end)
-	else
-		-- Fallback smooth banishment in case the asset link fails
-		task.spawn(function()
-			local dragCF = entityPivot - Vector3.new(0, 50, 0)
-			local sinkTween = TweenService:Create(
-				entityModel:IsA("BasePart") and entityModel or entityModel.PrimaryPart or entityModel:FindFirstChildWhichIsA("BasePart"),
-				TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-				{ CFrame = dragCF }
-			)
-			sinkTween:Play()
-			sinkTween.Completed:Wait()
-
-			if entityModel and entityModel.Parent then
-				entityModel:Destroy()
-			end
-		end)
 	end
 end
 
@@ -529,7 +409,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local skipCurrentRoom = false
 	local regenPathRequested = false
 	local isMoveToActive = false
-	local isBanished = false
 	
 	local reboundRequestedOffset: number? = nil
 	local reboundRequestedDelayBefore: number = 0
@@ -606,7 +485,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
 			if shakerInstance then shakerInstance:Update(dt) end
 
-			if isMovementFinished or isBanished or not model or not model.Parent then
+			if isMovementFinished or not model or not model.Parent then
 				if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
 				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 				task.delay(0.2, function()
@@ -615,30 +494,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				return
 			end
 
-			if isMoving and not isStopped and not isBanished then
+			if isMoving and not isStopped then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
 					local hrpPos = character.HumanoidRootPart.Position
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
-
-					-- Crucifix Collision Check
-					if distance <= 35 then
-						local hasTool, tool = hasEquippedCrucifix()
-						if hasTool and tool and not isBanished then
-							isBanished = true
-							isStopped = true
-							if currentTween then currentTween:Cancel(); currentTween = nil end
-
-							if type(callbacks.OnCrucified) == "function" then
-								task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
-							end
-
-							tool:Destroy()
-							executeRepentanceCrucifix(model)
-							return
-						end
-					end
 
 					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
@@ -767,12 +628,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local currentRoomIndex = initialTargetIndex
 
 	local function moveDirectTo(targetPos: Vector3?, customSpeed: number?)
-		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested or isBanished then return end
+		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested then return end
 
-		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested and not isBanished do
+		-- Yield if MoveTo or Stop is active
+		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested do
 			task.wait(0.05)
 		end
-		if skipCurrentRoom or regenPathRequested or isBanished then return end
+		if skipCurrentRoom or regenPathRequested then return end
 
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
@@ -814,6 +676,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
+		-- Instantly cancel active room tween
 		if currentTween then
 			currentTween:Cancel()
 			currentTween = nil
@@ -828,7 +691,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local customHeight = cfg.HeightOffset or heightOffset
 		local lastTargetPos: Vector3? = nil
 
-		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBanished do
+		while isMoveToActive and model and model.Parent and not skipCurrentRoom do
 			local currentTargetPos = resolveTargetPosition(target)
 			if not currentTargetPos then break end
 
@@ -839,6 +702,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				lastTargetPos = currentTargetPos
 				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
 				
+				-- Directly step toward target without invoking pathing loops
 				local dist = (groundTargetPos - entityPos).Magnitude
 				if dist > reachDistance then
 					local travelTime = math.max(0.01, dist / moveSpeed)
@@ -873,7 +737,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		isMoveToActive = false
-		regenPathRequested = true
+		regenPathRequested = true -- Recalculate main room path after chasing finishes
 	end
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
@@ -891,20 +755,20 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fullPathVisuals = renderDebugWaypoints(allNodes)
 		end
 
-		if startNode and not skipCurrentRoom and not regenPathRequested and not isBanished then
+		if startNode and not skipCurrentRoom and not regenPathRequested then
 			moveDirectTo(startNode + heightVector)
 		end
 
 		local idx = 1
 		while idx <= #waypoints do
-			if skipCurrentRoom or isBanished then break end
+			if skipCurrentRoom then break end
 
-			while isMoveToActive and not isBanished do
+			while isMoveToActive do
 				task.wait(0.05)
 				regenPathRequested = true
 			end
 
-			if regenPathRequested and not isBanished then
+			if regenPathRequested then
 				regenPathRequested = false
 				if fullPathVisuals then fullPathVisuals:Destroy() end
 
@@ -920,11 +784,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 
-			if waypoints[idx] and not isBanished then moveDirectTo(waypoints[idx]) end
+			if waypoints[idx] then moveDirectTo(waypoints[idx]) end
 			idx += 1
 		end
 
-		if endNode and not skipCurrentRoom and not isBanished then moveDirectTo(endNode + heightVector) end
+		if endNode and not skipCurrentRoom then moveDirectTo(endNode + heightVector) end
 		if fullPathVisuals then fullPathVisuals:Destroy() end
 	end
 
@@ -964,7 +828,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		else
-			while model and model.Parent and currentRoomIndex >= targetRoomIndex and not isBanished do
+			while model and model.Parent and currentRoomIndex >= targetRoomIndex do
 				skipCurrentRoom = false
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
@@ -983,7 +847,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runForwardPass()
-		while model and model.Parent and not isBanished do
+		while model and model.Parent do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -1015,7 +879,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runBackwardPass()
-		while model and model.Parent and not isBanished do
+		while model and model.Parent do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -1047,7 +911,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	while model and model.Parent and not isBanished do
+	while model and model.Parent do
 		hasHitPlayerThisPass = false
 		lastEntityPosition = nil
 
@@ -1056,7 +920,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		if isForwardStep then runForwardPass() else runBackwardPass() end
 
-		if isRebound and currentReboundState < targetReboundCount and not isBanished do
+		if isRebound and currentReboundState < targetReboundCount then
 			isMoving = false
 			currentReboundState += 1
 
@@ -1073,8 +937,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			break
 		end
 	end
-
-	if isBanished then return end
 
 	if type(callbacks.OnDespawn) == "function" then
 		task.spawn(callbacks.OnDespawn, model, actionsHandle)
