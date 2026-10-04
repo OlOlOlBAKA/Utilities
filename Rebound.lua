@@ -85,7 +85,7 @@ local isCrucified = false
                 OnCrucifixion = function(model: Model | BasePart, actions)
 		            isCrucified = true
 			        model:SetAttribute("Crucified", true)
-		        end
+		        end,
 
                 OnDespawn = function(model, actions)
                 end
@@ -174,7 +174,7 @@ local isCrucified = false
                         OnCrucifixion = function(model: Model | BasePart, actions)
 			                isCrucified = true
 							model:SetAttribute("Crucified", true)
-		                end
+		                end,
 
                         OnDespawn = function(model, actions)
                         end
