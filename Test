@@ -120,35 +120,56 @@ local function spawnEntity(entityName, roomNumber)
         end
     end)
 
-    -- 2. Handle Despawns via workspace.ChildRemoved
+    -- 2. Handle Despawns & Crucifixion
     if entityName == "Rebound" then
-        -- Track Rebound across 4 total despawns
         task.spawn(function()
             while activeEntities["Rebound"] do
                 local entityModel = workspace:WaitForChild("Rebound", 15)
                 
                 if entityModel then
-                    local connection
-                    connection = workspace.ChildRemoved:Connect(function(child)
+                    local isCrucified = false
+
+                    -- Listen for normal despawns
+                    local childRemovedConn
+                    childRemovedConn = workspace.ChildRemoved:Connect(function(child)
                         if child == entityModel then
                             reboundDespawnCount = reboundDespawnCount + 1
-                            connection:Disconnect()
                         end
                     end)
-                    
-                    -- Wait until model is actually removed before looking for the next pass
+
+                    -- Listen for Crucified attribute change
+                    local attrConn
+                    attrConn = entityModel:GetAttributeChangedSignal("Crucified"):Connect(function()
+                        if entityModel:GetAttribute("Crucified") == true then
+                            isCrucified = true
+                        end
+                    end)
+
+                    -- Poll until model is removed or attribute gets set to true
                     while entityModel and entityModel.Parent == workspace do
+                        if entityModel:GetAttribute("Crucified") == true then
+                            isCrucified = true
+                            break
+                        end
                         task.wait(0.1)
                     end
 
-                    -- If 4 despawns have occurred, unlock Rebound
-                    if reboundDespawnCount >= 4 then
+                    -- Clean up signal listeners
+                    if childRemovedConn then childRemovedConn:Disconnect() end
+                    if attrConn then attrConn:Disconnect() end
+
+                    -- Unlock activeEntities if Crucified OR completed 4 despawns
+                    if isCrucified then
+                        print("[Hardcore Mode] Rebound was Crucified! Unlocking spawn.")
                         activeEntities["Rebound"] = false
-                        print("despawn testing")
+                        break
+                    elseif reboundDespawnCount >= 4 then
+                        print("[Hardcore Mode] Rebound completely despawned (4/4).")
+                        activeEntities["Rebound"] = false
                         break
                     end
                 else
-                    -- Safety unlock if model fails to load in workspace
+                    -- Safety unlock if entity failed to load or got removed early
                     activeEntities["Rebound"] = false
                     break
                 end
@@ -160,13 +181,32 @@ local function spawnEntity(entityName, roomNumber)
             local entityModel = workspace:WaitForChild(entityName, 15)
             
             if entityModel then
-                local connection
-                connection = workspace.ChildRemoved:Connect(function(child)
+                local childRemovedConn
+                local attrConn
+
+                local function cleanupAndUnlock()
+                    if childRemovedConn then childRemovedConn:Disconnect() end
+                    if attrConn then attrConn:Disconnect() end
+                    activeEntities[entityName] = false
+                end
+
+                childRemovedConn = workspace.ChildRemoved:Connect(function(child)
                     if child == entityModel then
-                        activeEntities[entityName] = false
-                        connection:Disconnect()
+                        cleanupAndUnlock()
                     end
                 end)
+
+                attrConn = entityModel:GetAttributeChangedSignal("Crucified"):Connect(function()
+                    if entityModel:GetAttribute("Crucified") == true then
+                        print(string.format("[Hardcore Mode] %s was Crucified! Unlocking spawn.", entityName))
+                        cleanupAndUnlock()
+                    end
+                end)
+
+                -- Fallback check in case attribute was already true on spawn/fetch
+                if entityModel:GetAttribute("Crucified") == true then
+                    cleanupAndUnlock()
+                end
             else
                 activeEntities[entityName] = false
             end
