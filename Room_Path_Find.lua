@@ -39,13 +39,16 @@ local function LoadCustomInstance(url: string)
 	return nil
 end
 
-local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
+
 local Assets = {
 	Repentance = nil
 }
+
 task.spawn(function()
-	Assets.Repentance = LoadCustomInstance(ROOT.."/Assets/Repentance.rbxm")
+	Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
 end)
+
 
 type MoveToConfig = {
 	Speed: number?,
