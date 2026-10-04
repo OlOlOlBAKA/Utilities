@@ -1,4 +1,7 @@
 --!nocheck
+-- CREDIT AND INSPIRED BY VYNIXU ENTITIY SPAWNER
+local Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
+
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
@@ -30,25 +33,16 @@ task.spawn(function()
 	end
 end)
 
--- Safe Asset Loader for Crucifix
-local function LoadCustomInstance(url: string)
-	local success, result = pcall(function()
-		return game:GetObjects(url)[1]
-	end)
-	if success then return result end
-	return nil
-end
-
+-- Asset Loader using RegularVynixu Utilities
 local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
-
 local Assets = {
 	Repentance = nil
 }
 
 task.spawn(function()
+	-- LoadCustomInstance comes from Utilities library
 	Assets.Repentance = LoadCustomInstance(REPENTANCE_URL)
 end)
-
 
 type MoveToConfig = {
 	Speed: number?,
