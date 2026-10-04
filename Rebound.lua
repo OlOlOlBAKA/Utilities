@@ -50,9 +50,9 @@ local ReSt = game:GetService("ReplicatedStorage")
                     model.Rebound_Cue2.Volume = 0.5
                     model.Rebound_Cue:Play()
                     model.Rebound_Cue2:Play()
-                    model.ReboundNew.Close.Volume = 1.25
-                    model.ReboundNew.Idle.Volume = 1.25
-                    model.ReboundNew.Sound.Volume = 2.5
+                    model.ReboundNew.Close.Volume = 0.75
+                    model.ReboundNew.Idle.Volume = 0.75
+                    model.ReboundNew.Sound.Volume = 4
 
                     task.wait(3.5)
                     model.Rebound_Cue.TimePosition = 0
@@ -132,9 +132,9 @@ local ReSt = game:GetService("ReplicatedStorage")
 
                     Callbacks = {
                         OnSpawned = function(model, actions)
-                            model.ReboundNew.Close.Volume = 1.25
-                            model.ReboundNew.Idle.Volume = 1.25
-                            model.ReboundNew.Sound.Volume = 2.5
+                            model.ReboundNew.Close.Volume = 0.75
+                            model.ReboundNew.Idle.Volume = 0.75
+                            model.ReboundNew.Sound.Volume = 4
                             model.Rebound_Cue.TimePosition = 0
                             model.Rebound_Cue:Play()
                         end,
