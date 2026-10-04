@@ -38,7 +38,7 @@ local function LoadCustomInstance(name: string, url: string): Instance?
 	end
 	writefile(name, game:HttpGet(url))
 
-	local assetId = getcustomasset(name)
+	local assetId = getcustomasset(name, true)
 
 	return assetId
 end
