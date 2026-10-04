@@ -3,10 +3,18 @@ local Players = game:GetService("Players")
 
 local Main_Game = require(Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
 
+-- Anti-re-run protection
+if _G.HardcoreModeRunning then
+    Main_Game.caption("Hardcore Mode is already running!", true, 3)
+    return
+end
+
 if ReplicatedStorage.GameData.LatestRoom.Value > 0 then
     Main_Game.caption("You must run the script at door 0", true, 3)
     return
 end
+
+_G.HardcoreModeRunning = true
 
 local function getJobIdSeed()
     local jobId = game.JobId
@@ -39,7 +47,7 @@ local reboundDespawnCount = 0
 -- Prevents the same room number from running the spawn logic multiple times
 local lastProcessedRoom = -1
 
-local GLOBAL_BLACKLIST_ROOMS = {50, 100}
+local GLOBAL_BLACKLIST_ROOMS = {49, 50, 99, 100}
 
 local ENTITY_TABLE = {
     {Name = "A-120",     Weight = 0.75, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
@@ -169,6 +177,13 @@ end
 local function handleHardcoreRoom(roomNumber)
     if lastProcessedRoom == roomNumber then return end
     lastProcessedRoom = roomNumber
+
+    -- Check if Seek is currently active in Workspace
+    if workspace:FindFirstChild("SeekMovingNewClone") then
+        print(string.format("[Hardcore Mode] Room %d skipped (SeekMovingNewClone present in workspace)", roomNumber))
+        safeRoomStreak = safeRoomStreak + 1
+        return
+    end
 
     local roomSeed = MASTER_SEED + roomNumber
     print(string.format("[Hardcore Mode] Processing Room %d | Room Seed: %d", roomNumber, roomSeed))
