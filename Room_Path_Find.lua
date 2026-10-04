@@ -39,16 +39,8 @@ local function LoadCustomInstance(name: string, url: string): Instance?
 	writefile(name, game:HttpGet(url))
 
 	local assetId = getcustomasset(name)
-	local success, result = pcall(function()
-		return game:GetObjects(assetId)[1]
-	end)
 
-	if not success then
-		warn("PathfindingMovement: GetObjects failed for asset " .. tostring(name) .. " ->", result)
-		return nil
-	end
-
-	return result
+	return assetId
 end
 
 -- Asset Definitions
