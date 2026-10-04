@@ -1,15 +1,41 @@
 --!nocheck
--- Load RegularVynixu Utilities Library
+local PathfindingMovement = {}
+PathfindingMovement.__index = PathfindingMovement
+
+-- High-visibility error tracer to capture exact crash line numbers
+local function TraceError(sourceName: string, errMessage: any)
+	local stackTrace = debug.traceback("", 2)
+	warn("==================================================")
+	warn("❌ CRASH IN MODULE: " .. tostring(sourceName))
+	warn("ERROR MESSAGE: " .. tostring(errMessage))
+	warn("TRACEBACK (Look for line numbers below):")
+	warn(stackTrace)
+	warn("==================================================")
+end
+
+-- Safe call wrapper
+local function SafeExecute(contextName: string, fn, ...)
+	local args = {...}
+	local success, result = xpcall(function()
+		return fn(unpack(args))
+	end, function(err)
+		TraceError(contextName, err)
+		return err
+	end)
+	if success then
+		return result
+	end
+	return nil
+end
+
+-- Load RegularVynixu Utilities Library safely
 local Utilities = nil
 pcall(function()
 	Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
 end)
 
 local LoadCustomInstance = (type(Utilities) == "table" and Utilities.LoadCustomInstance) 
-	or getgenv().LoadCustomInstance
-
-local PathfindingMovement = {}
-PathfindingMovement.__index = PathfindingMovement
+	or (getgenv and getgenv().LoadCustomInstance)
 
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
@@ -43,7 +69,7 @@ task.spawn(function()
 end)
 
 -- Asset Loader using RegularVynixu Utilities
-local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Entity-Spawner/raw/refs/heads/main/Assets/Repentance.rbxm"
+local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
 local Assets = {
 	Repentance = nil
 }
@@ -235,7 +261,7 @@ local function renderDebugWaypoints(waypoints: {Vector3}): Folder
 end
 
 local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
-	local character = LocalPlayer.Character
+	local character = LocalPlayer and LocalPlayer.Character
 	if not character or not character:FindFirstChild("HumanoidRootPart") then return false, nil end
 
 	local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
@@ -393,15 +419,16 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	return true
 end
 
--- SAFE CRUCIFIX HELPER FUNCTIONS
+-- CRUCIFIX DETECTOR
 local function HasEquippedCrucifix(): (boolean, Tool?)
+	if not LocalPlayer then return false, nil end
 	local character = LocalPlayer.Character
 	if not character then return false, nil end
 	local tool = character:FindFirstChildOfClass("Tool")
 	if tool then
 		local hasTag = false
 		pcall(function()
-			hasTag = CollectionService:HasTag(tool, "Crucifix")
+			hasTag = CollectionService and CollectionService:HasTag(tool, "Crucifix")
 		end)
 		if tool.Name == "Crucifix" or hasTag then
 			return true, tool
@@ -411,10 +438,13 @@ local function HasEquippedCrucifix(): (boolean, Tool?)
 end
 
 local function CrucifixEntity(model: Instance)
-	if not Assets.Repentance then return end
+	if not Assets.Repentance then 
+		warn("[Crucifix] Assets.Repentance is nil! Cannot execute crucifix sequence.")
+		return 
+	end
 
+	if not LocalPlayer or not LocalPlayer.Character then return end
 	local character = LocalPlayer.Character
-	if not character then return end
 
 	local entityPivot = model:IsA("Model") and model:GetPivot() or model.CFrame
 	pcall(function() model:SetAttribute("BeingBanished", true) end)
@@ -461,7 +491,7 @@ local function CrucifixEntity(model: Instance)
 	local Color = Color3.fromRGB(137, 207, 255)
 	for _, v in ipairs(Repentance:GetDescendants()) do
 		local hasTag = false
-		pcall(function() hasTag = CollectionService:HasTag(v, "GiveMeColor") end)
+		pcall(function() hasTag = CollectionService and CollectionService:HasTag(v, "GiveMeColor") end)
 
 		if v:IsA("Light") or v:IsA("BasePart") then
 			if v.Name == "GiveMeColor" or hasTag then v.Color = Color end
@@ -549,7 +579,8 @@ local function CrucifixEntity(model: Instance)
 	end)
 end
 
-function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
+-- Core Execution Wrapper
+local function InternalMoveThroughRooms(options: MovementOptions)
 	local model = options.Model
 	if not model then return end
 
@@ -660,113 +691,143 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					camera.CFrame = camera.CFrame * shakeCFrame
 				end
 			end)
-			shakerInstance:Start()
+			if shakerInstance and type(shakerInstance.Start) == "function" then
+				shakerInstance:Start()
+			end
 		end)
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
-			if shakerInstance then shakerInstance:Update(dt) end
+			SafeExecute("RenderSteppedLoop", function()
+				if shakerInstance and type(shakerInstance.Update) == "function" then 
+					shakerInstance:Update(dt) 
+				end
 
-			if isMovementFinished or isBanished or not model or not model.Parent then
-				if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.2) end); sustainedShake = nil end
-				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-				task.delay(0.2, function()
-					if shakerInstance then pcall(function() shakerInstance:Stop() end); shakerInstance = nil end
-				end)
-				return
-			end
+				if isMovementFinished or isBanished or not model or not model.Parent then
+					if sustainedShake and type(sustainedShake.StartFadeOut) == "function" then 
+						pcall(function() sustainedShake:StartFadeOut(0.2) end)
+						sustainedShake = nil 
+					end
+					if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
+					task.delay(0.2, function()
+						if shakerInstance and type(shakerInstance.Stop) == "function" then 
+							pcall(function() shakerInstance:Stop() end)
+							shakerInstance = nil 
+						end
+					end)
+					return
+				end
 
-			if isMoving and not isStopped and not isBanished then
-				local character = LocalPlayer.Character
-				if character and character:FindFirstChild("HumanoidRootPart") then
-					local hrpPos = character.HumanoidRootPart.Position
-					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					local distance = (hrpPos - entityPos).Magnitude
+				if isMoving and not isStopped and not isBanished then
+					if LocalPlayer and LocalPlayer.Character then
+						local character = LocalPlayer.Character
+						if character:FindFirstChild("HumanoidRootPart") then
+							local hrpPos = character.HumanoidRootPart.Position
+							local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+							local distance = (hrpPos - entityPos).Magnitude
 
-					if distance <= 40 then
-						local hasTool, tool = HasEquippedCrucifix()
-						if hasTool and tool and not isBanished then
-							isBanished = true
-							isStopped = true
-							if currentTween then currentTween:Cancel(); currentTween = nil end
+							if distance <= 40 then
+								local hasTool, tool = HasEquippedCrucifix()
+								if hasTool and tool and not isBanished then
+									isBanished = true
+									isStopped = true
+									if currentTween then currentTween:Cancel(); currentTween = nil end
 
-							if type(callbacks.OnCrucified) == "function" then
-								task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
+									if type(callbacks.OnCrucified) == "function" then
+										task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
+									end
+
+									tool:Destroy()
+									CrucifixEntity(model)
+									return
+								end
 							end
 
-							tool:Destroy()
-							CrucifixEntity(model)
-							return
+							local isHiding = false
+							pcall(function() isHiding = (character:GetAttribute("Hiding") == true) end)
+
+							if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
+								local canHit = true
+								if useRaycastHitbox then
+									canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
+								end
+
+								if canHit then
+									hasHitPlayerThisPass = true
+									local humanoid = character:FindFirstChildOfClass("Humanoid")
+									if humanoid then humanoid:TakeDamage(damageAmount) end
+
+									if type(callbacks.OnKillPlayer) == "function" then
+										task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									end
+								end
+							end
+
+							lastEntityPosition = entityPos
+
+							if type(callbacks.OnSeePlayer) == "function" then
+								local canSee, playerChar = checkLineOfSight(model)
+								if canSee and playerChar then
+									task.spawn(callbacks.OnSeePlayer, model, playerChar, actionsHandle)
+								end
+							end
+
+							if distance <= shakeRadius and shakerInstance then
+								if not sustainedShake then
+									local shakeInstConstructor = nil
+									if type(CameraShaker) == "table" and CameraShaker.CameraShakeInstance then
+										shakeInstConstructor = CameraShaker.CameraShakeInstance.new
+									else
+										pcall(function()
+											shakeInstConstructor = require(ReplicatedStorage:WaitForChild("CameraShaker"):WaitForChild("CameraShakeInstance")).new
+										end)
+									end
+									
+									if type(shakeInstConstructor) == "function" then
+										local rawShakeInstance = shakeInstConstructor(shakeAmount, 6, 0.2, 0.3)
+										rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
+										rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
+										if type(shakerInstance.ShakeSustain) == "function" then
+											sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+										end
+									end
+								end
+
+								if sustainedShake then
+									local distanceRatio = 1 - (distance / shakeRadius)
+									local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
+									sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+								end
+							else
+								if sustainedShake and type(sustainedShake.StartFadeOut) == "function" then 
+									pcall(function() sustainedShake:StartFadeOut(0.3) end)
+									sustainedShake = nil 
+								end
+							end
 						end
 					end
-
-					local isHiding = false
-					pcall(function() isHiding = (character:GetAttribute("Hiding") == true) end)
-
-					if not isHiding and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
-						local canHit = true
-						if useRaycastHitbox then
-							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
-						end
-
-						if canHit then
-							hasHitPlayerThisPass = true
-							local humanoid = character:FindFirstChildOfClass("Humanoid")
-							if humanoid then humanoid:TakeDamage(damageAmount) end
-
-							if type(callbacks.OnKillPlayer) == "function" then
-								task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
-							end
-						end
-					end
-
-					lastEntityPosition = entityPos
-
-					if type(callbacks.OnSeePlayer) == "function" then
-						local canSee, playerChar = checkLineOfSight(model)
-						if canSee and playerChar then
-							task.spawn(callbacks.OnSeePlayer, model, playerChar, actionsHandle)
-						end
-					end
-
-					if distance <= shakeRadius and shakerInstance then
-						if not sustainedShake then
-							local shakeInst = (CameraShaker.CameraShakeInstance and CameraShaker.CameraShakeInstance.new) 
-							if not shakeInst then
-								pcall(function()
-									shakeInst = require(ReplicatedStorage:WaitForChild("CameraShaker"):WaitForChild("CameraShakeInstance")).new
-								end)
-							end
-							
-							if shakeInst then
-								local rawShakeInstance = shakeInst(shakeAmount, 6, 0.2, 0.3)
-								rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
-								rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
-								sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
-							end
-						end
-
-						if sustainedShake then
-							local distanceRatio = 1 - (distance / shakeRadius)
-							local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
-							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
-						end
-					else
-						if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.3) end); sustainedShake = nil end
+				else
+					if sustainedShake and type(sustainedShake.StartFadeOut) == "function" then 
+						pcall(function() sustainedShake:StartFadeOut(0.3) end)
+						sustainedShake = nil 
 					end
 				end
-			else
-				if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.3) end); sustainedShake = nil end
-			end
+			end)
 		end)
 	end
 
 	local function stopCameraShake()
 		isMovementFinished = true
-		if sustainedShake then pcall(function() sustainedShake:StartFadeOut(0.2) end); sustainedShake = nil end
+		if sustainedShake and type(sustainedShake.StartFadeOut) == "function" then 
+			pcall(function() sustainedShake:StartFadeOut(0.2) end)
+			sustainedShake = nil 
+		end
 		if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 		if shakerInstance then
 			task.delay(0.2, function()
-				if shakerInstance then pcall(function() shakerInstance:Stop() end); shakerInstance = nil end
+				if shakerInstance and type(shakerInstance.Stop) == "function" then 
+					pcall(function() shakerInstance:Stop() end)
+					shakerInstance = nil 
+				end
 			end)
 		end
 	end
@@ -1015,8 +1076,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		if type(callbacks.OnEnterPlayerRoom) == "function" then
 			local playerRoomNum = nil
-			pcall(function() playerRoomNum = LocalPlayer:GetAttribute("CurrentRoom") end)
-			if playerRoomNum and tostring(playerRoomNum) == roomFolder.Name then
+			pcall(function() playerRoomNum = LocalPlayer and LocalPlayer:GetAttribute("CurrentRoom") end)
+			if playerRoomNum and tostring(playerRoomNum) == roomFolder.Name and LocalPlayer then
 				task.spawn(callbacks.OnEnterPlayerRoom, model, roomFolder, LocalPlayer.Character, actionsHandle)
 			end
 		end
@@ -1187,6 +1248,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 	
 	table.clear(roomFloorCache)
+end
+
+-- Exported Entry Point wrapped in Error Diagnostics
+function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
+	return SafeExecute("PathfindingMovement.MoveThroughRooms", InternalMoveThroughRooms, options)
 end
 
 return PathfindingMovement
