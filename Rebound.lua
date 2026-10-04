@@ -83,8 +83,9 @@ local isCrucified = false
                 end,
 
                 OnCrucifixion = function(model: Model | BasePart, actions)
-		    isCrucified = true
-		end
+		            isCrucified = true
+			        model:SetAttribute("Crucified", true)
+		        end
 
                 OnDespawn = function(model, actions)
                 end
@@ -102,6 +103,7 @@ local isCrucified = false
 
             while reboundsLeft > 0 do
                 if isCrucified == true then
+				    print("Rebound got crucified, the spawn loop is ended")
                     break
                 end
                 latestRoom.Changed:Wait()
@@ -170,8 +172,9 @@ local isCrucified = false
                         end,
 
                         OnCrucifixion = function(model: Model | BasePart, actions)
-			    isCrucified = true
-		        end
+			                isCrucified = true
+							model:SetAttribute("Crucified", true)
+		                end
 
                         OnDespawn = function(model, actions)
                         end
