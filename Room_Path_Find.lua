@@ -30,6 +30,23 @@ task.spawn(function()
 	end
 end)
 
+-- Safe Asset Loader for Crucifix
+local function LoadCustomInstance(url: string)
+	local success, result = pcall(function()
+		return game:GetObjects(url)[1]
+	end)
+	if success then return result end
+	return nil
+end
+
+local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+local Assets = {
+	Repentance = nil
+}
+task.spawn(function()
+	Assets.Repentance = LoadCustomInstance(ROOT.."/Assets/Repentance.rbxm")
+end)
+
 type MoveToConfig = {
 	Speed: number?,
 	ReachDistance: number?,
@@ -57,6 +74,7 @@ type EventCallbacks = {
 	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnSeePlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnKillPlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
+	OnCrucified: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnDespawn: ((model: Model | BasePart, actions: ActionsHandle) -> ())?
 }
 
@@ -371,6 +389,125 @@ local function isRoomDistanceValid(roomFolder: Instance, entityModel: Instance, 
 	return true
 end
 
+-- CRUCIFIX HELPER FUNCTIONS
+local function HasEquippedCrucifix(): (boolean, Tool?)
+	local character = LocalPlayer.Character
+	if not character then return false, nil end
+	local tool = character:FindFirstChildOfClass("Tool")
+	if tool and (tool.Name == "Crucifix" or tool:HasTag("Crucifix")) then
+		return true, tool
+	end
+	return false, nil
+end
+
+local function CrucifixEntity(model: Instance)
+	if not Assets.Repentance then return end
+
+	local character = LocalPlayer.Character
+	if not character then return end
+
+	local entityPivot = model:IsA("Model") and model:GetPivot() or model.CFrame
+	model:SetAttribute("BeingBanished", true)
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, model }
+
+	local rayResult = Workspace:Raycast(entityPivot.Position, Vector3.new(0, -1000, 0), params)
+	if not rayResult then return end
+
+	local Repentance = Assets.Repentance:Clone()
+	local Crucifix = Repentance.Crucifix
+	local Handle = Crucifix.Handle
+	local Pentagram = Repentance.Pentagram
+	local EntityPart = Repentance.Entity
+	local Sound = Handle.Sound
+
+	Repentance:PivotTo(CFrame.new(rayResult.Position))
+	Crucifix:PivotTo(character:GetPivot())
+	EntityPart.CFrame = entityPivot
+	Repentance.Parent = Workspace
+	Sound:Play()
+
+	local function waitUntil(t: number)
+		repeat RunService.RenderStepped:Wait() until Sound.TimePosition >= t
+	end
+
+	local function fadeOut()
+		for _, v in Pentagram:GetChildren() do
+			if v.Name == "BeamFlat" or v.Name == "BeamChain" then
+				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			end
+		end
+	end
+
+	local Color = Color3.fromRGB(137, 207, 255)
+	for _, v in next, Repentance:GetDescendants() do
+		if v:IsA("Light") or v:IsA("BasePart") then
+			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then v.Color = Color end
+		elseif v:IsA("ParticleEmitter") or v:IsA("Beam") then
+			if v.Name == "GiveMeColor" or v:HasTag("GiveMeColor") then
+				v.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color), ColorSequenceKeypoint.new(1, Color) })
+			end
+		end
+	end
+
+	task.spawn(function()
+		while EntityPart and EntityPart.Parent do
+			if model and model.Parent then
+				if model:IsA("Model") then model:PivotTo(EntityPart.CFrame) elseif model:IsA("BasePart") then model.CFrame = EntityPart.CFrame end
+			end
+			RunService.RenderStepped:Wait()
+		end
+		if model and model.Parent then model:Destroy() end
+	end)
+
+	TweenService:Create(Pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = Pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
+	task.delay(2, Pentagram.Circle.Destroy, Pentagram.Circle)
+
+	Handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
+	TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
+
+	task.delay(3, function()
+		for _, shard in next, Handle.Shards:GetChildren() do
+			shard.CollisionGroup = "NoPlayer"
+			shard.CanCollide = true
+			if shard:FindFirstChild("Weld") then shard.Weld:Destroy() end
+			shard.AssemblyAngularVelocity = Vector3.zero
+		end
+	end)
+
+	TweenService:Create(EntityPart, TweenInfo.new(3, Enum.EasingStyle.Elastic, Enum.EasingDirection.In), { CFrame = EntityPart.CFrame + Vector3.new(0, 2, 0) }):Play()
+
+	task.spawn(function()
+		waitUntil(2.625)
+		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 5, Range = 40 }):Play()
+		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 11.25, Range = 30 }):Play()
+		
+		task.wait(1.5)
+		TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+		TweenService:Create(Handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+
+		TweenService:Create(Handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
+		fadeOut()
+
+		TweenService:Create(Handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
+	end)
+
+	waitUntil(2.5)
+	TweenService:Create(EntityPart, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { CFrame = EntityPart.CFrame - Vector3.new(0, 50, 0) }):Play()
+
+	stopEntitySounds(model)
+	waitUntil(6.75)
+
+	TweenService:Create(Handle.Glow, TweenInfo.new(1), { Size = Handle.Glow.Size * 3, Transparency = 1 }):Play()
+	TweenService:Create(Pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+	TweenService:Create(Handle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+
+	if Handle:FindFirstChild("ExplodeParticle") then Handle.ExplodeParticle:Emit(math.random(20, 30)) end
+	task.delay(5, Repentance.Destroy, Repentance)
+end
+
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local model = options.Model
 	if not model then return end
@@ -409,6 +546,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local skipCurrentRoom = false
 	local regenPathRequested = false
 	local isMoveToActive = false
+	local isBanished = false
 	
 	local reboundRequestedOffset: number? = nil
 	local reboundRequestedDelayBefore: number = 0
@@ -485,7 +623,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
 			if shakerInstance then shakerInstance:Update(dt) end
 
-			if isMovementFinished or not model or not model.Parent then
+			if isMovementFinished or isBanished or not model or not model.Parent then
 				if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
 				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
 				task.delay(0.2, function()
@@ -494,12 +632,31 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				return
 			end
 
-			if isMoving and not isStopped then
+			if isMoving and not isStopped and not isBanished then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
 					local hrpPos = character.HumanoidRootPart.Position
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
+
+					-- AUTOMATIC CRUCIFIX CHECK
+					if distance <= 40 then
+						local hasTool, tool = HasEquippedCrucifix()
+						if hasTool and tool and not isBanished then
+							isBanished = true
+							isStopped = true
+							if currentTween then currentTween:Cancel(); currentTween = nil end
+
+							-- Trigger OnCrucified callback
+							if type(callbacks.OnCrucified) == "function" then
+								task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
+							end
+
+							tool:Destroy()
+							CrucifixEntity(model)
+							return
+						end
+					end
 
 					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
@@ -628,13 +785,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local currentRoomIndex = initialTargetIndex
 
 	local function moveDirectTo(targetPos: Vector3?, customSpeed: number?)
-		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested then return end
+		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested or isBanished then return end
 
-		-- Yield if MoveTo or Stop is active
-		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested do
+		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested and not isBanished do
 			task.wait(0.05)
 		end
-		if skipCurrentRoom or regenPathRequested then return end
+		if skipCurrentRoom or regenPathRequested or isBanished then return end
 
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
@@ -676,7 +832,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
-		-- Instantly cancel active room tween
 		if currentTween then
 			currentTween:Cancel()
 			currentTween = nil
@@ -691,7 +846,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local customHeight = cfg.HeightOffset or heightOffset
 		local lastTargetPos: Vector3? = nil
 
-		while isMoveToActive and model and model.Parent and not skipCurrentRoom do
+		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBanished do
 			local currentTargetPos = resolveTargetPosition(target)
 			if not currentTargetPos then break end
 
@@ -702,7 +857,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				lastTargetPos = currentTargetPos
 				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
 				
-				-- Directly step toward target without invoking pathing loops
 				local dist = (groundTargetPos - entityPos).Magnitude
 				if dist > reachDistance then
 					local travelTime = math.max(0.01, dist / moveSpeed)
@@ -737,7 +891,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		isMoveToActive = false
-		regenPathRequested = true -- Recalculate main room path after chasing finishes
+		regenPathRequested = true
 	end
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
@@ -755,20 +909,20 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fullPathVisuals = renderDebugWaypoints(allNodes)
 		end
 
-		if startNode and not skipCurrentRoom and not regenPathRequested then
+		if startNode and not skipCurrentRoom and not regenPathRequested and not isBanished then
 			moveDirectTo(startNode + heightVector)
 		end
 
 		local idx = 1
 		while idx <= #waypoints do
-			if skipCurrentRoom then break end
+			if skipCurrentRoom or isBanished then break end
 
-			while isMoveToActive do
+			while isMoveToActive and not isBanished do
 				task.wait(0.05)
 				regenPathRequested = true
 			end
 
-			if regenPathRequested then
+			if regenPathRequested and not isBanished then
 				regenPathRequested = false
 				if fullPathVisuals then fullPathVisuals:Destroy() end
 
@@ -784,11 +938,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 
-			if waypoints[idx] then moveDirectTo(waypoints[idx]) end
+			if waypoints[idx] and not isBanished then moveDirectTo(waypoints[idx]) end
 			idx += 1
 		end
 
-		if endNode and not skipCurrentRoom then moveDirectTo(endNode + heightVector) end
+		if endNode and not skipCurrentRoom and not isBanished then moveDirectTo(endNode + heightVector) end
 		if fullPathVisuals then fullPathVisuals:Destroy() end
 	end
 
@@ -828,7 +982,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		else
-			while model and model.Parent and currentRoomIndex >= targetRoomIndex do
+			while model and model.Parent and currentRoomIndex >= targetRoomIndex and not isBanished do
 				skipCurrentRoom = false
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
@@ -847,7 +1001,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runForwardPass()
-		while model and model.Parent do
+		while model and model.Parent and not isBanished do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -879,7 +1033,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runBackwardPass()
-		while model and model.Parent do
+		while model and model.Parent and not isBanished do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -911,7 +1065,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	while model and model.Parent do
+	while model and model.Parent and not isBanished do
 		hasHitPlayerThisPass = false
 		lastEntityPosition = nil
 
@@ -920,7 +1074,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		if isForwardStep then runForwardPass() else runBackwardPass() end
 
-		if isRebound and currentReboundState < targetReboundCount then
+		if isRebound and currentReboundState < targetReboundCount and not isBanished do
 			isMoving = false
 			currentReboundState += 1
 
@@ -937,6 +1091,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			break
 		end
 	end
+
+	if isBanished then return end
 
 	if type(callbacks.OnDespawn) == "function" then
 		task.spawn(callbacks.OnDespawn, model, actionsHandle)
