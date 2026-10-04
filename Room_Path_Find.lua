@@ -32,16 +32,40 @@ task.spawn(function()
 end)
 
 -- Custom Asset Loader Implementation
+-- Custom Asset Loader Implementation
 local function LoadCustomInstance(name: string, url: string): Instance?
-	if isfile(name) then
-		delfile(name)
-	end
-	writefile(name, game:HttpGet(url))
+    if isfile(name) then
+        delfile(name)
+    end
+    
+    writefile(name, game:HttpGet(url))
 
-	local assetId = getcustomasset(name, true)
+    -- If your getcustomasset returns the object/function directly:
+    local customAsset = getcustomasset(name)
 
-	return assetId
+    -- Case 1: getcustomasset returns the loaded Instance directly
+    if typeof(customAsset) == "Instance" then
+        return customAsset
+    end
+
+    -- Case 2: getcustomasset returns a table or function wrapper
+    if type(customAsset) == "function" then
+        return customAsset()
+    end
+
+    -- Case 3: Standard executor fallback (returns string path like "rbxasset://...")
+    if type(customAsset) == "string" then
+        local success, result = pcall(function()
+            return game:GetObjects(customAsset)[1]
+        end)
+        if success and result then
+            return result
+        end
+    end
+
+    return nil
 end
+
 
 -- Asset Definitions
 local REPENTANCE_URL = "https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Repentance.rbxm"
