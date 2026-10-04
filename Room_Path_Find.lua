@@ -1,4 +1,21 @@
 --!nocheck
+-- CREDIT AND INSPIRED BY REGULAR VYNIXU
+-- \\ Safe Global Function Loading // --
+local httpSuccess, rawCode = pcall(function()
+	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
+end)
+
+if httpSuccess and rawCode then
+	local loadedFunc, err = loadstring(rawCode)
+	if type(loadedFunc) == "function" then
+		pcall(loadedFunc)
+	else
+		warn("PathfindingMovement: Failed to compile HTTP code ->", err)
+	end
+else
+	warn("PathfindingMovement: Failed to fetch HTTP functions ->", rawCode)
+end
+
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
 
@@ -8,10 +25,23 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 -- Module Requirements
-local CameraShaker = require(ReplicatedStorage:WaitForChild("CameraShaker"))
 local LocalPlayer = Players.LocalPlayer
+local CameraShaker = nil
+
+task.spawn(function()
+	local csModule = ReplicatedStorage:WaitForChild("CameraShaker", 5)
+	if csModule then
+		local success, result = pcall(require, csModule)
+		if success then
+			CameraShaker = result
+		else
+			warn("PathfindingMovement: Failed to require CameraShaker ->", result)
+		end
+	end
+end)
 
 -- Safe Module_Events Integration
 local Module_Events = nil
@@ -29,6 +59,29 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- \\ Crucifixion Assets & Storage // --
+local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+local CrucifixAssets = {
+	Repentance = nil
+}
+
+-- Spawned in background so failure here NEVER crashes module load
+task.spawn(function()
+	local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or LoadCustomInstance
+	if typeof(fetchFunc) == "function" then
+		pcall(function()
+			CrucifixAssets.Repentance = fetchFunc(ROOT .. "/Assets/Repentance.rbxm")
+		end)
+	end
+end)
+
+local CrucifixStorage = {
+	CrucifixTypes = {
+		["guiding"] = { Color = Color3.fromRGB(137, 207, 255) },
+		["curious"] = { Color = Color3.fromRGB(255, 227, 137) }
+	}
+}
 
 type MoveToConfig = {
 	Speed: number?,
@@ -57,6 +110,7 @@ type EventCallbacks = {
 	OnEnterPlayerRoom: ((model: Model | BasePart, roomFolder: Instance, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnSeePlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
 	OnKillPlayer: ((model: Model | BasePart, playerCharacter: Model, actions: ActionsHandle) -> ())?,
+	OnCrucifixion: ((model: Model | BasePart, actions: ActionsHandle) -> ())?,
 	OnDespawn: ((model: Model | BasePart, actions: ActionsHandle) -> ())?
 }
 
@@ -133,7 +187,163 @@ local function stopEntitySounds(instance: Instance)
 	end
 end
 
-local roomFloorCache: { [Instance]: { BasePart } } = {}
+local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			local toolName = string.lower(child.Name)
+			local isCrucifix = string.find(toolName, "crucifix") ~= nil 
+				or child:GetAttribute("IsCrucifix") == true
+				or CollectionService:HasTag(child, "Crucifix")
+				or child:FindFirstChild("Crucifix") ~= nil
+				
+			if isCrucifix then
+				return true, child
+			end
+		end
+	end
+	return false, nil
+end
+
+local function performCrucifixion(
+	entityModel: Instance, 
+	character: Model, 
+	shakerInstance: any
+)
+	if not CrucifixAssets.Repentance then return false end
+
+	local entityPivot = entityModel:IsA("Model") and entityModel:GetPivot() or entityModel.CFrame
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character, entityModel }
+
+	local rayResult = Workspace:Raycast(entityPivot.Position, Vector3.new(0, -1000, 0), rayParams)
+	if not rayResult then return false end
+
+	local repentance = CrucifixAssets.Repentance:Clone()
+	local crucifix = repentance.Crucifix
+	local handle = crucifix.Handle
+	local pentagram = repentance.Pentagram
+	local entityPart = repentance.Entity
+	local sound = handle.Sound
+
+	repentance:PivotTo(CFrame.new(rayResult.Position))
+	crucifix:PivotTo(character:GetPivot())
+	entityPart.CFrame = entityPivot
+	repentance.Parent = Workspace
+	sound:Play()
+
+	local theShake = nil
+	if shakerInstance and typeof(shakerInstance.StartShake) == "function" then
+		theShake = shakerInstance:StartShake(5, 20, 2, Vector3.zero)
+	end
+
+	local function waitUntil(t: number)
+		repeat RunService.RenderStepped:Wait() until sound.TimePosition >= t
+	end
+
+	local function fadeOut()
+		for _, v in ipairs(pentagram:GetChildren()) do
+			if v.Name == "BeamFlat" then
+				task.delay(v:GetAttribute("Delay") or 0, function()
+					TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+				end)
+			elseif v.Name == "BeamChain" then
+				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			end
+		end
+	end
+
+	local typeData = CrucifixStorage.CrucifixTypes["guiding"]
+	local color = typeData.Color
+
+	for _, v in ipairs(repentance:GetDescendants()) do
+		if v:HasTag("GiveMeColor") or v.Name == "GiveMeColor" then
+			if v:IsA("Light") or v:IsA("BasePart") then
+				v.Color = color
+			elseif v:IsA("ParticleEmitter") or v:IsA("Beam") then
+				v.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, color),
+					ColorSequenceKeypoint.new(1, color)
+				})
+			end
+		end
+	end
+
+	task.spawn(function()
+		while entityPart.Parent and entityModel and entityModel.Parent do
+			if entityModel:IsA("Model") then
+				entityModel:PivotTo(entityPart.CFrame)
+			else
+				entityModel.CFrame = entityPart.CFrame
+			end
+			RunService.RenderStepped:Wait()
+		end
+		if entityModel and entityModel.Parent then
+			entityModel:Destroy()
+		end
+	end)
+
+	TweenService:Create(pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
+	task.delay(2, pentagram.Circle.Destroy, pentagram.Circle)
+
+	handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
+	TweenService:Create(handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
+
+	task.delay(3, function()
+		for _, shard in ipairs(handle.Shards:GetChildren()) do
+			shard.CollisionGroup = "NoPlayer"
+			shard.CanCollide = true
+			if shard:FindFirstChild("Weld") then shard.Weld:Destroy() end
+			shard.AssemblyAngularVelocity = Vector3.zero
+		end
+	end)
+
+	TweenService:Create(entityPart, TweenInfo.new(3, Enum.EasingStyle.Elastic, Enum.EasingDirection.In), { CFrame = entityPart.CFrame + Vector3.new(0, 2, 0) }):Play()
+
+	task.spawn(function()
+		waitUntil(2.625)
+		TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 5, Range = 40 }):Play()
+		TweenService:Create(handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 11.25, Range = 30 }):Play()
+
+		task.wait(1.5)
+		TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+		TweenService:Create(handle.Light, TweenInfo.new(1.5, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 0, Range = 0 }):Play()
+
+		TweenService:Create(handle.Light, TweenInfo.new(1, Enum.EasingStyle.Circular, Enum.EasingDirection.InOut), { Brightness = 15, Range = 40 }):Play()
+		if theShake and typeof(theShake.StartFadeOut) == "function" then theShake:StartFadeOut(3) end
+		fadeOut()
+		TweenService:Create(handle.BodyAngularVelocity, TweenInfo.new(3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { AngularVelocity = Vector3.zero }):Play()
+	end)
+
+	waitUntil(2.5)
+	TweenService:Create(entityPart, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { CFrame = entityPart.CFrame - Vector3.new(0, 50, 0) }):Play()
+
+	local soundTargets = entityModel:GetDescendants()
+	if entityModel:IsA("Sound") then table.insert(soundTargets, entityModel) end
+
+	for _, s in ipairs(soundTargets) do
+		if s:IsA("Sound") and not s:GetAttribute("VolumeIgnore") then
+			TweenService:Create(s, TweenInfo.new(3, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Volume = 0 }):Play()
+		end
+	end
+
+	waitUntil(6.75)
+
+	TweenService:Create(handle.Glow, TweenInfo.new(1), { Size = handle.Glow.Size * 3, Transparency = 1 }):Play()
+	TweenService:Create(pentagram.Base.LightAttach.LightBright, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+	TweenService:Create(handle.Light, TweenInfo.new(1), { Brightness = 0, Range = 0 }):Play()
+
+	handle.ExplodeParticle:Emit(math.random(20, 30))
+	if shakerInstance and typeof(shakerInstance.ShakeOnce) == "function" then 
+		shakerInstance:ShakeOnce(7.5, 7.5, 0.25, 1.5) 
+	end
+
+	task.delay(5, repentance.Destroy, repentance)
+	return true
+end
+
+-- Weak table cache to automatically GC deleted room references
+local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
 	if roomFloorCache[roomFolder] then
@@ -167,7 +377,7 @@ local function alignToFloorLevel(position: Vector3, roomFolder: Instance?, floor
 	raycastParams.FilterDescendantsInstances = floorParts
 
 	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -30, 0), raycastParams)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -200, 0), raycastParams)
 
 	if rayResult then
 		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
@@ -409,6 +619,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local skipCurrentRoom = false
 	local regenPathRequested = false
 	local isMoveToActive = false
+	local isBeingCrucified = false
 	
 	local reboundRequestedOffset: number? = nil
 	local reboundRequestedDelayBefore: number = 0
@@ -471,92 +682,144 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local shakerInstance: any?
 	local sustainedShake: any?
 
-	local function startCameraShake()
-		if not RunService:IsClient() or not enableShake or renderConnection then return end
+	-- Camera Shake Stop Function (Stops ONLY the entity's proximity shake, keeping shakerInstance available for crucifixion)
+	local function stopCameraShake(destroyShaker: boolean?)
+		isMovementFinished = true
+		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+			sustainedShake:StartFadeOut(0.2)
+			sustainedShake = nil 
+		end
+		if renderConnection then 
+			renderConnection:Disconnect()
+			renderConnection = nil 
+		end
+		if destroyShaker and shakerInstance and typeof(shakerInstance.Stop) == "function" then
+			task.delay(0.2, function()
+				if shakerInstance then 
+					shakerInstance:Stop()
+					shakerInstance = nil 
+				end
+			end)
+		end
+	end
 
-		shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
-			local camera = Workspace.CurrentCamera
-			if camera and camera.CameraSubject then
-				camera.CFrame = camera.CFrame * shakeCFrame
+	-- Camera Shake Start Function
+	local function startCameraShake()
+		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
+
+		if typeof(CameraShaker) == "table" and typeof(CameraShaker.new) == "function" then
+			shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
+				local camera = Workspace.CurrentCamera
+				if camera and camera.CameraSubject then
+					camera.CFrame = camera.CFrame * shakeCFrame
+				end
+			end)
+			if shakerInstance and typeof(shakerInstance.Start) == "function" then
+				shakerInstance:Start()
 			end
-		end)
-		shakerInstance:Start()
+		end
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
-			if shakerInstance then shakerInstance:Update(dt) end
+			if shakerInstance and typeof(shakerInstance.Update) == "function" then 
+				shakerInstance:Update(dt) 
+			end
 
 			if isMovementFinished or not model or not model.Parent then
-				if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
-				if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-				task.delay(0.2, function()
-					if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
-				end)
+				stopCameraShake(true)
 				return
 			end
 
-			if isMoving and not isStopped then
+			if isMoving and not isStopped and not isBeingCrucified then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
 					local hrpPos = character.HumanoidRootPart.Position
 					local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					local distance = (hrpPos - entityPos).Magnitude
 
-					if character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
+					-- 1. HITBOX & DAMAGE / CRUCIFIX CHECK
+					if not isBeingCrucified and character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
 							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
 						end
 
 						if canHit then
-							hasHitPlayerThisPass = true
-							local humanoid = character:FindFirstChildOfClass("Humanoid")
-							if humanoid then humanoid:TakeDamage(damageAmount) end
+							-- First, confirm Line of Sight before processing damage or crucifix usage
+							local hasLoS = checkLineOfSight(model)
+							if hasLoS then
+								-- Line of Sight is confirmed; now check for crucifix
+								local hasCrucifix, tool = checkForEquippedCrucifix(character)
+								if hasCrucifix and tool then
+									-- CRUCIFIX ACTION: Stop entity movement and entity shake, but preserve shakerInstance for animation
+									isBeingCrucified = true
+									isStopped = true
+									if currentTween then currentTween:Cancel(); currentTween = nil end
+									tool:Destroy()
 
-							if type(callbacks.OnKillPlayer) == "function" then
-								task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									-- Stop entity proximity shake without destroying shakerInstance
+									stopCameraShake(false)
+
+									if type(callbacks.OnCrucifixion) == "function" then
+										task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
+									end
+
+									task.spawn(function()
+										performCrucifixion(model, character, shakerInstance)
+										isMovementFinished = true
+									end)
+									return
+								else
+									-- NO CRUCIFIX: Apply normal player damage
+									hasHitPlayerThisPass = true
+									local humanoid = character:FindFirstChildOfClass("Humanoid")
+									if humanoid then humanoid:TakeDamage(damageAmount) end
+
+									if type(callbacks.OnKillPlayer) == "function" then
+										task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									end
+								end
 							end
 						end
 					end
 
 					lastEntityPosition = entityPos
 
-					if type(callbacks.OnSeePlayer) == "function" then
+					-- 2. STANDALONE LINE OF SIGHT CALLBACK CHECK
+					if not isBeingCrucified and type(callbacks.OnSeePlayer) == "function" then
 						local canSee, playerChar = checkLineOfSight(model)
 						if canSee and playerChar then
 							task.spawn(callbacks.OnSeePlayer, model, playerChar, actionsHandle)
 						end
 					end
 
-					if distance <= shakeRadius then
-						if not sustainedShake then
+					-- 3. CAMERA SHAKE UPDATE
+					if distance <= shakeRadius and shakerInstance then
+						if not sustainedShake and typeof(CameraShaker.CameraShakeInstance) == "table" then
 							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
 							rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
 							rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
-							sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							if typeof(shakerInstance.ShakeSustain) == "function" then
+								sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
+							end
 						end
 
-						local distanceRatio = 1 - (distance / shakeRadius)
-						local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
-						sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						if sustainedShake then
+							local distanceRatio = 1 - (distance / shakeRadius)
+							local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
+							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
+						end
 					else
-						if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+						if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+							sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
+						end
 					end
 				end
 			else
-				if sustainedShake then sustainedShake:StartFadeOut(0.3); sustainedShake = nil end
+				if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
+					sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
+				end
 			end
 		end)
-	end
-
-	local function stopCameraShake()
-		isMovementFinished = true
-		if sustainedShake then sustainedShake:StartFadeOut(0.2); sustainedShake = nil end
-		if renderConnection then renderConnection:Disconnect(); renderConnection = nil end
-		if shakerInstance then
-			task.delay(0.2, function()
-				if shakerInstance then shakerInstance:Stop(); shakerInstance = nil end
-			end)
-		end
 	end
 
 	if model.Parent ~= Workspace then model.Parent = Workspace end
@@ -566,7 +829,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local latestRoomValue = gameData and gameData:WaitForChild("LatestRoom", 10)
 
 	if not currentRooms or not latestRoomValue then
-		stopCameraShake()
+		stopCameraShake(true)
 		return
 	end
 
@@ -630,11 +893,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local function moveDirectTo(targetPos: Vector3?, customSpeed: number?)
 		if not targetPos or not model or not model.Parent or skipCurrentRoom or regenPathRequested then return end
 
-		-- Yield if MoveTo or Stop is active
-		while (isStopped or isMoveToActive) and not skipCurrentRoom and not regenPathRequested do
+		while (isStopped or isMoveToActive or isBeingCrucified) and not skipCurrentRoom and not regenPathRequested do
 			task.wait(0.05)
 		end
-		if skipCurrentRoom or regenPathRequested then return end
+		if skipCurrentRoom or regenPathRequested or not model or not model.Parent or isBeingCrucified then return end
 
 		local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 		local segmentDistance = (targetPos - currentPos).Magnitude
@@ -676,7 +938,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
-		-- Instantly cancel active room tween
 		if currentTween then
 			currentTween:Cancel()
 			currentTween = nil
@@ -691,7 +952,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local customHeight = cfg.HeightOffset or heightOffset
 		local lastTargetPos: Vector3? = nil
 
-		while isMoveToActive and model and model.Parent and not skipCurrentRoom do
+		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
 			local currentTargetPos = resolveTargetPosition(target)
 			if not currentTargetPos then break end
 
@@ -702,7 +963,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				lastTargetPos = currentTargetPos
 				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
 				
-				-- Directly step toward target without invoking pathing loops
 				local dist = (groundTargetPos - entityPos).Magnitude
 				if dist > reachDistance then
 					local travelTime = math.max(0.01, dist / moveSpeed)
@@ -737,7 +997,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		isMoveToActive = false
-		regenPathRequested = true -- Recalculate main room path after chasing finishes
+		regenPathRequested = true
 	end
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
@@ -755,18 +1015,21 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fullPathVisuals = renderDebugWaypoints(allNodes)
 		end
 
-		if startNode and not skipCurrentRoom and not regenPathRequested then
+		if startNode and not skipCurrentRoom and not regenPathRequested and not isBeingCrucified then
 			moveDirectTo(startNode + heightVector)
 		end
 
 		local idx = 1
 		while idx <= #waypoints do
-			if skipCurrentRoom then break end
+			if skipCurrentRoom or isBeingCrucified then break end
 
-			while isMoveToActive do
+			while isMoveToActive or isBeingCrucified do
 				task.wait(0.05)
 				regenPathRequested = true
+				if isBeingCrucified then break end
 			end
+
+			if isBeingCrucified then break end
 
 			if regenPathRequested then
 				regenPathRequested = false
@@ -788,7 +1051,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			idx += 1
 		end
 
-		if endNode and not skipCurrentRoom then moveDirectTo(endNode + heightVector) end
+		if endNode and not skipCurrentRoom and not isBeingCrucified then moveDirectTo(endNode + heightVector) end
 		if fullPathVisuals then fullPathVisuals:Destroy() end
 	end
 
@@ -828,7 +1091,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 		else
-			while model and model.Parent and currentRoomIndex >= targetRoomIndex do
+			while model and model.Parent and currentRoomIndex >= targetRoomIndex and not isBeingCrucified do
 				skipCurrentRoom = false
 				local roomFolder = currentRooms:FindFirstChild(tostring(currentRoomIndex))
 				if roomFolder then
@@ -837,7 +1100,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						moveAlongWaypoints(exitFront, entBack, roomFolder, exitFront, entBack)
 					end
 				end
-				if currentRoomIndex == targetRoomIndex then break end
+				if currentRoomIndex == targetRoomIndex or isBeingCrucified then break end
 				currentRoomIndex -= 1
 				task.wait()
 			end
@@ -847,7 +1110,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runForwardPass()
-		while model and model.Parent do
+		while model and model.Parent and not isBeingCrucified do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -879,7 +1142,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function runBackwardPass()
-		while model and model.Parent do
+		while model and model.Parent and not isBeingCrucified do
 			skipCurrentRoom = false
 			regenPathRequested = false
 
@@ -911,7 +1174,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	while model and model.Parent do
+	while model and model.Parent and not isBeingCrucified do
 		hasHitPlayerThisPass = false
 		lastEntityPosition = nil
 
@@ -920,7 +1183,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 		if isForwardStep then runForwardPass() else runBackwardPass() end
 
-		if isRebound and currentReboundState < targetReboundCount then
+		if isRebound and currentReboundState < targetReboundCount and not isBeingCrucified then
 			isMoving = false
 			currentReboundState += 1
 
@@ -935,6 +1198,13 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			end
 		else
 			break
+		end
+	end
+
+	-- Despawn / Crucifixion Cleanup
+	if isBeingCrucified then
+		while isBeingCrucified and model and model.Parent do
+			task.wait(0.1)
 		end
 	end
 
@@ -964,17 +1234,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			fallTween:Play()
 			fallTween.Completed:Wait()
 			
-			stopCameraShake()
+			stopCameraShake(true)
 			connection:Disconnect()
 			CFrameValue:Destroy()
 		end
 
 		stopEntitySounds(model)
 		task.wait(1)
-		model:Destroy()
+		if model and model.Parent then model:Destroy() end
 	end
-	
-	table.clear(roomFloorCache)
 end
 
 return PathfindingMovement
