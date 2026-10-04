@@ -61,6 +61,10 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                 OnKillPlayer = function(model, playerCharacter, actions)
                 end,
 
+                OnCrucifixion = function(model: Model | BasePart, actions)
+		    model:SetAttribute("Crucified", true)
+	        end,
+
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
                         model.Slam:Play()
