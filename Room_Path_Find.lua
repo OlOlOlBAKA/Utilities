@@ -1,6 +1,15 @@
 --!nocheck
--- CREDIT AND INSPIRED BY VYNIXU ENTITIY SPAWNER
-local Utilities = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/refs/heads/main/Functions.lua"))()
+-- CREDIT AND INSPIRED BY VYNIXU ENTITY SPAWNER
+local Utilities = nil
+local success, result = pcall(function()
+	return loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
+end)
+
+if success and result then
+	Utilities = result
+else
+	warn("PathfindingMovement: Failed to load RegularVynixu Utilities ->", result)
+end
 
 local PathfindingMovement = {}
 PathfindingMovement.__index = PathfindingMovement
@@ -23,11 +32,11 @@ task.spawn(function()
 	if modulesClient then
 		local moduleEventsScript = modulesClient:WaitForChild("Module_Events", 5)
 		if moduleEventsScript then
-			local success, result = pcall(require, moduleEventsScript)
-			if success then
-				Module_Events = result
+			local ok, res = pcall(require, moduleEventsScript)
+			if ok then
+				Module_Events = res
 			else
-				warn("PathfindingMovement: Failed to load Module_Events ->", result)
+				warn("PathfindingMovement: Failed to load Module_Events ->", res)
 			end
 		end
 	end
@@ -40,8 +49,20 @@ local Assets = {
 }
 
 task.spawn(function()
-	-- LoadCustomInstance comes from Utilities library
-	Assets.Repentance = Utilities.LoadCustomInstance(REPENTANCE_URL)
+	local loadFn = (Utilities and Utilities.LoadCustomInstance) 
+		or (Utilities and Utilities.Functions and Utilities.Functions.LoadCustomInstance) 
+		or getgenv().LoadCustomInstance
+
+	if type(loadFn) == "function" then
+		local ok, customInst = pcall(loadFn, REPENTANCE_URL)
+		if ok and customInst then
+			Assets.Repentance = customInst
+		else
+			warn("PathfindingMovement: Failed to load Repentance Asset ->", customInst)
+		end
+	else
+		warn("PathfindingMovement: Could not resolve LoadCustomInstance function.")
+	end
 end)
 
 type MoveToConfig = {
@@ -507,7 +528,10 @@ end
 
 function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local model = options.Model
-	if not model then return end
+	if not model then 
+		warn("PathfindingMovement: Missing options.Model!")
+		return 
+	end
 
 	disableCollision(model)
 
@@ -589,8 +613,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		LightFlicker = function(room: Instance | number, durationAmount: number?, amount: number?)
 			triggerLightFlicker(room, durationAmount or duration, amount)
 		end,
-		LightBreak = function(room: Instance | number, amount: number?, breakSpeed: number?)
-			triggerLightBreak(room, amount, breakSpeed)
+		LightBreak = function(room: Instance | number, amount: number?, speedAmount: number?)
+			triggerLightBreak(room, amount, speedAmount)
 		end,
 		ToggleLight = function(room: Instance | number, state: boolean, ambientColor: Color3?)
 			triggerToggleLight(room, state, ambientColor)
@@ -644,7 +668,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							isStopped = true
 							if currentTween then currentTween:Cancel(); currentTween = nil end
 
-							-- Trigger OnCrucified callback
 							if type(callbacks.OnCrucified) == "function" then
 								task.spawn(callbacks.OnCrucified, model, character, actionsHandle)
 							end
@@ -719,7 +742,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 	local latestRoomValue = gameData and gameData:WaitForChild("LatestRoom", 10)
 
-	if not currentRooms or not latestRoomValue then
+	if not currentRooms then
+		warn("PathfindingMovement: 'Workspace.CurrentRooms' not found. Ensure DOORS has fully loaded.")
+		stopCameraShake()
+		return
+	end
+
+	if not latestRoomValue then
+		warn("PathfindingMovement: 'ReplicatedStorage.GameData.LatestRoom' not found.")
 		stopCameraShake()
 		return
 	end
