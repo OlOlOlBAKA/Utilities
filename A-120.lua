@@ -2,7 +2,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
-            Speed = 75,
+            Speed = 60,
             HeightOffset = 6,
             FloorYOffset = -2,
             DelayTime = 5,
@@ -45,11 +45,11 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
                     if playerCharacter and playerCharacter.PrimaryPart then
-                        task.wait(1.5)
+                        task.wait(0.5)
 				        actions.Stop()
                         task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 5), {
-                            Speed = 70,
+                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 3), {
+                            Speed = 60,
                             ReachDistance = 3,
                             HeightOffset = 5
                         })
