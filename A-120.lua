@@ -47,7 +47,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                     if playerCharacter and playerCharacter.PrimaryPart then
                         actions.Stop()
                         task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart, {
+                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 5), {
                             Speed = 60,
                             ReachDistance = 5,
                             HeightOffset = 5
