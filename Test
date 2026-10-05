@@ -63,7 +63,7 @@ local function countHidingSpots(roomModel)
     if assets then
         for _, child in ipairs(assets:GetChildren()) do
             -- Checks for Wardrobes or other standard hiding spot model names
-            if child.Name == "Wardrobe" or child.Name == "Locker" or child.Name == "Bed" then
+            if child.Name == "Wardrobe" or child.Name == "Locker" or child.Name == "Bed" or child.Name == "Backdoor_Wardrobe" then
                 count = count + 1
             end
         end
