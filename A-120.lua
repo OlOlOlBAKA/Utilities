@@ -2,16 +2,16 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
-            Speed = 60,
-            HeightOffset = 5,
+            Speed = 75,
+            HeightOffset = 6,
             FloorYOffset = -2,
             DelayTime = 5,
             SpawnOffsetRooms = 5,
             AttackType = "Front",
 
-            HitboxRange = 25,
+            HitboxRange = 40,
             RaycastHitbox = true,
-            SphereRadius = 4,
+            SphereRadius = 3.5,
             Damage = 100,
 
             LightFlicker = false,
@@ -25,7 +25,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
             EnableCameraShake = true,
             ShakeAmount = 2.5,
-            ShakeRadius = 30,
+            ShakeRadius = 100
 
             ShowPath = false,
 
@@ -45,11 +45,12 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
                     if playerCharacter and playerCharacter.PrimaryPart then
-                        actions.Stop()
+                        task.wait(1.5)
+				        actions.Stop()
                         task.wait(0.1)
                         actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 5), {
-                            Speed = 60,
-                            ReachDistance = 5,
+                            Speed = 70,
+                            ReachDistance = 3,
                             HeightOffset = 5
                         })
                         task.wait(0.1)
