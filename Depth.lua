@@ -92,7 +92,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                            Title = "Deeper Even More",
                            Desc = "Banished where it belongs.",
                            Reason = "Use a Crucifix against Depth.",
-                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                           Image = customImage("crucifiedDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
                        })
 			        end
 			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
@@ -101,7 +101,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                            Title = "The Deep Shift",
                            Desc = "Everything here just turned blue...",
                            Reason = "Successfully survived Depth.",
-                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/%E0%B9%84%E0%B8%A1%E0%B9%88%E0%B8%A1%E0%B8%B5%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%2092_20261006170600.png?raw=true")
                        })
 			        end
 	            end,
@@ -116,7 +116,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                            Title = "The Deep Shift",
                            Desc = "Everything here just turned blue...",
                            Reason = "Successfully survived Depth.",
-                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/%E0%B9%84%E0%B8%A1%E0%B9%88%E0%B8%A1%E0%B8%B5%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%2092_20261006170600.png?raw=true")
                        })
 			        end
                 end
