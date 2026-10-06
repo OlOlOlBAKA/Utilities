@@ -31,6 +31,10 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
             Callbacks = {
                 OnSpawned = function(model, actions)
+			        local lf = Instance.new("Sound", model)
+			        lf.SoundId = "rbxassetid://82673534432571"
+			        lf.Volume = 1.5
+			        lf:Play()
                     for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
                         if room ~= workspace.CurrentRooms:FindFirstChild(game.ReplicatedStorage.GameData.LatestRoom.Value + 1) then
                             actions.ToggleLight(room, true, Color3.fromRGB(0, 100, 255))
@@ -62,13 +66,16 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                 end,
 
                 OnCrucifixion = function(model: Model | BasePart, actions)
-		    model:SetAttribute("Crucified", true)
-	        end,
+		            model:SetAttribute("Crucified", true)
+	            end,
 
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
                         model.Slam:Play()
                     end
+			        if game.Players.LocalPlayer:GetAttribute("Alive") == true then
+
+			        end
                 end
             }
         }
