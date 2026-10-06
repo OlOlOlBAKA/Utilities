@@ -12,8 +12,6 @@ local function customImage(name, link)
 	end
 end
 
-_G.SurviveDepth = false
-_G.CrucifyDepth = false
 -- CREDIT TO REGULAR VYNIXU
 local CustomAchievements = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/DOORS-Custom-Achievements/main/init.luau"))()
 
