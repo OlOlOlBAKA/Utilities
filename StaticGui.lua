@@ -12,7 +12,7 @@ if playerGui:FindFirstChild("StaticScreenGui") then return end
 
 -- 1. Configuration Settings
 local BASE_TRANSPARENCY = 0.9 -- Default max transparency (faint/idle)
-local MIN_TRANSPARENCY = 0.5  -- Min transparency when monster is on top of player (heavy static)
+local MIN_TRANSPARENCY = 0.6  -- Min transparency when monster is on top of player (heavy static)
 local MAX_DETECTION_DIST = 200 -- Distance in studs where static starts ramping up
 local FADE_SPEED = 3 -- Speed multiplier for smooth transparency transition
 
