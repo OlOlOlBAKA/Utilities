@@ -484,7 +484,7 @@ local function checkAdvancedHitbox(
 	return false
 end
 
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?, entityModel: Instance?): {Vector3}
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
 	local distance = (endPos - startPos).Magnitude
 	if distance ~= distance or distance == 0 then return {} end
 
@@ -496,43 +496,21 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		Costs = { Default = 1 }
 	})
 
-	-- Detect when pathing becomes blocked dynamically
-	local pathBlockedConnection
-	pathBlockedConnection = primaryPath.Blocked:Connect(function(blockedIndex)
-		local waypoints = primaryPath:GetWaypoints()
-		if waypoints and blockedIndex > 1 and waypoints[blockedIndex - 1] and waypoints[blockedIndex] then
-			local wpStart = waypoints[blockedIndex - 1].Position
-			local wpEnd = waypoints[blockedIndex].Position
-			
-			local blockingPart = findBlockingPart(wpStart, wpEnd, entityModel)
-			if blockingPart then
-				warn("[PathfindingMovement] Path blocked at Waypoint", blockedIndex, "| Blocking Part:", blockingPart:GetFullName())
-			else
-				warn("[PathfindingMovement] Path blocked at Waypoint", blockedIndex, "| Blocking Part: Unknown Geometry")
-			end
-		end
-	end)
-
 	local success = pcall(function()
 		primaryPath:ComputeAsync(startPos, endPos)
-	end)
-
-	-- Disconnect listener once initial path calculation is done
-	task.delay(1, function()
-		if pathBlockedConnection then
-			pathBlockedConnection:Disconnect()
-		end
 	end)
 
 	local filteredWaypoints: {Vector3} = {}
 
 	local function processWaypointCandidate(pos: Vector3)
 		local distToStart = (pos - startPos).Magnitude
-		if distToStart <= 10 or (pos - endPos).Magnitude <= 10 then return end
+		local distToEnd = (pos - endPos).Magnitude
+		if distToStart <= 10 or distToEnd <= 10 then return end
 
 		local lastPos = filteredWaypoints[#filteredWaypoints]
 		if lastPos then
-			if (pos - lastPos).Magnitude < 10 then return end
+			local distToLast = (pos - lastPos).Magnitude
+			if distToLast < 10 then return end
 		end
 
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
@@ -544,12 +522,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 			processWaypointCandidate(wp.Position)
 		end
 		return filteredWaypoints
-	else
-		-- Log if path computation directly fails due to an obstacle surrounding the start/end
-		local blockingPart = findBlockingPart(startPos, endPos, entityModel)
-		if blockingPart then
-			warn("[PathfindingMovement] Path computation failed! Blocking Part:", blockingPart:GetFullName())
-		end
 	end
 
 	local steps = math.max(2, math.ceil(distance / 10))
@@ -561,7 +533,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 
 	return filteredWaypoints
 end
-
 
 local function resolveTargetPosition(target: Vector3 | BasePart | Model): Vector3?
 	if typeof(target) == "Vector3" then
