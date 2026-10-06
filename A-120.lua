@@ -45,7 +45,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
                     if playerCharacter and playerCharacter.PrimaryPart then
-                        task.wait(0.5)
+                        task.wait(0.75)
 				        actions.Stop()
                         task.wait(0.1)
                         actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 3), {
