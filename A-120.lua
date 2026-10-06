@@ -9,8 +9,8 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
             SpawnOffsetRooms = 5,
             AttackType = "Front",
 
-            HitboxRange = 40,
-            RaycastHitbox = true,
+            HitboxRange = 25,
+            RaycastHitbox = false,
             SphereRadius = 3.5,
             Damage = 100,
 
