@@ -1,0 +1,322 @@
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local HasteModule = {}
+
+local isRunning = false
+
+local CameraShakerModule
+pcall(function()
+	CameraShakerModule = require(ReplicatedStorage:WaitForChild("CameraShaker", 5))
+end)
+
+local function createAmbienceSound()
+	local sound = Instance.new("Sound")
+	sound.Name = "Ambience"
+	sound.SoundId = "rbxassetid://16695425474"
+	sound.MaxDistance = 20
+	sound.EmitterSize = 1
+	sound.Volume = 0.525
+	sound.PlaybackSpeed = 1
+	sound.Looped = true
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+	sound.Parent = SoundService
+
+	local distortion = Instance.new("DistortionSoundEffect")
+	distortion.Level = 0.63
+	distortion.Parent = sound
+
+	local equalizer = Instance.new("EqualizerSoundEffect")
+	equalizer.HighGain = 6
+	equalizer.LowGain = 3
+	equalizer.MidGain = 0
+	equalizer.Parent = sound
+
+	return sound
+end
+
+local function createStaticSound()
+	local sound = Instance.new("Sound")
+	sound.Name = "Static"
+	sound.SoundId = "rbxassetid://9116302323"
+	sound.MaxDistance = 20
+	sound.EmitterSize = 1
+	sound.Volume = 0.2
+	sound.PlaybackSpeed = 19
+	sound.Looped = true
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+	sound.Parent = SoundService
+
+	local distortion = Instance.new("DistortionSoundEffect")
+	distortion.Level = 1
+	distortion.Parent = sound
+
+	local equalizer = Instance.new("EqualizerSoundEffect")
+	equalizer.HighGain = -80
+	equalizer.LowGain = 10
+	equalizer.MidGain = -20
+	equalizer.Parent = sound
+
+	return sound
+end
+
+local function createHasteScreen()
+	local hasteImage = Instance.new("ImageLabel")
+	hasteImage.Name = "HasteScreen"
+	hasteImage.BackgroundTransparency = 1
+	hasteImage.AnchorPoint = Vector2.new(0.5, 0.5)
+	hasteImage.Position = UDim2.new(1, 0, -2, 0)
+	hasteImage.Size = UDim2.new(7, 0, 5, 0)
+	hasteImage.SizeConstraint = Enum.SizeConstraint.RelativeXX
+	hasteImage.ZIndex = -11
+	hasteImage.Image = "rbxassetid://16664547202"
+	hasteImage.ImageColor3 = Color3.fromRGB(255, 0, 0)
+	hasteImage.ResampleMode = Enum.ResamplerMode.Pixelated
+	hasteImage.ScaleType = Enum.ScaleType.Tile
+	hasteImage.SliceCenter = Rect.new(500, 500, 500, 500)
+	hasteImage.SliceScale = 0.75
+	hasteImage.TileSize = UDim2.new(0.025, 0, 0.013, 0)
+
+	return hasteImage
+end
+
+local function getEntityModel()
+	local success, objects = pcall(function()
+		return game:GetObjects("rbxassetid://87400018481813")
+	end)
+	if success and objects and objects[1] then
+		return objects[1]
+	end
+	return nil
+end
+
+function HasteModule.Run(p1, cancel)
+	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local mainUI = LocalPlayer.PlayerGui:WaitForChild("MainUI")
+	local dreadVignette = mainUI:WaitForChild("MainFrame"):WaitForChild("DreadVignette")
+
+	if p1.dead then return end
+	if cancel then
+		isRunning = false
+		return
+	end
+
+	local ambienceSound = createAmbienceSound()
+	local staticSound = createStaticSound()
+	local hasteScreenImage = createHasteScreen()
+	local entityModel = getEntityModel()
+
+	if not entityModel or not entityModel.PrimaryPart then
+		warn("[HasteModule] Failed to load EntityModel!")
+		return
+	end
+
+	local sanityClone = Lighting:WaitForChild("Sanity"):Clone()
+	sanityClone.Name = "LiveSanity"
+	sanityClone.Enabled = true
+	sanityClone.Parent = workspace.CurrentCamera
+
+	local eqClone = SoundService:WaitForChild("Main"):WaitForChild("SanityEqualizer"):Clone()
+	eqClone.Name = "SanityEqualizerLive"
+	eqClone.Enabled = true
+	eqClone.Parent = SoundService.Main
+
+	TweenService:Create(sanityClone, TweenInfo.new(0.1, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+		Saturation = 0, Brightness = 6, Contrast = 12, TintColor = Color3.new(1.5, 0.2, 0)
+	}):Play()
+
+	TweenService:Create(eqClone, TweenInfo.new(0.1, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {
+		LowGain = 0, MidGain = -3, HighGain = -5
+	}):Play()
+
+	local camShakerObj = p1.camShaker
+	if not camShakerObj and CameraShakerModule then
+		pcall(function()
+			camShakerObj = CameraShakerModule.new(Enum.RenderPriority.Camera.Value, function(shakeCFrame)
+				workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame * shakeCFrame
+			end)
+			camShakerObj:Start()
+		end)
+	end
+
+	local shake1, shake2
+	if camShakerObj and camShakerObj.StartShake then
+		shake1 = camShakerObj:StartShake(1, 12, 0.1, Vector3.zero)
+		shake2 = camShakerObj:StartShake(5, 1, 0.1, Vector3.zero)
+	end
+
+	isRunning = true
+
+	ambienceSound.Volume = 0
+	TweenService:Create(ambienceSound, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), { Volume = 0.525 }):Play()
+	ambienceSound:Play()
+
+	task.wait(0.1)
+
+	dreadVignette.ImageColor3 = Color3.new(1, 0, 0)
+	dreadVignette.Size = UDim2.new(2, 0, 2, 0)
+	TweenService:Create(dreadVignette, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		ImageColor3 = Color3.new(0, 0, 0), Size = UDim2.new(1.2, 0, 1.2, 0)
+	}):Play()
+
+	for _, frame in ipairs(dreadVignette:GetChildren()) do
+		if frame:IsA("Frame") then
+			frame.BackgroundColor3 = Color3.new(1, 0, 0)
+			TweenService:Create(frame, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+				BackgroundColor3 = Color3.new(0, 0, 0)
+			}):Play()
+		end
+	end
+	dreadVignette.Visible = true
+
+	local spawnOffset = (p1.cam.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit * -1000
+	entityModel.PrimaryPart.CFrame = CFrame.new(char.PrimaryPart.Position + spawnOffset)
+	entityModel.Parent = workspace
+
+	if entityModel.PrimaryPart:FindFirstChild("Footsteps") then entityModel.PrimaryPart.Footsteps:Play() end
+	if entityModel.PrimaryPart:FindFirstChild("PlaySound") then entityModel.PrimaryPart.PlaySound:Play() end
+
+	local moveSpeed = 80
+	local bindName = "HasteCameraLock_" .. tostring(math.random(1000, 9999))
+
+	while isRunning and not p1.dead do
+		local deltaTime = task.wait()
+		local distance = (entityModel.PrimaryPart.Position - char.PrimaryPart.Position).Magnitude
+
+		if distance < 60 then moveSpeed = 40 end
+
+		if distance < 20 then
+			entityModel.PrimaryPart.CFrame = CFrame.new(char.PrimaryPart.Position + p1.cam.CFrame.LookVector * 7)
+			p1.char.PrimaryPart.Anchored = true
+			p1.stopcam = true
+
+			RunService:BindToRenderStep(bindName, Enum.RenderPriority.Camera.Value + 1, function()
+				if entityModel and entityModel.PrimaryPart and char and char.PrimaryPart then
+					local targetPos = entityModel.PrimaryPart.Position + Vector3.new(0, 1, 0)
+					char:PivotTo(CFrame.new(char.PrimaryPart.Position, entityModel.PrimaryPart.Position))
+					p1.cam.CFrame = CFrame.new(p1.cam.CFrame.Position, targetPos)
+				end
+			end)
+
+			for _, part in ipairs(p1.char:GetDescendants()) do
+				if part:IsA("BasePart") then
+					local originalTransparency = part.Transparency
+					part.Transparency = 1
+					task.delay(1, function()
+						repeat task.wait(0.1) until p1.stopcam == false
+						part.Transparency = originalTransparency
+					end)
+				end
+			end
+
+			for _, particle in ipairs(entityModel:GetDescendants()) do
+				if particle:IsA("ParticleEmitter") then
+					particle:Emit(5)
+				end
+			end
+
+			hasteScreenImage.Parent = mainUI
+			hasteScreenImage.Visible = true
+
+			TweenService:Create(eqClone, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+				LowGain = -99, MidGain = -99, HighGain = -99
+			}):Play()
+
+			dreadVignette.ImageColor3 = Color3.new(1, 0, 0)
+			TweenService:Create(dreadVignette, TweenInfo.new(0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+				ImageColor3 = Color3.new(0, 0, 0), Size = UDim2.new(5, 0, 5, 0)
+			}):Play()
+
+			TweenService:Create(hasteScreenImage, TweenInfo.new(7, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
+				Position = UDim2.new(-2, 0, 2, 0)
+			}):Play()
+
+			sanityClone.TintColor = Color3.new(1, 0, 0)
+			sanityClone.Brightness = 2
+
+			if entityModel.PrimaryPart:FindFirstChild("Footsteps") then entityModel.PrimaryPart.Footsteps:Stop() end
+			if entityModel.PrimaryPart:FindFirstChild("PlaySound") then entityModel.PrimaryPart.PlaySound:Stop() end
+			
+			ambienceSound:Stop()
+			staticSound:Play()
+
+			dreadVignette.Swirl.ImageTransparency = 1
+
+			local endTime = tick() + 6
+			repeat
+				task.wait(0.1)
+			until p1.dead or not isRunning or tick() >= endTime or (p1.char:FindFirstChild("Humanoid") and p1.char.Humanoid.Health <= 0.5)
+
+			pcall(function()
+				RunService:UnbindFromRenderStep(bindName)
+			end)
+
+			staticSound:Stop()
+			hasteScreenImage:Destroy()
+			p1.char.PrimaryPart.Anchored = false
+			p1.stopcam = false
+
+			break
+		end
+
+		local direction = CFrame.lookAt(entityModel.PrimaryPart.Position, char.PrimaryPart.Position - char.PrimaryPart.Velocity).LookVector
+		local alpha = math.clamp(distance / 50, 0, 1)
+		local moveStep = math.min(moveSpeed * deltaTime, distance - 0.5)
+
+		entityModel.PrimaryPart.CFrame = CFrame.new(entityModel.PrimaryPart.Position + direction * moveStep)
+
+		dreadVignette.Rotation = math.random(0, 359)
+		dreadVignette.Position = UDim2.new(0.5 + math.random(-10, 10) / 1000, 0, 0.5 + math.random(-10, 10) / 1000, 0)
+		dreadVignette.Swirl.ImageTransparency = alpha
+		dreadVignette.Swirl.Rotation = math.random(0, 359)
+		dreadVignette.Swirl.Size = UDim2.new(alpha + 1, 0, alpha + 1, 0)
+	end
+
+	pcall(function()
+		RunService:UnbindFromRenderStep(bindName)
+	end)
+
+	dreadVignette.Visible = false
+	entityModel:Destroy()
+	if hasteScreenImage and hasteScreenImage.Parent then hasteScreenImage:Destroy() end
+	ambienceSound:Destroy()
+	staticSound:Destroy()
+
+	if shake1 and shake1.StartFadeOut then shake1:StartFadeOut(0.1) end
+	if shake2 and shake2.StartFadeOut then shake2:StartFadeOut(0.1) end
+
+	if not p1.dead then
+		task.wait(0.1)
+		TweenService:Create(sanityClone, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Saturation = 0, Contrast = 0, Brightness = 0, TintColor = Color3.new(1, 1, 1)
+		}):Play()
+
+		TweenService:Create(eqClone, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+			LowGain = 0, MidGain = 0, HighGain = 0
+		}):Play()
+		task.wait(1)
+	end
+
+	sanityClone:Destroy()
+	eqClone:Destroy()
+end
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+local p1 = {
+	dead = false,
+	cam = workspace.CurrentCamera,
+	char = character,
+	stopcam = false,
+	camShaker = nil
+}
+
+task.spawn(function()
+	HasteModule.Run(p1, false)
+end)
