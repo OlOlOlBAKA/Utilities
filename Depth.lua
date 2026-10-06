@@ -1,3 +1,22 @@
+local function customImage(name, link)
+	if isfile(name .. ".PNG") then
+		delfile(name .. ".PNG")
+    end
+    writefile(name .. ".PNG", game:HttpGet(link))
+
+	if getcustomasset then
+		task.delay(20, function()
+			delfile(name .. ".PNG")
+		end)
+		return getcustomasset(name .. ".PNG")
+	end
+end
+
+_G.SurviveDepth = false
+_G.CrucifyDepth = false
+-- CREDIT TO REGULAR VYNIXU
+local CustomAchievements = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/DOORS-Custom-Achievements/main/init.luau"))()
+
 local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
 
         local entityConfig = {
@@ -5,7 +24,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
             Speed = 150,
             HeightOffset = 5,
             FloorYOffset = -2,
-            DelayTime = 6,
+            DelayTime = 4,
             SpawnOffsetRooms = 5,
             AttackType = "Back",
 
@@ -67,14 +86,38 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnCrucifixion = function(model: Model | BasePart, actions)
 		            model:SetAttribute("Crucified", true)
+			        if _G.CrucifyDepth == false then
+				        _G.CrucifyDepth = true
+				        CustomAchievements:Grant({
+                           Title = "Deeper Even More",
+                           Desc = "Banished where it belongs.",
+                           Reason = "Use a Crucifix against Depth.",
+                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                       })
+			        end
+			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
+				       _G.SurviveDepth = true
+				       CustomAchievements:Grant({
+                           Title = "The Deep Shift",
+                           Desc = "Everything here just turned blue...",
+                           Reason = "Successfully survived Depth.",
+                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                       })
+			        end
 	            end,
 
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
                         model.Slam:Play()
                     end
-			        if game.Players.LocalPlayer:GetAttribute("Alive") == true then
-
+			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
+				       _G.SurviveDepth = true
+				       CustomAchievements:Grant({
+                           Title = "The Deep Shift",
+                           Desc = "Everything here just turned blue...",
+                           Reason = "Successfully survived Depth.",
+                           Image = customImage("surviveDepth", "https://github.com/OlOlOlBAKA/Utilities/blob/main/IMG_6375.png?raw=true")
+                       })
 			        end
                 end
             }
