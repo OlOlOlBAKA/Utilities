@@ -247,6 +247,15 @@ function HasteModule.Run(p1, cancel)
 
 			dreadVignette.Swirl.ImageTransparency = 1
 
+			task.delay(1.2, function()
+				if isRunning and char then
+					local humanoid = char:FindFirstChildOfClass("Humanoid")
+					if humanoid then
+						humanoid:TakeDamage(100)
+					end
+				end
+			end)
+
 			local endTime = tick() + 6
 			repeat
 				task.wait(0.1)
