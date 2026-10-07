@@ -947,21 +947,21 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
-		if currentTween then
-			currentTween:Cancel()
-			currentTween = nil
-		end
+executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
+	if currentTween then
+		currentTween:Cancel()
+		currentTween = nil
+	end
 
-		isMoveToActive = true
-		isStopped = false
+	isMoveToActive = true
+	isStopped = false
 
-		local cfg = config or {}
-		local moveSpeed = cfg.Speed or speed
-		local reachDistance = cfg.ReachDistance or 2
-		local customHeight = cfg.HeightOffset or heightOffset
-		local lastTargetPos: Vector3? = nil
+	local cfg = config or {}
+	local moveSpeed = cfg.Speed or speed
+	local reachDistance = cfg.ReachDistance or 2
+	local customHeight = cfg.HeightOffset or heightOffset
 
+	task.spawn(function()
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
 			local currentTargetPos = resolveTargetPosition(target)
 			if not currentTargetPos then break end
@@ -969,46 +969,33 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 			if (currentTargetPos - entityPos).Magnitude <= reachDistance then break end
 
-			if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
-				lastTargetPos = currentTargetPos
-				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-				
-				local dist = (groundTargetPos - entityPos).Magnitude
-				if dist > reachDistance then
-					local travelTime = math.max(0.01, dist / moveSpeed)
-					local direction = (groundTargetPos - entityPos).Unit
-					local targetCFrame = CFrame.lookAt(groundTargetPos, groundTargetPos + direction)
-					local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+			-- Compute pathfinding waypoints directly to the target
+			local waypoints = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model)
 
-					if model:IsA("BasePart") then
-						currentTween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
-						currentTween:Play()
-						currentTween.Completed:Wait()
-						currentTween = nil
-					elseif model:IsA("Model") then
-						local CFrameValue = Instance.new("CFrameValue")
-						CFrameValue.Value = model:GetPivot()
+			if #waypoints > 0 then
+				for _, wp in ipairs(waypoints) do
+					if not isMoveToActive or skipCurrentRoom or isBeingCrucified then break end
+					
+					-- Check if we are already close enough to the target mid-path
+					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+					if (currentTargetPos - currentPos).Magnitude <= reachDistance then break end
 
-						local connection = CFrameValue.Changed:Connect(function(newCFrame)
-							if model and model.Parent then model:PivotTo(newCFrame) end
-						end)
-
-						currentTween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
-						currentTween:Play()
-						currentTween.Completed:Wait()
-
-						connection:Disconnect()
-						CFrameValue:Destroy()
-						currentTween = nil
-					end
+					moveDirectTo(wp, moveSpeed)
 				end
+			else
+				-- Fallback to direct movement if pathfinding returns no waypoints
+				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+				moveDirectTo(groundTargetPos, moveSpeed)
 			end
-			task.wait(0.05)
+
+			task.wait(0.1)
 		end
 
 		isMoveToActive = false
 		regenPathRequested = true
-	end
+	end)
+end
+
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
