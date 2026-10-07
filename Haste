@@ -95,6 +95,26 @@ local function getEntityModel()
 	return nil
 end
 
+local function getDeathModule()
+	local mainUI = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
+	if mainUI then
+		local initiator = mainUI:FindFirstChild("Initiator")
+		if initiator then
+			local mainGame = initiator:FindFirstChild("Main_Game")
+			if mainGame then
+				local remoteListener = mainGame:FindFirstChild("RemoteListener")
+				if remoteListener then
+					local jumpscares = remoteListener:FindFirstChild("Jumpscares")
+					if jumpscares then
+						return jumpscares:FindFirstChild("Death")
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
 function HasteModule.Run(p1, cancel)
 	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local mainUI = LocalPlayer.PlayerGui:WaitForChild("MainUI")
@@ -247,7 +267,18 @@ function HasteModule.Run(p1, cancel)
 
 			dreadVignette.Swirl.ImageTransparency = 1
 
-			task.delay(1.2, function()
+			task.delay(1.5, function()
+				if isRunning then
+					local deathScript = getDeathModule()
+					if deathScript then
+						pcall(function()
+							require(deathScript)(p1)
+						end)
+					end
+				end
+			end)
+
+			task.delay(1.6, function()
 				if isRunning and char then
 					local humanoid = char:FindFirstChildOfClass("Humanoid")
 					if humanoid then
