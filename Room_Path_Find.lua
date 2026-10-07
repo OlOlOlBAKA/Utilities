@@ -947,7 +947,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
+	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
 	if currentTween then
 		currentTween:Cancel()
 		currentTween = nil
@@ -961,39 +961,42 @@ executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfi
 	local reachDistance = cfg.ReachDistance or 2
 	local customHeight = cfg.HeightOffset or heightOffset
 
-	task.spawn(function()
-		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
-			local currentTargetPos = resolveTargetPosition(target)
-			if not currentTargetPos then break end
+	-- Yields the thread sequentially until target destination is reached
+	while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
+		local currentTargetPos = resolveTargetPosition(target)
+		if not currentTargetPos then break end
 
-			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			if (currentTargetPos - entityPos).Magnitude <= reachDistance then break end
-
-			-- Compute pathfinding waypoints directly to the target
-			local waypoints = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model)
-
-			if #waypoints > 0 then
-				for _, wp in ipairs(waypoints) do
-					if not isMoveToActive or skipCurrentRoom or isBeingCrucified then break end
-					
-					-- Check if we are already close enough to the target mid-path
-					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-					if (currentTargetPos - currentPos).Magnitude <= reachDistance then break end
-
-					moveDirectTo(wp, moveSpeed)
-				end
-			else
-				-- Fallback to direct movement if pathfinding returns no waypoints
-				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-				moveDirectTo(groundTargetPos, moveSpeed)
-			end
-
-			task.wait(0.1)
+		local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+		local distToTarget = (currentTargetPos - entityPos).Magnitude
+		
+		-- Target reached: Exit MoveTo loop
+		if distToTarget <= reachDistance then 
+			break 
 		end
 
-		isMoveToActive = false
-		regenPathRequested = true
-	end)
+		-- Compute pathfinding waypoints toward target position
+		local waypoints = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model)
+
+		if #waypoints > 0 then
+			for _, wp in ipairs(waypoints) do
+				if not isMoveToActive or skipCurrentRoom or isBeingCrucified then break end
+
+				local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+				if (currentTargetPos - currentPos).Magnitude <= reachDistance then break end
+
+				moveDirectTo(wp, moveSpeed)
+			end
+		else
+			-- Fallback to direct movement if pathfinding yields no waypoints
+			local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+			moveDirectTo(groundTargetPos, moveSpeed)
+		end
+
+		task.wait(0.05)
+	end
+
+	isMoveToActive = false
+	regenPathRequested = true
 end
 
 
