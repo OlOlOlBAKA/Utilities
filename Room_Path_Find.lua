@@ -204,6 +204,37 @@ local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 	return false, nil
 end
 
+local function handleCrucifixRemoval(tool: Tool)
+	local toolHandlerServer = tool:FindFirstChild("ToolHandlerServer", true)
+	
+	if toolHandlerServer then
+		local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
+		local dropRemote = remotesFolder and remotesFolder:FindFirstChild("DropItem")
+		
+		if dropRemote then
+			-- Fire server remote to drop the tool
+			dropRemote:FireServer(tool)
+			
+			-- Listen for dropped instance in Workspace.Drops
+			task.spawn(function()
+				local dropsFolder = Workspace:WaitForChild("Drops", 3)
+				if dropsFolder then
+					local droppedItem = dropsFolder:WaitForChild(tool.Name, 3)
+					if droppedItem then
+						droppedItem:Destroy()
+					end
+				end
+			end)
+		else
+			tool:Destroy()
+		end
+	else
+		-- Simple fallback destruction if ToolHandlerServer is not present
+		tool:Destroy()
+	end
+end
+
+
 local function performCrucifixion(
 	entityModel: Instance, 
 	character: Model, 
@@ -754,7 +785,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 									isBeingCrucified = true
 									isStopped = true
 									if currentTween then currentTween:Cancel(); currentTween = nil end
-									tool:Destroy()
+									handleCrucifixRemoval(tool)
 
 									-- Stop entity proximity shake without destroying shakerInstance
 									stopCameraShake(false)
