@@ -204,46 +204,10 @@ local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 	return false, nil
 end
 
-local function handleCrucifixRemoval(tool: Tool)
-	task.wait(0.1)
-	local checkReal = game.Players.LocalPlayer.Character:FindFirstChild(tool.Name):FindFirstChildOfClass("Script")
-	for _,v in pairs(tool:GetChildren()) do
-		print(v.Name)
-	end
-	if checkReal then
-		local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
-		
-		if remotesFolder then
-			print("found")
-			-- Fire server remote to drop the tool
-			ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
-			task.wait(0.1)
-			print("dropped")
-			-- Listen for dropped instance in Workspace.Drops
-			task.spawn(function()
-				local dropsFolder = Workspace:WaitForChild("Drops", 3)
-				if dropsFolder then
-					local droppedItem = dropsFolder:WaitForChild(tool.Name, 3)
-					if droppedItem then
-						droppedItem:Destroy()
-					end
-				end
-			end)
-		else
-			tool:Destroy()
-		end
-	else
-		-- Simple fallback destruction if ToolHandlerServer is not present
-		tool:Destroy()
-	end
-end
-
-
 local function performCrucifixion(
 	entityModel: Instance, 
 	character: Model, 
-	shakerInstance: any,
-	tool: Tool,
+	shakerInstance: any
 )
 	if not CrucifixAssets.Repentance then return false end
 
@@ -266,7 +230,6 @@ local function performCrucifixion(
 	crucifix:PivotTo(character:GetPivot())
 	entityPart.CFrame = entityPivot
 	repentance.Parent = Workspace
-	handleCrucifixRemoval(tool)
 	sound:Play()
 
 	local theShake = nil
@@ -791,7 +754,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 									isBeingCrucified = true
 									isStopped = true
 									if currentTween then currentTween:Cancel(); currentTween = nil end
-
+									task.spawn(function()
+										if tool:FindFirstChildOfClass("Script") then
+											ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
+											task.wait()
+											workspace.Drops:WaitForChild(tool.Name,3):Destroy()
+										else
+											tool:Destroy()
+										end
+									end)
 									-- Stop entity proximity shake without destroying shakerInstance
 									stopCameraShake(false)
 
@@ -800,7 +771,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 									end
 
 									task.spawn(function()
-										performCrucifixion(model, character, shakerInstance, tool)
+										performCrucifixion(model, character, shakerInstance)
 										isMovementFinished = true
 									end)
 									return
