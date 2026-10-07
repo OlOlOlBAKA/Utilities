@@ -205,16 +205,16 @@ local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 end
 
 local function handleCrucifixRemoval(tool: Tool)
-	local checkReal = tool:GetAttribute("Interactable")
+	local checkReal = game.Players.LocalPlayer.Character:FindFirstChild(tool.Name):GetAttribute("Interactable")
 	
 	if checkReal == true then
 		local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
-		local dropRemote = remotesFolder and remotesFolder:FindFirstChild("DropItem")
 		
-		if dropRemote then
+		if remotesFolder then
 			-- Fire server remote to drop the tool
-			dropRemote:FireServer(tool)
+			ReplicatedStorage.RemotesFolder.DropItem:FireServer(game.Players.LocalPlayer.Character:FindFirstChild(tool.Name)
 			task.wait(0.25)
+			print("dropped")
 			-- Listen for dropped instance in Workspace.Drops
 			task.spawn(function()
 				local dropsFolder = Workspace:WaitForChild("Drops", 3)
