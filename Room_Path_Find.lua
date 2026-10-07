@@ -755,8 +755,11 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 									isStopped = true
 									if currentTween then currentTween:Cancel(); currentTween = nil end
 									task.spawn(function()
-										if tool:FindFirstChildOfClass("Script") then
+										if tool:FindFirstChildOfClass("RemoteEvent") then
 											ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
+										    for _,v in ipairs(tool:GetChildren()) do
+												print(v.Name)
+											end
 											task.wait()
 											workspace.Drops:WaitForChild(tool.Name,3):Destroy()
 										else
