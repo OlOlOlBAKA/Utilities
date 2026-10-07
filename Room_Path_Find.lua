@@ -484,7 +484,7 @@ local function checkAdvancedHitbox(
 	return false
 end
 
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?, entityModel: Instance?, isCustomMoveTo: boolean?): {Vector3}
 	local distance = (endPos - startPos).Magnitude
 	if distance ~= distance or distance == 0 then return {} end
 
@@ -503,14 +503,13 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local filteredWaypoints: {Vector3} = {}
 
 	local function processWaypointCandidate(pos: Vector3)
-		local distToStart = (pos - startPos).Magnitude
-		local distToEnd = (pos - endPos).Magnitude
-		if distToStart <= 10 or distToEnd <= 10 then return end
+		-- Skip room-distance pruning during custom MoveTo actions
+		if not isCustomMoveTo then
+			local distToStart = (pos - startPos).Magnitude
+			if distToStart <= 10 or (pos - endPos).Magnitude <= 10 then return end
 
-		local lastPos = filteredWaypoints[#filteredWaypoints]
-		if lastPos then
-			local distToLast = (pos - lastPos).Magnitude
-			if distToLast < 10 then return end
+			local lastPos = filteredWaypoints[#filteredWaypoints]
+			if lastPos and (pos - lastPos).Magnitude < 10 then return end
 		end
 
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
@@ -524,7 +523,8 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return filteredWaypoints
 	end
 
-	local steps = math.max(2, math.ceil(distance / 10))
+	-- Fallback linear interpolation if pathfinding fails
+	local steps = math.max(2, math.ceil(distance / 5))
 	for i = 1, steps do
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
@@ -533,6 +533,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 
 	return filteredWaypoints
 end
+
 
 local function resolveTargetPosition(target: Vector3 | BasePart | Model): Vector3?
 	if typeof(target) == "Vector3" then
@@ -948,98 +949,79 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
-    if currentTween then
-        currentTween:Cancel()
-        currentTween = nil
-    end
+	if currentTween then
+		currentTween:Cancel()
+		currentTween = nil
+	end
 
-    isMoveToActive = true
-    isStopped = false
+	isMoveToActive = true
+	isStopped = false
 
-    local cfg = config or {}
-    local moveSpeed = cfg.Speed or speed
-    local reachDistance = cfg.ReachDistance or 2
-    local customHeight = cfg.HeightOffset or heightOffset
-    local lastTargetPos: Vector3? = nil
+	local cfg = config or {}
+	local moveSpeed = cfg.Speed or speed
+	local reachDistance = cfg.ReachDistance or 2
+	local customHeight = cfg.HeightOffset or heightOffset
 
-    while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
-        local currentTargetPos = resolveTargetPosition(target)
-        if not currentTargetPos then break end
+	local currentTargetPos = resolveTargetPosition(target)
+	if currentTargetPos then
+		local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+		local distToTarget = (currentTargetPos - entityPos).Magnitude
 
-        local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-        if (currentTargetPos - entityPos).Magnitude <= reachDistance then break end
+		if distToTarget > reachDistance then
+			-- Pass `true` as the 7th parameter to disable 10-stud waypoint pruning
+			local waypointsToFollow = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model, true)
 
-        if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
-            lastTargetPos = currentTargetPos
+			for _, wayPointPos in ipairs(waypointsToFollow) do
+				if not isMoveToActive or skipCurrentRoom or isBeingCrucified or isStopped then break end
 
-            -- 1. Compute raw pathfinding waypoints straight to target
-            local path = PathfindingService:CreatePath({
-                AgentRadius = 1,
-                AgentHeight = 2.5,
-                AgentCanJump = false,
-                WaypointSpacing = 3
-            })
+				local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+				local dist = (wayPointPos - startPos).Magnitude
 
-            local success = pcall(function()
-                path:ComputeAsync(entityPos, currentTargetPos)
-            end)
+				if dist > 0.5 then
+					local travelTime = math.max(0.01, dist / moveSpeed)
+					
+					-- Keep movement horizontal/aligned by locking pitch orientation
+					local lookDirection = (wayPointPos - startPos)
+					if lookDirection.Magnitude > 0.001 then
+						lookDirection = Vector3.new(lookDirection.X, 0, lookDirection.Z).Unit
+					else
+						lookDirection = model:IsA("Model") and model:GetPivot().LookVector or model.CFrame.LookVector
+					end
 
-            local waypointsToFollow = {}
+					local targetCFrame = CFrame.lookAt(wayPointPos, wayPointPos + lookDirection)
+					local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
-            if success and path.Status == Enum.PathStatus.Success then
-                for _, wp in ipairs(path:GetWaypoints()) do
-                    local groundPos = alignToFloorLevel(wp.Position, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-                    table.insert(waypointsToFollow, groundPos)
-                end
-            else
-                -- Fallback to direct linear position if path fails
-                local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-                table.insert(waypointsToFollow, groundTargetPos)
-            end
+					if model:IsA("BasePart") then
+						currentTween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
+						currentTween:Play()
+						currentTween.Completed:Wait()
+						currentTween = nil
+					elseif model:IsA("Model") then
+						local CFrameValue = Instance.new("CFrameValue")
+						CFrameValue.Value = model:GetPivot()
 
-            -- 2. Traverse calculated waypoints using your original tween system
-            for _, wayPointPos in ipairs(waypointsToFollow) do
-                if not isMoveToActive or skipCurrentRoom or isBeingCrucified or isStopped then break end
+						local connection = CFrameValue.Changed:Connect(function(newCFrame)
+							if model and model.Parent then model:PivotTo(newCFrame) end
+						end)
 
-                local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-                local dist = (wayPointPos - startPos).Magnitude
+						currentTween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
+						currentTween:Play()
+						currentTween.Completed:Wait()
 
-                if dist > 0.5 then
-                    local travelTime = math.max(0.01, dist / moveSpeed)
-                    local direction = (wayPointPos - startPos).Unit
-                    local targetCFrame = CFrame.lookAt(wayPointPos, wayPointPos + direction)
-                    local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+						connection:Disconnect()
+						CFrameValue:Destroy()
+						currentTween = nil
+					end
+				end
+			end
+		end
+	end
 
-                    if model:IsA("BasePart") then
-                        currentTween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
-                        currentTween:Play()
-                        currentTween.Completed:Wait()
-                        currentTween = nil
-                    elseif model:IsA("Model") then
-                        local CFrameValue = Instance.new("CFrameValue")
-                        CFrameValue.Value = model:GetPivot()
-
-                        local connection = CFrameValue.Changed:Connect(function(newCFrame)
-                            if model and model.Parent then model:PivotTo(newCFrame) end
-                        end)
-
-                        currentTween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
-                        currentTween:Play()
-                        currentTween.Completed:Wait()
-
-                        connection:Disconnect()
-                        CFrameValue:Destroy()
-                        currentTween = nil
-                    end
-                end
-            end
-        end
-        task.wait(0.05)
-    end
-
-    isMoveToActive = false
-    regenPathRequested = true
+	-- Unlock active state so room movement resumes automatically
+	isMoveToActive = false
+	regenPathRequested = true
 end
+
 
 
 
