@@ -484,7 +484,7 @@ local function checkAdvancedHitbox(
 	return false
 end
 
-local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?, entityModel: Instance?, isCustomMoveTo: boolean?): {Vector3}
+local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOffset: number, floorYOffset: number, roomFolder: Instance?): {Vector3}
 	local distance = (endPos - startPos).Magnitude
 	if distance ~= distance or distance == 0 then return {} end
 
@@ -503,13 +503,14 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local filteredWaypoints: {Vector3} = {}
 
 	local function processWaypointCandidate(pos: Vector3)
-		-- Skip room-distance pruning during custom MoveTo actions
-		if not isCustomMoveTo then
-			local distToStart = (pos - startPos).Magnitude
-			if distToStart <= 10 or (pos - endPos).Magnitude <= 10 then return end
+		local distToStart = (pos - startPos).Magnitude
+		local distToEnd = (pos - endPos).Magnitude
+		if distToStart <= 10 or distToEnd <= 10 then return end
 
-			local lastPos = filteredWaypoints[#filteredWaypoints]
-			if lastPos and (pos - lastPos).Magnitude < 10 then return end
+		local lastPos = filteredWaypoints[#filteredWaypoints]
+		if lastPos then
+			local distToLast = (pos - lastPos).Magnitude
+			if distToLast < 10 then return end
 		end
 
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
@@ -523,8 +524,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		return filteredWaypoints
 	end
 
-	-- Fallback linear interpolation if pathfinding fails
-	local steps = math.max(2, math.ceil(distance / 5))
+	local steps = math.max(2, math.ceil(distance / 10))
 	for i = 1, steps do
 		local alpha = i / steps
 		local interpolated = startPos:Lerp(endPos, alpha)
@@ -533,7 +533,6 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 
 	return filteredWaypoints
 end
-
 
 local function resolveTargetPosition(target: Vector3 | BasePart | Model): Vector3?
 	if typeof(target) == "Vector3" then
@@ -948,47 +947,37 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 	end
 
-executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
-	if currentTween then
-		currentTween:Cancel()
-		currentTween = nil
-	end
+	executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfig?)
+		if currentTween then
+			currentTween:Cancel()
+			currentTween = nil
+		end
 
-	isMoveToActive = true
-	isStopped = false
+		isMoveToActive = true
+		isStopped = false
 
-	local cfg = config or {}
-	local moveSpeed = cfg.Speed or speed
-	local reachDistance = cfg.ReachDistance or 2
-	local customHeight = cfg.HeightOffset or heightOffset
+		local cfg = config or {}
+		local moveSpeed = cfg.Speed or speed
+		local reachDistance = cfg.ReachDistance or 2
+		local customHeight = cfg.HeightOffset or heightOffset
+		local lastTargetPos: Vector3? = nil
 
-	local currentTargetPos = resolveTargetPosition(target)
-	if currentTargetPos then
-		local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-		local distToTarget = (currentTargetPos - entityPos).Magnitude
+		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
+			local currentTargetPos = resolveTargetPosition(target)
+			if not currentTargetPos then break end
 
-		if distToTarget > reachDistance then
-			-- Pass `true` as the 7th parameter to disable 10-stud waypoint pruning
-			local waypointsToFollow = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model, true)
+			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+			if (currentTargetPos - entityPos).Magnitude <= reachDistance then break end
 
-			for _, wayPointPos in ipairs(waypointsToFollow) do
-				if not isMoveToActive or skipCurrentRoom or isBeingCrucified or isStopped then break end
-
-				local startPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-				local dist = (wayPointPos - startPos).Magnitude
-
-				if dist > 0.5 then
+			if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
+				lastTargetPos = currentTargetPos
+				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+				
+				local dist = (groundTargetPos - entityPos).Magnitude
+				if dist > reachDistance then
 					local travelTime = math.max(0.01, dist / moveSpeed)
-					
-					-- Keep movement horizontal/aligned by locking pitch orientation
-					local lookDirection = (wayPointPos - startPos)
-					if lookDirection.Magnitude > 0.001 then
-						lookDirection = Vector3.new(lookDirection.X, 0, lookDirection.Z).Unit
-					else
-						lookDirection = model:IsA("Model") and model:GetPivot().LookVector or model.CFrame.LookVector
-					end
-
-					local targetCFrame = CFrame.lookAt(wayPointPos, wayPointPos + lookDirection)
+					local direction = (groundTargetPos - entityPos).Unit
+					local targetCFrame = CFrame.lookAt(groundTargetPos, groundTargetPos + direction)
 					local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
 
 					if model:IsA("BasePart") then
@@ -1014,18 +1003,12 @@ executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfi
 					end
 				end
 			end
+			task.wait(0.05)
 		end
+
+		isMoveToActive = false
+		regenPathRequested = true
 	end
-
-	-- Unlock active state so room movement resumes automatically
-	isMoveToActive = false
-	regenPathRequested = true
-end
-
-
-
-
-
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
