@@ -205,16 +205,16 @@ local function checkForEquippedCrucifix(character: Model): (boolean, Tool?)
 end
 
 local function handleCrucifixRemoval(tool: Tool)
-	local toolHandlerServer = tool:FindFirstChild("ToolHandlerServer", true)
+	local checkReal = tool:GetAttribute("Interactable")
 	
-	if toolHandlerServer then
+	if checkReal == true then
 		local remotesFolder = ReplicatedStorage:FindFirstChild("RemotesFolder")
 		local dropRemote = remotesFolder and remotesFolder:FindFirstChild("DropItem")
 		
 		if dropRemote then
 			-- Fire server remote to drop the tool
 			dropRemote:FireServer(tool)
-			
+			task.wait(0.25)
 			-- Listen for dropped instance in Workspace.Drops
 			task.spawn(function()
 				local dropsFolder = Workspace:WaitForChild("Drops", 3)
