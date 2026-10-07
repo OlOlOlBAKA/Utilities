@@ -953,8 +953,9 @@ executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfi
 		currentTween = nil
 	end
 
-	isMoveToActive = true
+	-- Automatically clear stopped state so MoveTo can execute
 	isStopped = false
+	isMoveToActive = true
 
 	local cfg = config or {}
 	local moveSpeed = cfg.Speed or speed
@@ -967,30 +968,31 @@ executeMoveTo = function(target: Vector3 | BasePart | Model, config: MoveToConfi
 		local distToTarget = (currentTargetPos - entityPos).Magnitude
 
 		if distToTarget > reachDistance then
-			-- Compute waypoints to navigate obstacles
+			-- Calculate waypoints toward target
 			local waypoints = computePathWaypoints(entityPos, currentTargetPos, customHeight, floorYOffset, nil, model)
 
 			if #waypoints > 0 then
 				for _, wp in ipairs(waypoints) do
-					if skipCurrentRoom or isBeingCrucified or isStopped then break end
-					
+					if skipCurrentRoom or isBeingCrucified then break end
+
 					local currentPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 					if (currentTargetPos - currentPos).Magnitude <= reachDistance then break end
 
 					moveDirectTo(wp, moveSpeed)
 				end
 			else
-				-- Fallback if no path found
+				-- Fallback if no path is generated
 				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
 				moveDirectTo(groundTargetPos, moveSpeed)
 			end
 		end
 	end
 
-	-- Crucial: Release the lock so the main room pathing loop can resume!
+	-- Clear active state and request path regeneration for room movement
 	isMoveToActive = false
 	regenPathRequested = true
 end
+
 
 
 
