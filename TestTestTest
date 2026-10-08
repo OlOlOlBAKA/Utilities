@@ -1235,5 +1235,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		if model and model.Parent then model:Destroy() end
 	end
 end
+end
 
 return PathfindingMovement
