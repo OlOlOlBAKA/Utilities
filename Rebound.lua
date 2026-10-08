@@ -12,30 +12,30 @@ local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
 local function Shake()
     local Earthquake = LoadCustomInstance(ROOT.."/Assets/Earthquake.rbxm")
-Earthquake.Parent = workspace
-Earthquake.SoundEarthquake.Volume = 1.55
-Earthquake.SoundEarthquake:Play()
-local v5 = CollectionService:GetTagged("PartCeiling")
-local v6 = {}
-for _, v7 in v5 do
-    local v8 = v7.Size.Magnitude * 0.7
-    local v9 = math.clamp(v8, 0, 150)
-    for _, v10 in pairs(Earthquake.Particles:GetChildren()) do
-        local v11 = v10:Clone()
-        v11.Parent = v7
-        v11:Emit(v9 / 10)
-        v11.Enabled = true
-        table.insert(v6, v11)
+    Earthquake.Parent = workspace
+    Earthquake.SoundEarthquake.Volume = 1.55
+    Earthquake.SoundEarthquake:Play()
+    local v5 = CollectionService:GetTagged("PartCeiling")
+    local v6 = {}
+    for _, v7 in v5 do
+        local v8 = v7.Size.Magnitude * 0.7
+        local v9 = math.clamp(v8, 0, 150)
+        for _, v10 in Earthquake.Particles:GetChildren() do
+            local v11 = v10:Clone()
+            v11.Parent = v7
+            v11:Emit(v9 / 10)
+            v11.Enabled = true
+            table.insert(v6, v11)
+        end
     end
-end
-task.delay(4, function()
-    for _, v12 in v6 do
-        v12.Enabled = false
-    end
-end)
-task.delay(10, function()
-    Earthquake:Destroy()
-end)
+    task.delay(4, function()
+        for _, v12 in v6 do
+            v12.Enabled = false
+        end
+    end)
+    task.delay(10, function()
+        Earthquake:Destroy()
+    end)
 end
 
 local isCrucified = false
