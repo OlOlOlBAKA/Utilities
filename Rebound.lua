@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+local CamShaker = require(ReSt:WaitForChild("CameraShaker")
 
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
@@ -13,8 +14,6 @@ local function Shake()
     local Earthquake = LoadCustomInstance(ROOT.."/Assets/Earthquake.rbxm")
 Earthquake.Parent = workspace
 Earthquake.SoundEarthquake.Volume = 1.55
-Main_Game.camShaker:ShakeOnce(4, 12, 1, 5)
-Main_Game.camShaker:ShakeOnce(10, 2, 3, 3)
 Earthquake.SoundEarthquake:Play()
 local v5 = CollectionService:GetTagged("PartCeiling")
 local v6 = {}
@@ -78,7 +77,7 @@ local entityConfig = {
             task.spawn(function()
                 Shake()
             end)
-            Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
+            CamShaker:ShakeOnce(15, 2, 3, 3)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
             ReboundColor.Name = "Warn"
