@@ -12,7 +12,7 @@ local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 local function Shake()
     local Earthquake = LoadCustomInstance(ROOT.."/Assets/Earthquake.rbxm")
     Earthquake.Parent = workspace
-    Earthquake.SoundEarthquake.Volume = 1.55
+    Earthquake.SoundEarthquake.Volume = 2.5
     Earthquake.SoundEarthquake:Play()
     local v5 = CollectionService:GetTagged("PartCeiling")
     local v6 = {}
