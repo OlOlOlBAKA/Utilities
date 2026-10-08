@@ -41,7 +41,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
             ReboundDelayTime = 1.0,
 
             EnableCameraShake = true,
-            ShakeAmount = 3.5,
+            ShakeValues = {2.25, 20, 0.1, 1},
             ShakeRadius = 100,
 
             ShowPath = false,
