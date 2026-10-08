@@ -706,6 +706,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		-- Vynixu Camera Shake Control Functions
 	local shakeValues = options.ShakeValues or {1.5, 20, 0.1, 1} -- Magnitude, Roughness, FadeIn, FadeOut
 	local shakeRadius = options.ShakeRadius or 100
+    local renderConnection: RBXScriptConnection? = nil
+
 
 	local function stopCameraShake(destroyShaker: boolean?)
 		isMovementFinished = true
