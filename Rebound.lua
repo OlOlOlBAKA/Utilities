@@ -6,7 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
-local CamShaker = require(ReSt:WaitForChild("CameraShaker")
+local CamShaker = require(ReSt:WaitForChild("CameraShaker"))
 
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
@@ -33,7 +33,7 @@ task.delay(4, function()
         v12.Enabled = false
     end
 end)
-task.delay(6, function()
+task.delay(10, function()
     Earthquake:Destroy()
 end)
 end
