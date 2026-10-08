@@ -27,22 +27,24 @@ local function Shake()
             table.insert(v6, v11)
         end
     end
-    task.delay(4, function()
-        for _, v12 in v6 do
-            v12.Enabled = false
-        end
-    end)
-    task.delay(10, function()
-        Earthquake:Destroy()
-    end)
+    task.wait(4)
+    for _, v12 in v6 do
+        v12.Enabled = false
+    end
+    task.wait(6)
+    Earthquake:Destroy()
 end
 
 local isCrucified = false
 local isPresent = false
 
-task.wait(1)
 local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
+task.spawn(function()
+    Shake()
+    Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
+end)
 
+task.wait(1)
 local entityConfig = {
     Model = game:GetObjects("rbxassetid://77366392445371")[1],
     Speed = 60,
@@ -75,10 +77,6 @@ local entityConfig = {
     Callbacks = {
         OnSpawned = function(model, actions)
             isPresent = true
-            task.spawn(function()
-                Shake()
-                Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
-            end)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
             ReboundColor.Name = "Warn"
