@@ -40,11 +40,11 @@ local isPresent = false
 
 local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
 task.spawn(function()
-    Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)  
+    Main_Game.camShaker:ShakeOnce(21, 2, 3, 3)  
     Shake()
 end)
 
-task.wait(1)
+task.wait(0.1)
 local entityConfig = {
     Model = game:GetObjects("rbxassetid://77366392445371")[1],
     Speed = 60,
