@@ -60,6 +60,31 @@ task.spawn(function()
 	end
 end)
 
+-- Replace CameraShaker require block with Main_Game require
+local Main_Game = nil
+
+task.spawn(function()
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+	if playerGui then
+		local mainUI = playerGui:WaitForChild("MainUI", 5)
+		if mainUI then
+			local initiator = mainUI:WaitForChild("Initiator", 5)
+			if initiator then
+				local mainGameScript = initiator:WaitForChild("Main_Game", 5)
+				if mainGameScript then
+					local success, result = pcall(require, mainGameScript)
+					if success then
+						Main_Game = result
+					else
+						warn("PathfindingMovement: Failed to load Main_Game ->", result)
+					end
+				end
+			end
+		end
+	end
+end)
+
+
 -- \\ Crucifixion Assets & Storage // --
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 local CrucifixAssets = {
@@ -141,7 +166,7 @@ type MovementOptions = {
 	ReboundDelayTime: number?,
 
 	EnableCameraShake: boolean?,
-	ShakeAmount: number?,
+	ShakeValues: {number}?,
 	ShakeRadius: number?
 }
 
@@ -678,52 +703,24 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local hasHitPlayerThisPass = false
 	local lastEntityPosition: Vector3? = nil
 
-	local renderConnection: RBXScriptConnection?
-	local shakerInstance: any?
-	local sustainedShake: any?
+		-- Vynixu Camera Shake Control Functions
+	local shakeValues = options.ShakeValues or {1.5, 20, 0.1, 1} -- Magnitude, Roughness, FadeIn, FadeOut
+	local shakeRadius = options.ShakeRadius or 100
+    local renderConnection: RBXScriptConnection? = nil
 
-	-- Camera Shake Stop Function (Stops ONLY the entity's proximity shake, keeping shakerInstance available for crucifixion)
+
 	local function stopCameraShake(destroyShaker: boolean?)
 		isMovementFinished = true
-		if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
-			sustainedShake:StartFadeOut(0.2)
-			sustainedShake = nil 
-		end
 		if renderConnection then 
 			renderConnection:Disconnect()
 			renderConnection = nil 
 		end
-		if destroyShaker and shakerInstance and typeof(shakerInstance.Stop) == "function" then
-			task.delay(0.2, function()
-				if shakerInstance then 
-					shakerInstance:Stop()
-					shakerInstance = nil 
-				end
-			end)
-		end
 	end
 
-	-- Camera Shake Start Function
 	local function startCameraShake()
-		if not RunService:IsClient() or not enableShake or renderConnection or not CameraShaker then return end
-
-		if typeof(CameraShaker) == "table" and typeof(CameraShaker.new) == "function" then
-			shakerInstance = CameraShaker.new(Enum.RenderPriority.Camera.Value + 10, function(shakeCFrame)
-				local camera = Workspace.CurrentCamera
-				if camera and camera.CameraSubject then
-					camera.CFrame = camera.CFrame * shakeCFrame
-				end
-			end)
-			if shakerInstance and typeof(shakerInstance.Start) == "function" then
-				shakerInstance:Start()
-			end
-		end
+		if not RunService:IsClient() or not enableShake or renderConnection or not Main_Game or not Main_Game.camShaker then return end
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
-			if shakerInstance and typeof(shakerInstance.Update) == "function" then 
-				shakerInstance:Update(dt) 
-			end
-
 			if isMovementFinished or not model or not model.Parent then
 				stopCameraShake(true)
 				return
@@ -744,29 +741,25 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 
 						if canHit then
-							-- First, confirm Line of Sight before processing damage or crucifix usage
 							local hasLoS = checkLineOfSight(model)
 							if hasLoS then
-								-- Line of Sight is confirmed; now check for crucifix
 								local hasCrucifix, tool = checkForEquippedCrucifix(character)
 								if hasCrucifix and tool then
-									-- CRUCIFIX ACTION: Stop entity movement and entity shake, but preserve shakerInstance for animation
 									isBeingCrucified = true
 									isStopped = true
 									if currentTween then currentTween:Cancel(); currentTween = nil end
 									task.spawn(function()
-										for _,v in ipairs(tool:GetChildren()) do
-											print(v.Name)
-										end
 										if tool:FindFirstChildWhichIsA("RemoteEvent") then
 											ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
 											task.wait()
-											workspace.Drops:WaitForChild(tool.Name,3):Destroy()
+											if Workspace:FindFirstChild("Drops") then
+												Workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
+											end
 										else
 											tool:Destroy()
 										end
 									end)
-									-- Stop entity proximity shake without destroying shakerInstance
+									
 									stopCameraShake(false)
 
 									if type(callbacks.OnCrucifixion) == "function" then
@@ -774,12 +767,12 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 									end
 
 									task.spawn(function()
-										performCrucifixion(model, character, shakerInstance)
+										-- Passes Main_Game.camShaker directly to crucifixion routine
+										performCrucifixion(model, character, Main_Game.camShaker)
 										isMovementFinished = true
 									end)
 									return
 								else
-									-- NO CRUCIFIX: Apply normal player damage
 									hasHitPlayerThisPass = true
 									local humanoid = character:FindFirstChildOfClass("Humanoid")
 									if humanoid then humanoid:TakeDamage(damageAmount) end
@@ -794,7 +787,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 					lastEntityPosition = entityPos
 
-					-- 2. STANDALONE LINE OF SIGHT CALLBACK CHECK
+					-- 2. LINE OF SIGHT CALLBACK
 					if not isBeingCrucified and type(callbacks.OnSeePlayer) == "function" then
 						local canSee, playerChar = checkLineOfSight(model)
 						if canSee and playerChar then
@@ -802,31 +795,19 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- 3. CAMERA SHAKE UPDATE
-					if distance <= shakeRadius and shakerInstance then
-						if not sustainedShake and typeof(CameraShaker.CameraShakeInstance) == "table" then
-							local rawShakeInstance = CameraShaker.CameraShakeInstance.new(shakeAmount, 6, 0.2, 0.3)
-							rawShakeInstance.PositionInfluence = Vector3.new(0.15, 0.15, 0.15)
-							rawShakeInstance.RotationInfluence = Vector3.new(0.8, 0.8, 0.8)
-							if typeof(shakerInstance.ShakeSustain) == "function" then
-								sustainedShake = shakerInstance:ShakeSustain(rawShakeInstance)
-							end
+					-- 3. VYNIXU DISTANCE-BASED CAMERA SHAKE
+					if distance <= shakeRadius then
+						local cloned = {}
+						for i, v in ipairs(shakeValues) do
+							cloned[i] = v
 						end
 
-						if sustainedShake then
-							local distanceRatio = 1 - (distance / shakeRadius)
-							local targetMagnitude = shakeAmount * (distanceRatio ^ 2)
-							sustainedShake.Magnitude = math.clamp(sustainedShake.Magnitude + (targetMagnitude - sustainedShake.Magnitude) * math.clamp(dt * 8, 0, 1), 0, shakeAmount)
-						end
-					else
-						if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
-							sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
-						end
+						-- Scale Magnitude and Roughness based on proximity
+						cloned[1] = shakeValues[1] / shakeRadius * (shakeRadius - distance) -- Magnitude
+						cloned[2] = shakeValues[2] / shakeRadius * (shakeRadius - distance) -- Roughness
+
+						Main_Game.camShaker:ShakeOnce(table.unpack(cloned))
 					end
-				end
-			else
-				if sustainedShake and typeof(sustainedShake.StartFadeOut) == "function" then 
-					sustainedShake:StartFadeOut(0.3); sustainedShake = nil 
 				end
 			end
 		end)
