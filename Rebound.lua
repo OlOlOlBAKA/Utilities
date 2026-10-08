@@ -76,7 +76,7 @@ local entityConfig = {
         OnSpawned = function(model, actions)
             isPresent = true
             task.spawn(function()
-                shake()
+                Shake()
             end)
             Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
