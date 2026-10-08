@@ -75,7 +75,9 @@ local entityConfig = {
     Callbacks = {
         OnSpawned = function(model, actions)
             isPresent = true
-            shake()
+            task.spawn(function()
+                shake()
+            end)
             Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
