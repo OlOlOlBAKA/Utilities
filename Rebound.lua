@@ -1,5 +1,41 @@
 local ReSt = game:GetService("ReplicatedStorage")
 local TS = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+-- CREDIT TO REGULAR VYNIXU
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
+
+local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+
+local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+
+local function Shake()
+    local Earthquake = LoadCustomInstance(ROOT.."/Assets/Earthquake.rbxm")
+Earthquake.Parent = workspace
+Earthquake.SoundEarthquake.Volume = 1.55
+Main_Game.camShaker:ShakeOnce(4, 12, 1, 5)
+Main_Game.camShaker:ShakeOnce(10, 2, 3, 3)
+Earthquake.SoundEarthquake:Play()
+local v5 = CollectionService:GetTagged("PartCeiling")
+local v6 = {}
+for _, v7 in v5 do
+    local v8 = v7.Size.Magnitude * 0.7
+    local v9 = math.clamp(v8, 0, 150)
+    for _, v10 in pairs(Earthquake.Particles:GetChildren()) do
+        local v11 = v10:Clone()
+        v11.Parent = v7
+        v11:Emit(v9 / 10)
+        v11.Enabled = true
+        table.insert(v6, v11)
+    end
+end
+task.wait(4)
+for _, v12 in v6 do
+    v12.Enabled = false
+end
+task.wait(6)
+Earthquake:Destroy()
+end
 
 local isCrucified = false
 local isPresent = false
@@ -39,6 +75,8 @@ local entityConfig = {
     Callbacks = {
         OnSpawned = function(model, actions)
             isPresent = true
+            shake()
+            Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
             ReboundColor.Name = "Warn"
@@ -104,11 +142,20 @@ task.spawn(function()
             print("Rebound got crucified, the spawn loop is ended")
             break
         end
+        if latestRoom.Value == 49 or latestRoom.Value == 50 or latestRoom.Value == 99 or latestRoom.Value == 100 then
+            print("break the loop, boss room")
+            break
+        end
 
         latestRoom.Changed:Wait()
 
         if isCrucified then
             print("Rebound got crucified during room wait, ending loop")
+            break
+        end
+
+        if latestRoom.Value == 49 or latestRoom.Value == 50 or latestRoom.Value == 99 or latestRoom.Value == 100 then
+            print("break the loop, boss room")
             break
         end
 
