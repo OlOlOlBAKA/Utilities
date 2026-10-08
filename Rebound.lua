@@ -69,8 +69,8 @@ local entityConfig = {
     ReboundDelayTime = 1.0,
 
     EnableCameraShake = true,
-    ShakeAmount = 5,
-    ShakeRadius = 100,
+    ShakeValues = {3.5, 22, 0.2, 1.5},
+    ShakeRadius = 120,
 
     ShowPath = false,
 
@@ -187,7 +187,7 @@ task.spawn(function()
                 ReboundDelayTime = 1.0,
 
                 EnableCameraShake = true,
-                ShakeAmount = 5,
+                ShakeValues = {3.5, 22, 0.2, 1.5},
                 ShakeRadius = 100,
 
                 ShowPath = false,
