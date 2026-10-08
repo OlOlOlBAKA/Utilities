@@ -2,7 +2,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
-            Speed = 60,
+            Speed = 40,
             HeightOffset = 6,
             FloorYOffset = -2,
             DelayTime = 5,
@@ -24,7 +24,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
             ReboundDelayTime = 1.0,
 
             EnableCameraShake = true,
-            ShakeAmount = 2.5,
+            ShakeValues = {1.5, 20, 0.1, 1},
             ShakeRadius = 100,
 
             ShowPath = false,
@@ -54,7 +54,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 				        --actions.Stop()
                         --task.wait(0.1)
                         actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 3), {
-                            Speed = 60,
+                            Speed = 40,
                             ReachDistance = 3,
                             HeightOffset = 2,
                         })
