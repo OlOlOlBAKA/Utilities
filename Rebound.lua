@@ -6,7 +6,6 @@ local CollectionService = game:GetService("CollectionService")
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
-local CamShaker = require(ReSt:WaitForChild("CameraShaker"))
 
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
@@ -76,8 +75,10 @@ local entityConfig = {
     Callbacks = {
         OnSpawned = function(model, actions)
             isPresent = true
-            Shake()
-            CamShaker:ShakeOnce(15, 2, 3, 3)
+            task.spawn(function()
+                Shake()
+                Main_Game.camShaker:ShakeOnce(15, 2, 3, 3)
+            end)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
             ReboundColor.Name = "Warn"
