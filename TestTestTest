@@ -811,8 +811,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end)
 	end
 
-	end
-
 	if model.Parent ~= Workspace then model.Parent = Workspace end
 
 	local currentRooms = Workspace:WaitForChild("CurrentRooms", 10)
@@ -1234,5 +1232,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		task.wait(1)
 		if model and model.Parent then model:Destroy() end
 	end
+end
 
 return PathfindingMovement
