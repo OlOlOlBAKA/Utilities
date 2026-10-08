@@ -188,7 +188,7 @@ task.spawn(function()
 
                 EnableCameraShake = true,
                 ShakeValues = {3.5, 22, 0.2, 1.5},
-                ShakeRadius = 100,
+                ShakeRadius = 120,
 
                 ShowPath = false,
 
