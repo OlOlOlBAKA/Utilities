@@ -28,12 +28,14 @@ for _, v7 in v5 do
         table.insert(v6, v11)
     end
 end
-task.wait(4)
-for _, v12 in v6 do
-    v12.Enabled = false
-end
-task.wait(6)
-Earthquake:Destroy()
+task.delay(4, function()
+    for _, v12 in v6 do
+        v12.Enabled = false
+    end
+end)
+task.delay(6, function()
+    Earthquake:Destroy()
+end)
 end
 
 local isCrucified = false
@@ -74,9 +76,7 @@ local entityConfig = {
     Callbacks = {
         OnSpawned = function(model, actions)
             isPresent = true
-            task.spawn(function()
-                Shake()
-            end)
+            Shake()
             CamShaker:ShakeOnce(15, 2, 3, 3)
             local ReboundColor = Instance.new("ColorCorrectionEffect", game.Lighting)
             game:GetService("Debris"):AddItem(ReboundColor, 24)
