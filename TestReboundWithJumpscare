@@ -69,7 +69,7 @@ local entityConfig = {
     HitboxRange = 50,
     RaycastHitbox = true,
     SphereRadius = 4,
-    Damage = 100,
+    Damage = 0,
 
     LightFlicker = true,
     Duration = 3,
@@ -226,7 +226,7 @@ task.spawn(function()
                 HitboxRange = 50,
                 RaycastHitbox = true,
                 SphereRadius = 4,
-                Damage = 100,
+                Damage = 0,
 
                 LightFlicker = false,
                 Duration = 1.5,
