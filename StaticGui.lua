@@ -13,7 +13,7 @@ if playerGui:FindFirstChild("StaticScreenGui") then return end
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 -- 1. Configuration Settings
-local BASE_TRANSPARENCY = 0.95 -- Default max transparency (faint/idle)
+local BASE_TRANSPARENCY = 0.9 -- Default max transparency (faint/idle)
 local MIN_TRANSPARENCY = 0.6  -- Min transparency when monster is on top of player (heavy static)
 local MAX_DETECTION_DIST = 150 -- Distance in studs where static starts ramping up
 local FADE_SPEED = 3 -- Speed multiplier for smooth proximity transparency transition
@@ -37,7 +37,7 @@ local tapeAction = playerGui:FindFirstChild("TapeAction")
 if not tapeAction then
 	tapeAction = Instance.new("StringValue")
 	tapeAction.Name = "TapeAction"
-	tapeAction.Value = "Play" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE"
+	tapeAction.Value = "PLAY" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE"
 	tapeAction.Parent = playerGui
 end
 
@@ -95,8 +95,8 @@ local modeTextImage = Instance.new("ImageLabel")
 modeTextImage.Name = "ModeTextImage"
 modeTextImage.BackgroundTransparency = 1
 modeTextImage.Image = ASSET_IDS[tapeAction.Value] or ASSET_IDS.PLAY
-modeTextImage.Size = UDim2.new(0.2, 0, 0.4, 0)
-modeTextImage.Position = UDim2.new(0.85, 0, 0.05, 0)
+modeTextImage.Size = UDim2.new(0.35, 0, 0.55, 0)
+modeTextImage.Position = UDim2.new(0.725, 0, -0.05, 0)
 modeTextImage.ScaleType = Enum.ScaleType.Fit
 modeTextImage.Active = false
 modeTextImage.Interactable = false
