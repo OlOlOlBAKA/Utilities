@@ -107,6 +107,7 @@ local entityConfig = {
             model.ReboundNew.Close.Volume = 0.35
             model.ReboundNew.Idle.Volume = 0.35
             model.ReboundNew.Sound.Volume = 3
+			model.ReboundNew.Sound.RollOffMaxDistance = 500
 
             task.wait(3.5)
             model.Rebound_Cue.TimePosition = 0
@@ -215,6 +216,7 @@ task.spawn(function()
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
                         model.Rebound_Cue:Play()
+						model.ReboundNew.Sound.RollOffMaxDistance = 500
                         model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
                     end,
 
