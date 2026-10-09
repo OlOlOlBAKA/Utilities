@@ -24,14 +24,12 @@ local timeAccumulator = 0
 
 local STATIC_IMAGE_ID = "rbxassetid://9470965"
 
-local root = "https://github.com/OlOlOlBAKA/Utilities/raw/main"
-
 -- Image Asset IDs for each TapeAction state (Replace with your own asset IDs)
 local ASSET_IDS = {
-	PLAY = LoadCustomInstance(root.."/Play.PNG"),
-	REPLAY = LoadCustomInstance(root.."/Replay.PNG"),
-	REWIND = LoadCustomInstance(root.."/Rewind.PNG"),
-	PAUSE = LoadCustomInstance(root.."/Pause.PNG")
+	PLAY = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Play.PNG"),
+	REPLAY = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Replay.PNG"),
+	REWIND = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Rewind.PNG"),
+	PAUSE = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Pause.PNG")
 }
 
 -- 3. TapeAction StringValue in PlayerGui
@@ -39,7 +37,7 @@ local tapeAction = playerGui:FindFirstChild("TapeAction")
 if not tapeAction then
 	tapeAction = Instance.new("StringValue")
 	tapeAction.Name = "TapeAction"
-	tapeAction.Value = "PLAY" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE"
+	tapeAction.Value = "Play" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE"
 	tapeAction.Parent = playerGui
 end
 
