@@ -59,8 +59,8 @@ local entityConfig = {
     SphereRadius = 4,
     Damage = 100,
 
-    LightFlicker = false,
-    Duration = 1.5,
+    LightFlicker = true,
+    Duration = 3,
     LightBreak = false,
 
     Rebound = false,
