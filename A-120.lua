@@ -71,8 +71,8 @@ end)
 
             Callbacks = {
                 OnSpawned = function(model, actions)
-                    model.Main.Name = "A120"
-			        for _,v in ipairs(model.A120:GetChildren()) do
+                    model.PrimaryPart = model.Main
+			        for _,v in ipairs(model.Main:GetChildren()) do
 				        if v:IsA("Sound") then
 					        v.RollOffMaxDistance = v.RollOffMaxDistance * 1.5
 				        end
