@@ -49,7 +49,7 @@ end)
             SpawnOffsetRooms = 5,
             AttackType = "Front",
 
-            HitboxRange = 25,
+            HitboxRange = 30,
             RaycastHitbox = false,
             SphereRadius = 3.5,
             Damage = 100,
@@ -93,10 +93,10 @@ end)
                         task.wait(0.75)
 				        --actions.Stop()
                         --task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 3), {
+                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 2), {
                             Speed = 40,
                             ReachDistance = 3,
-                            HeightOffset = 2,
+                            HeightOffset = 5,
                         })
                         --task.wait(0.1)
                         --actions.Resume(2)
