@@ -15,31 +15,34 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utiliti
 
 -- 1. Custom Font Loader Function
 local function loadCustomFont(fontUrl, fileName, fontName)
-	local ttfFileName = fileName .. ".ttf"
-	local jsonFileName = fileName .. ".font"
+    local ttfFileName = fileName .. ".ttf"
+    local jsonFileName = fileName .. ".font"
 
-	if not isfile(ttfFileName) then
-		writefile(ttfFileName, game:HttpGet(fontUrl))
-	end
+    -- 1. Download TTF file only if it doesn't exist
+    if not isfile(ttfFileName) then
+        writefile(ttfFileName, game:HttpGet(fontUrl))
+    end
 
-	local ttfAssetId = getcustomasset(ttfFileName)
+    -- 2. Create .font JSON file only if it doesn't exist
+    if not isfile(jsonFileName) then
+        local ttfAssetId = getcustomasset(ttfFileName)
+        local fontConfig = {
+            name = fontName or fileName,
+            faces = {
+                {
+                    name = "Regular",
+                    weight = 400,
+                    style = "normal",
+                    assetId = ttfAssetId
+                }
+            }
+        }
+        writefile(jsonFileName, HttpService:JSONEncode(fontConfig))
+    end
 
-	local fontConfig = {
-		name = fontName or fileName,
-		faces = {
-			{
-				name = "Regular",
-				weight = 400,
-				style = "normal",
-				assetId = ttfAssetId
-			}
-		}
-	}
-
-	writefile(jsonFileName, HttpService:JSONEncode(fontConfig))
-	local customFontAsset = getcustomasset(jsonFileName)
-
-	return Font.new(customFontAsset)
+    -- 3. Return the Font object directly from the cached .font asset
+    local customFontAsset = getcustomasset(jsonFileName)
+    return Font.new(customFontAsset)
 end
 
 -- Load VCR OSD Mono Font for Timer
