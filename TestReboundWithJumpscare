@@ -69,7 +69,7 @@ local entityConfig = {
     HitboxRange = 50,
     RaycastHitbox = true,
     SphereRadius = 4,
-    Damage = 0,
+    Damage = 1,
 
     LightFlicker = true,
     Duration = 3,
@@ -138,7 +138,7 @@ local entityConfig = {
                         end
 						local cam = workspace.CurrentCamera
 						local camCF = CFrame.new(cam.CFrame.Position, model.PrimaryPart.Position + Vector3.new(0, 1, 0))
-				        local camTween = TweenService:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
+				        local camTween = TS:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
 				        camTween:Play()
 						task.wait(1)
 						RunService:BindToRenderStep("onDeathScreen", Enum.RenderPriority.Camera.Value + 1, function()
@@ -226,7 +226,7 @@ task.spawn(function()
                 HitboxRange = 50,
                 RaycastHitbox = true,
                 SphereRadius = 4,
-                Damage = 0,
+                Damage = 1,
 
                 LightFlicker = false,
                 Duration = 1.5,
@@ -278,7 +278,7 @@ task.spawn(function()
                         end
 						local cam = workspace.CurrentCamera
 						local camCF = CFrame.new(cam.CFrame.Position, model.PrimaryPart.Position + Vector3.new(0, 1, 0))
-				        local camTween = TweenService:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
+				        local camTween = TS:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
 				        camTween:Play()
 						task.wait(1)
 						RunService:BindToRenderStep("onDeathScreen", Enum.RenderPriority.Camera.Value + 1, function()
