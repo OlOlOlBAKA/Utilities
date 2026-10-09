@@ -1,5 +1,7 @@
 local TS = game:GetService("TweenService")
 
+local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+
 local function customImage(name, link)
 	if isfile(name .. ".PNG") then
 		delfile(name .. ".PNG")
@@ -60,7 +62,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 					        if room:FindFirstChild("Assets") then
 						        for _,v in ipairs(room.Assets:GetDescendants()) do 
 						            if v:IsA("BasePart") and v.Name == "Neon" then
-							            TS:Create(v, TweenInfo.new(1.25), {Color = Color3.fromRGB(150,150,255)}):Play()
+							            TS:Create(v, TweenInfo.new(1.25), {Color = Color3.fromRGB(82, 129, 255)}):Play()
 						            end
 				        	    end
 					        end
@@ -116,6 +118,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
                         model.Slam:Play()
+				        Main_Game.camShaker:ShakeOnce(6, 32, 0.25, 1)  
                     end
 			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
 				       _G.SurviveDepth = true
