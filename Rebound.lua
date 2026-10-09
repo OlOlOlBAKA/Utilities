@@ -115,7 +115,7 @@ local entityConfig = {
         end,
 
         OnStartMoving = function(model, actions)
-			task.wait(0.1)
+			task.wait(0.25)
             for _, v in pairs(model.ReboundNew:GetChildren()) do
                 if v:IsA("Sound") then
                     v:Play()
@@ -219,7 +219,7 @@ task.spawn(function()
                     end,
 
                     OnStartMoving = function(model, actions)
-                        task.wait(0.1)
+                        task.wait(0.25)
 						for _, v in pairs(model.ReboundNew:GetChildren()) do
                             if v:IsA("Sound") then
                                 v:Play()
