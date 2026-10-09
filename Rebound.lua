@@ -106,11 +106,11 @@ local entityConfig = {
             model.ReboundNew.Close.Volume = 0.75
             model.ReboundNew.Idle.Volume = 0.75
             model.ReboundNew.Sound.Volume = 4
-            model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
 
             task.wait(3.5)
             model.Rebound_Cue.TimePosition = 0
             model.Rebound_Cue:Play()
+			model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
         end,
 
         OnStartMoving = function(model, actions)
