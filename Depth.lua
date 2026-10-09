@@ -63,6 +63,9 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 						        for _,v in ipairs(room.Assets:GetDescendants()) do 
 						            if v:IsA("BasePart") and v.Name == "Neon" then
 							            TS:Create(v, TweenInfo.new(1.25), {Color = Color3.fromRGB(82, 129, 255)}):Play()
+								        if v.Parent:FindFirstChildWhichIsA("PointLight") then
+									        TS:Create(v.Parent:FindFirstChildOfClass("PointLight"), TweenInfo.new(1.25), {Color = Color3.fromRGB(115,154,255)}):Play()
+								        end
 						            end
 				        	    end
 					        end
