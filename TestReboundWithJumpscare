@@ -137,12 +137,12 @@ local entityConfig = {
                             end
                         end
 						local cam = workspace.CurrentCamera
-						local camCF = CFrame.new(cam.CFrame.Position, model.PrimaryPart.Position + Vector3.new(0, 1, 0))
+						local camCF = CFrame.new(cam.CFrame.Position, model.ReboundNew.Position + Vector3.new(0, 1, 0))
 				        local camTween = TS:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
 				        camTween:Play()
 						task.wait(1)
 						RunService:BindToRenderStep("onDeathScreen", Enum.RenderPriority.Camera.Value + 1, function()
-				            if model and model.PrimaryPart and char and char.PrimaryPart then
+				            if model and model.ReboundNew and char and char.PrimaryPart then
 					            local targetPos = model.PrimaryPart.Position + Vector3.new(0, 1, 0)
 					            cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
 				            end
@@ -277,12 +277,12 @@ task.spawn(function()
                             end
                         end
 						local cam = workspace.CurrentCamera
-						local camCF = CFrame.new(cam.CFrame.Position, model.PrimaryPart.Position + Vector3.new(0, 1, 0))
+						local camCF = CFrame.new(cam.CFrame.Position, model.ReboundNew.Position + Vector3.new(0, 1, 0))
 				        local camTween = TS:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
 				        camTween:Play()
 						task.wait(1)
 						RunService:BindToRenderStep("onDeathScreen", Enum.RenderPriority.Camera.Value + 1, function()
-				            if model and model.PrimaryPart and char and char.PrimaryPart then
+				            if model and model.ReboundNew and char and char.PrimaryPart then
 					            local targetPos = model.PrimaryPart.Position + Vector3.new(0, 1, 0)
 					            cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
 				            end
