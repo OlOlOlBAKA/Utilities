@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 
 local localPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = localPlayer:WaitForChild("PlayerGui")
@@ -12,7 +13,39 @@ if playerGui:FindFirstChild("StaticScreenGui") then return end
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
--- 1. Configuration Settings
+-- 1. Custom Font Loader Function
+local function loadCustomFont(fontUrl, fileName, fontName)
+	local ttfFileName = fileName .. ".ttf"
+	local jsonFileName = fileName .. ".font"
+
+	if not isfile(ttfFileName) then
+		writefile(ttfFileName, game:HttpGet(fontUrl))
+	end
+
+	local ttfAssetId = getcustomasset(ttfFileName)
+
+	local fontConfig = {
+		name = fontName or fileName,
+		faces = {
+			{
+				name = "Regular",
+				weight = 400,
+				style = "normal",
+				assetId = ttfAssetId
+			}
+		}
+	}
+
+	writefile(jsonFileName, HttpService:JSONEncode(fontConfig))
+	local customFontAsset = getcustomasset(jsonFileName)
+
+	return Font.new(customFontAsset)
+end
+
+-- Load VCR OSD Mono Font for Timer
+local vcrFont = loadCustomFont("https://github.com/OlOlOlBAKA/Utilities/blob/main/VCR_OSD_MONO_1.001.ttf?raw=true", "VCR_OSD_MONO", "VCR OSD Mono")
+
+-- 2. Configuration Settings
 local BASE_TRANSPARENCY = 0.9 -- Default max transparency (faint/idle)
 local MIN_TRANSPARENCY = 0.6  -- Min transparency when monster is on top of player (heavy static)
 local MAX_DETECTION_DIST = 150 -- Distance in studs where static starts ramping up
@@ -21,6 +54,9 @@ local FADE_SPEED = 3 -- Speed multiplier for smooth proximity transparency trans
 local MAX_ROTATION = 90
 local UPDATE_INTERVAL = 0.03
 local timeAccumulator = 0
+
+-- Timer Accumulator
+local tapeTimeSeconds = 0
 
 local STATIC_IMAGE_ID = "rbxassetid://9470965"
 
@@ -124,6 +160,20 @@ rightBorder.Position = UDim2.new(0.85, 0, 0, 0)
 rightBorder.BorderSizePixel = 0
 rightBorder.Parent = mainGroup
 
+local timerTextLabel = Instance.new("TextLabel")
+timerTextLabel.Name = "TimerTextLabel"
+timerTextLabel.BackgroundTransparency = 1
+timerTextLabel.FontFace = vcrFont
+timerTextLabel.Text = "00:00:00"
+timerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+timerTextLabel.TextScaled = true
+timerTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+timerTextLabel.TextYAlignment = Enum.TextYAlignment.Top
+timerTextLabel.Size = UDim2.new(0.25, 0, 0.075, 0)
+timerTextLabel.Position = UDim2.new(-0.225, 0, 0.182, 0)
+timerTextLabel.Active = false
+timerTextLabel.Interactable = false
+timerTextLabel.Parent = rightBorder
 -- 11. Create Tiled ImageLabel inside Frame
 local staticImage = Instance.new("ImageLabel")
 staticImage.Name = "TiledStaticImage"
@@ -148,6 +198,14 @@ tapeAction.Changed:Connect(function(newMode)
 		modeTextImage.Image = ASSET_IDS[newMode]
 	end
 end)
+
+-- Helper function to format seconds into HH:MM:SS
+local function formatTimestamp(seconds)
+	local hrs = math.floor(seconds / 3600)
+	local mins = math.floor((seconds % 3600) / 60)
+	local secs = math.floor(seconds % 60)
+	return string.format("%02d:%02d:%02d", hrs, mins, secs)
+end
 
 -- Helper function to get closest entity distance
 local function getClosestMonsterDistance()
@@ -183,20 +241,30 @@ local function getClosestMonsterDistance()
 	return minDistance
 end
 
--- 13. Animate Position, Rotation, TapeAction Mode, Screen Black Fade, and Proximity Transparency
+-- 13. Animate Position, Rotation, TapeAction Mode, Timer, Screen Black Fade, and Proximity Transparency
 RunService.RenderStepped:Connect(function(deltaTime)
 	local mode = tapeAction.Value
 	
+	-- Timer Behavior
+	if mode == "PLAY" or mode == "REPLAY" then
+		tapeTimeSeconds = tapeTimeSeconds + deltaTime
+	elseif mode == "REWIND" then
+		tapeTimeSeconds = math.max(0, tapeTimeSeconds - (deltaTime * 5)) -- Rewinds 5x speed
+	end
+	-- PAUSE freezes tapeTimeSeconds
+	
+	timerTextLabel.Text = formatTimestamp(tapeTimeSeconds)
+
 	-- Mode Handling: 2-second transitions for PAUSE mode
 	if mode == "PAUSE" then
-		-- Smoothly turn screen fully black over 2 seconds (0 -> 1)
+		-- Smoothly turn screen fully black over 2 seconds
 		pauseOverlay.BackgroundTransparency = math.max(0, pauseOverlay.BackgroundTransparency - (deltaTime / 2))
-		-- Smoothly fade out static noise & UI text over 2 seconds (0 -> 1)
+		-- Smoothly fade out static noise & UI text over 2 seconds
 		mainGroup.GroupTransparency = math.min(1, mainGroup.GroupTransparency + (deltaTime / 2))
 	else
-		-- Smoothly return screen back from black over 2 seconds (1 -> 0)
+		-- Smoothly return screen back from black over 2 seconds
 		pauseOverlay.BackgroundTransparency = math.min(1, pauseOverlay.BackgroundTransparency + (deltaTime / 2))
-		-- Smoothly restore UI elements visibility over 2 seconds (1 -> 0)
+		-- Smoothly restore UI elements visibility over 2 seconds
 		mainGroup.GroupTransparency = math.max(0, mainGroup.GroupTransparency - (deltaTime / 2))
 	end
 	
