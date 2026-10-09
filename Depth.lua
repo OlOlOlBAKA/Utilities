@@ -1,3 +1,5 @@
+local TS = game:GetService("TweenService")
+
 local function customImage(name, link)
 	if isfile(name .. ".PNG") then
 		delfile(name .. ".PNG")
@@ -55,6 +57,11 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                     for _, room in ipairs(workspace.CurrentRooms:GetChildren()) do
                         if room ~= workspace.CurrentRooms:FindFirstChild(game.ReplicatedStorage.GameData.LatestRoom.Value + 1) then
                             actions.ToggleLight(room, true, Color3.fromRGB(0, 100, 255))
+					        for _,v in ipairs(room.Assets:GetDescendants()) do 
+						        if v:IsA("BasePart") and v.Name == "Neon" then
+							        TS:Create(v, TweenInfo.new(1.25), {Color = Color3.fromRGB(150,150,255)}):Play()
+						        end
+				        	end
                         end
                     end
                     for _,v in ipairs(model.DepthNew:GetChildren()) do
