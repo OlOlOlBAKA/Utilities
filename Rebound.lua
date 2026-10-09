@@ -50,7 +50,7 @@ local isPresent = false
 
 local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Room_Path_Find.lua"))()
 task.spawn(function()
-    Main_Game.camShaker:ShakeOnce(21, 2, 3, 3)  
+    Main_Game.camShaker:ShakeOnce(21, 3, 1, 3)  
     Shake()
 end)
 
