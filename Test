@@ -111,6 +111,8 @@ local function spawnEntity(entityName, roomNumber)
 
     activeEntities[entityName] = true
 
+    task.wait(1)
+
     -- 1. Run entity script via loadstring
     task.spawn(function()
         if entityName == "A-120" then
@@ -300,7 +302,6 @@ if gameData and gameData:FindFirstChild("LatestRoom") then
     Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
     
     latestRoom.Changed:Connect(function(newRoomNumber)
-        task.wait(1)
         handleHardcoreRoom(newRoomNumber)
     end)
 
