@@ -54,10 +54,9 @@ task.spawn(function()
     Shake()
 end)
 
-task.wait(0.1)
 local entityConfig = {
     Model = game:GetObjects("rbxassetid://77366392445371")[1],
-    Speed = 50,
+    Speed = 70,
     HeightOffset = 5,
     FloorYOffset = -2,
     DelayTime = 4,
@@ -179,7 +178,7 @@ task.spawn(function()
 
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
-                Speed = 50,
+                Speed = 70,
                 HeightOffset = 5,
                 FloorYOffset = -2,
                 DelayTime = 0.75,
