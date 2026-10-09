@@ -41,8 +41,8 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
             ReboundDelayTime = 1.0,
 
             EnableCameraShake = true,
-            ShakeValues = {2.25, 20, 0.1, 1},
-            ShakeRadius = 100,
+            ShakeValues = {3.5, 22, 0.25, 1.5},
+            ShakeRadius = 150,
 
             ShowPath = false,
 
@@ -59,7 +59,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                     end
                     for _,v in ipairs(model.DepthNew:GetChildren()) do
                         if v:IsA("Sound") then
-                            v.Volume = v.Volume * 1.25
+                            v.Volume = v.Volume * 1.5
                         end
                     end
                 end,
