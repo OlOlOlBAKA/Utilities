@@ -76,7 +76,7 @@ local tapeAction = playerGui:FindFirstChild("TapeAction")
 if not tapeAction then
 	tapeAction = Instance.new("StringValue")
 	tapeAction.Name = "TapeAction"
-	tapeAction.Value = "PLAY" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE"
+	tapeAction.Value = "PLAY" -- Options: "PLAY", "REPLAY", "REWIND", "PAUSE", "END"
 	tapeAction.Parent = playerGui
 end
 
@@ -112,7 +112,7 @@ pauseOverlay.BorderSizePixel = 0
 pauseOverlay.ZIndex = 1
 pauseOverlay.Parent = screenGui
 
--- 7. CanvasGroup Container (Handles 2-second PAUSE fade for all overlay elements)
+-- 7. CanvasGroup Container (Handles 2-second PAUSE fade & 1-second END fade for all overlay elements)
 local mainGroup = Instance.new("CanvasGroup")
 mainGroup.Name = "MainGroup"
 mainGroup.BackgroundTransparency = 1
@@ -177,6 +177,7 @@ timerTextLabel.Position = UDim2.new(-0.225, 0, 0.182, 0)
 timerTextLabel.Active = false
 timerTextLabel.Interactable = false
 timerTextLabel.Parent = rightBorder
+
 -- 11. Create Tiled ImageLabel inside Frame
 local staticImage = Instance.new("ImageLabel")
 staticImage.Name = "TiledStaticImage"
@@ -244,9 +245,31 @@ local function getClosestMonsterDistance()
 	return minDistance
 end
 
--- 13. Animate Position, Rotation, TapeAction Mode, Timer, Screen Black Fade, and Proximity Transparency
-RunService.RenderStepped:Connect(function(deltaTime)
+-- 13. Animate Position, Rotation, TapeAction Mode, Timer, Screen Black Fade, Proximity Transparency, and Destruction
+local renderConnection
+renderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 	local mode = tapeAction.Value
+	
+	-- END Mode: Smoothly fade everything out over 1 second, then destroy
+	if mode == "END" then
+		-- Smoothly fade out all UI elements to 1 (invisible) over 1 second
+		mainGroup.GroupTransparency = math.min(1, mainGroup.GroupTransparency + (deltaTime / 1))
+		-- Fade black pause overlay out as well
+		pauseOverlay.BackgroundTransparency = math.min(1, pauseOverlay.BackgroundTransparency + (deltaTime / 1))
+		-- Smoothly reduce blur size to 0 over 1 second
+		blurEffect.Size = math.max(0, blurEffect.Size - (7 * deltaTime / 1))
+
+		-- Cleanup when fully invisible
+		if mainGroup.GroupTransparency >= 1 then
+			screenGui:Destroy()
+			if blurEffect then
+				blurEffect:Destroy()
+			end
+			tapeAction:Destroy()
+			renderConnection:Disconnect()
+		end
+		return
+	end
 	
 	-- Timer Behavior
 	if mode == "PLAY" or mode == "REPLAY" then
