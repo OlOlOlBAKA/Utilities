@@ -46,77 +46,7 @@ local function Shake()
     Earthquake:Destroy()
 end
 
-local function createScreenGui()
-	local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "StaticScreenGui"
-    screenGui.ResetOnSpawn = false
-    screenGui.IgnoreGuiInset = true
-    screenGui.ScreenInsets = Enum.ScreenInsets.None
-    screenGui.DisplayOrder = -5
-    screenGui.Enabled = true
-    screenGui.Parent = playerGui
 
-	return screenGui
-end
-
-local function createStatic(screen)
-	local containerFrame = Instance.new("Frame")
-containerFrame.Name = "StaticContainer"
-containerFrame.BackgroundTransparency = 1
-containerFrame.Size = UDim2.new(1, 0, 1, 0)
-containerFrame.Position = UDim2.new(0, 0, 0, 0)
-containerFrame.ClipsDescendants = true
-containerFrame.Parent = screen
-
-local leftBorder = Instance.new("Frame")
-leftBorder.Name = "LeftBorder"
-leftBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-leftBorder.BackgroundTransparency = 0
-leftBorder.Size = UDim2.new(1, 0, 1, 0)
-leftBorder.Position = UDim2.new(-0.8, 0, 0, 0)
-leftBorder.BorderSizePixel = 0
-leftBorder.Parent = screen
-
-local rightBorder = Instance.new("Frame")
-rightBorder.Name = "RightBorder"
-rightBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-rightBorder.BackgroundTransparency = 0
-rightBorder.Size = UDim2.new(1, 0, 1, 0)
-rightBorder.Position = UDim2.new(0.8, 0, 0, 0)
-rightBorder.BorderSizePixel = 0
-rightBorder.Parent = screen
-
-	local staticImage = Instance.new("ImageLabel")
-staticImage.Name = "TiledStaticImage"
-staticImage.BackgroundTransparency = 1
-staticImage.Image = "rbxassetid://9470965"
-staticImage.ImageTransparency = BASE_TRANSPARENCY
-staticImage.ImageColor3 = Color3.fromRGB(255, 255, 255)
-
-staticImage.Active = true
-staticImage.Interactable = true
-
-staticImage.ScaleType = Enum.ScaleType.Tile
-staticImage.TileSize = UDim2.new(0, 256, 0, 256)
-
-staticImage.Size = UDim2.new(10, 0, 10, 0)
-staticImage.AnchorPoint = Vector2.new(0.5, 0.5)
-staticImage.Parent = containerFrame
-end
-
-local function createBlackScreen(screen)
-local black = Instance.new("Frame")
-black.Name = "tweenBlack"
-black.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-black.BackgroundTransparency = 1
-black.Zindex = 100000
-black.Size = UDim2.new(1, 0, 1, 0)
-black.Position = UDim2.new(0, 0, 0, 0)
-black.BorderSizePixel = 0
-black.Parent = screen
-
-	return black
-end
 
 local isCrucified = false
 local isPresent = false
@@ -199,7 +129,42 @@ local entityConfig = {
         OnEnterRoom = function(model, roomFolder, actions) end,
         OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions) end,
         OnSeePlayer = function(model, playerCharacter, actions) end,
-        OnKillPlayer = function(model, playerCharacter, actions) end,
+        OnKillPlayer = function(model, playerCharacter, actions)
+						actions.Stop()
+						for _, v in pairs(model:GetDescendants()) do
+                            if v:IsA("Sound") then
+                                v.Volume = 0
+                            end
+                        end
+						local cam = workspace.CurrentCamera
+						local camCF = CFrame.new(cam.CFrame.Position, model.PrimaryPart.Position + Vector3.new(0, 1, 0))
+				        local camTween = TweenService:Create(Camera, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = camCF })
+				        camTween:Play()
+						task.wait(1)
+						RunService:BindToRenderStep("onDeathScreen", Enum.RenderPriority.Camera.Value + 1, function()
+				            if model and model.PrimaryPart and char and char.PrimaryPart then
+					            local targetPos = model.PrimaryPart.Position + Vector3.new(0, 1, 0)
+					            cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
+				            end
+			            end)
+						task.wait(2)
+                        local tape = game.Players.LocalPlayer.PlayerGui:FindFirstChild("TapeAction")
+                        if tape then
+                            tape.Value = "REWIND"
+                            task.wait(3)
+                            tape.Value = "REPLAY"
+                            actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 5), {
+                                Speed = 70,
+                                ReachDistance = 3,
+                                HeightOffset = 2,
+                            })
+                            task.wait(0.5)
+                            tape.Value = "PAUSE"
+                            task.wait(2)
+                            tape.Value = "END"
+                            playerCharacter.Humanoid.Health = 0
+                        end
+        end,
 
         OnCrucifixion = function(model: Model | BasePart, actions)
             isCrucified = true
@@ -323,6 +288,22 @@ task.spawn(function()
 				            end
 			            end)
 						task.wait(2)
+                        local tape = game.Players.LocalPlayer.PlayerGui:FindFirstChild("TapeAction")
+                        if tape then
+                            tape.Value = "REWIND"
+                            task.wait(3)
+                            tape.Value = "REPLAY"
+                            actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 5), {
+                                Speed = 70,
+                                ReachDistance = 3,
+                                HeightOffset = 2,
+                            })
+                            task.wait(0.5)
+                            tape.Value = "PAUSE"
+                            task.wait(2)
+                            tape.Value = "END"
+                            playerCharacter.Humanoid.Health = 0
+                        end
 					end,
 
                     OnCrucifixion = function(model: Model | BasePart, actions)
