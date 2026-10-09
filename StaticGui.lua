@@ -3,7 +3,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
-local ContentProvider = game:GetService("ContentProvider")
 
 local localPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = localPlayer:WaitForChild("PlayerGui")
@@ -34,21 +33,6 @@ local ASSET_IDS = {
 	REWIND = LoadCustomInstance(root.."/Rewind.PNG"),
 	PAUSE = LoadCustomInstance(root.."/Pause.PNG")
 }
-
--- 2. Preload Images
-task.spawn(function()
-	local assetsToPreload = { STATIC_IMAGE_ID }
-	for _, id in pairs(ASSET_IDS) do
-		if type(id) == "string" then
-			table.insert(assetsToPreload, id)
-		end
-	end
-	
-	-- Asynchronously preloads textures into memory
-	pcall(function()
-		ContentProvider:PreloadAsync(assetsToPreload)
-	end)
-end)
 
 -- 3. TapeAction StringValue in PlayerGui
 local tapeAction = playerGui:FindFirstChild("TapeAction")
