@@ -492,7 +492,7 @@ local function checkAdvancedHitbox(
 
 	local targetParts = {}
 	for _, child in ipairs(character:GetChildren()) do
-		if child:IsA("BasePart") and child.Name ~= "Head" then
+		if child:IsA("BasePart") and child.Name == "HumanoidRootPart" then
 			table.insert(targetParts, child)
 		end
 	end
