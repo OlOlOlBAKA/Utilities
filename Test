@@ -106,6 +106,7 @@ end
 local function spawnEntity(entityName, roomNumber)
     -- Prevent duplicate spawns if active or already in Workspace
     if activeEntities[entityName] or workspace:FindFirstChild(entityName) then 
+        warn(entityName.. " is present right now cannot spawn")
         return 
     end
 
