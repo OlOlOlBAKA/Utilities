@@ -300,6 +300,7 @@ if gameData and gameData:FindFirstChild("LatestRoom") then
     Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
     
     latestRoom.Changed:Connect(function(newRoomNumber)
+        task.wait(math.random(1,2))
         handleHardcoreRoom(newRoomNumber)
     end)
 
