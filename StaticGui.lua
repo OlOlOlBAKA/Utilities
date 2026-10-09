@@ -24,7 +24,7 @@ local timeAccumulator = 0
 
 local STATIC_IMAGE_ID = "rbxassetid://9470965"
 
--- Image Asset IDs for each TapeAction state (Replace with your own asset IDs)
+-- Image Asset IDs for each TapeAction state
 local ASSET_IDS = {
 	PLAY = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Play.PNG"),
 	REPLAY = LoadCustomAsset("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/main/Replay.PNG"),
@@ -62,16 +62,28 @@ screenGui.DisplayOrder = -5
 screenGui.Enabled = true
 screenGui.Parent = playerGui
 
--- 6. CanvasGroup Container (Handles 2-second PAUSE fade for all elements)
+-- 6. Full-Screen Pause Black Overlay (Smoothly fades in to turn screen black)
+local pauseOverlay = Instance.new("Frame")
+pauseOverlay.Name = "PauseOverlay"
+pauseOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+pauseOverlay.BackgroundTransparency = 1 -- Starts fully transparent
+pauseOverlay.Size = UDim2.new(1, 0, 1, 0)
+pauseOverlay.Position = UDim2.new(0, 0, 0, 0)
+pauseOverlay.BorderSizePixel = 0
+pauseOverlay.ZIndex = 1
+pauseOverlay.Parent = screenGui
+
+-- 7. CanvasGroup Container (Handles 2-second PAUSE fade for all overlay elements)
 local mainGroup = Instance.new("CanvasGroup")
 mainGroup.Name = "MainGroup"
 mainGroup.BackgroundTransparency = 1
 mainGroup.Size = UDim2.new(1, 0, 1, 0)
 mainGroup.Position = UDim2.new(0, 0, 0, 0)
 mainGroup.GroupTransparency = 0 -- 0 = fully visible, 1 = fully invisible
+mainGroup.ZIndex = 2
 mainGroup.Parent = screenGui
 
--- 7. Outer Frame Container for Static
+-- 8. Outer Frame Container for Static
 local containerFrame = Instance.new("Frame")
 containerFrame.Name = "StaticContainer"
 containerFrame.BackgroundTransparency = 1
@@ -80,13 +92,13 @@ containerFrame.Position = UDim2.new(0, 0, 0, 0)
 containerFrame.ClipsDescendants = true
 containerFrame.Parent = mainGroup
 
--- 8. Left Black Frame (Positioned at -0.85, 0, 0, 0)
+-- 9. Left Black Frame (Positioned at -0.85, 0, 0, 0)
 local leftBorder = Instance.new("Frame")
 leftBorder.Name = "LeftBorder"
 leftBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 leftBorder.BackgroundTransparency = 0 -- Visible black frame
 leftBorder.Size = UDim2.new(1, 0, 1, 0)
-leftBorder.Position = UDim2.new(-0.8, 0, 0, 0)
+leftBorder.Position = UDim2.new(-0.85, 0, 0, 0)
 leftBorder.BorderSizePixel = 0
 leftBorder.Parent = mainGroup
 
@@ -96,23 +108,23 @@ modeTextImage.Name = "ModeTextImage"
 modeTextImage.BackgroundTransparency = 1
 modeTextImage.Image = ASSET_IDS[tapeAction.Value] or ASSET_IDS.PLAY
 modeTextImage.Size = UDim2.new(0.35, 0, 0.55, 0)
-modeTextImage.Position = UDim2.new(0.725, 0, -0.05, 0)
+modeTextImage.Position = UDim2.new(0.95, 0, -0.05, 0)
 modeTextImage.ScaleType = Enum.ScaleType.Fit
 modeTextImage.Active = false
 modeTextImage.Interactable = false
 modeTextImage.Parent = leftBorder
 
--- 9. Right Black Frame (Positioned at 0.85, 0, 0, 0)
+-- 10. Right Black Frame (Positioned at 0.85, 0, 0, 0)
 local rightBorder = Instance.new("Frame")
 rightBorder.Name = "RightBorder"
 rightBorder.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 rightBorder.BackgroundTransparency = 0 -- Visible black frame
 rightBorder.Size = UDim2.new(1, 0, 1, 0)
-rightBorder.Position = UDim2.new(0.8, 0, 0, 0)
+rightBorder.Position = UDim2.new(0.85, 0, 0, 0)
 rightBorder.BorderSizePixel = 0
 rightBorder.Parent = mainGroup
 
--- 10. Create Tiled ImageLabel inside Frame
+-- 11. Create Tiled ImageLabel inside Frame
 local staticImage = Instance.new("ImageLabel")
 staticImage.Name = "TiledStaticImage"
 staticImage.BackgroundTransparency = 1
@@ -130,7 +142,7 @@ staticImage.Size = UDim2.new(10, 0, 10, 0)
 staticImage.AnchorPoint = Vector2.new(0.5, 0.5)
 staticImage.Parent = containerFrame
 
--- 11. Automatically Swap Text Image on TapeAction Change
+-- 12. Automatically Swap Text Image on TapeAction Change
 tapeAction.Changed:Connect(function(newMode)
 	if ASSET_IDS[newMode] then
 		modeTextImage.Image = ASSET_IDS[newMode]
@@ -171,14 +183,20 @@ local function getClosestMonsterDistance()
 	return minDistance
 end
 
--- 12. Animate Position, Rotation, TapeAction Mode, and Smooth Proximity Transparency
+-- 13. Animate Position, Rotation, TapeAction Mode, Screen Black Fade, and Proximity Transparency
 RunService.RenderStepped:Connect(function(deltaTime)
 	local mode = tapeAction.Value
 	
-	-- Mode Handling: Group Fading for PAUSE mode (2 seconds)
+	-- Mode Handling: 2-second transitions for PAUSE mode
 	if mode == "PAUSE" then
+		-- Smoothly turn screen fully black over 2 seconds (0 -> 1)
+		pauseOverlay.BackgroundTransparency = math.max(0, pauseOverlay.BackgroundTransparency - (deltaTime / 2))
+		-- Smoothly fade out static noise & UI text over 2 seconds (0 -> 1)
 		mainGroup.GroupTransparency = math.min(1, mainGroup.GroupTransparency + (deltaTime / 2))
 	else
+		-- Smoothly return screen back from black over 2 seconds (1 -> 0)
+		pauseOverlay.BackgroundTransparency = math.min(1, pauseOverlay.BackgroundTransparency + (deltaTime / 2))
+		-- Smoothly restore UI elements visibility over 2 seconds (1 -> 0)
 		mainGroup.GroupTransparency = math.max(0, mainGroup.GroupTransparency - (deltaTime / 2))
 	end
 	
