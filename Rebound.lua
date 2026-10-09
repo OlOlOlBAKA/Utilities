@@ -58,7 +58,7 @@ end)
 task.wait(0.1)
 local entityConfig = {
     Model = game:GetObjects("rbxassetid://77366392445371")[1],
-    Speed = 45,
+    Speed = 50,
     HeightOffset = 5,
     FloorYOffset = -2,
     DelayTime = 4,
@@ -101,7 +101,7 @@ local entityConfig = {
                 if ReboundColor then ReboundColor:Destroy() end
             end)
             model.Rebound_Cue2.Volume = 0.5
-			model.Rebound_Cue.Volume = 0.5
+			model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
             model.Rebound_Cue:Play()
             model.Rebound_Cue2:Play()
             model.ReboundNew.Close.Volume = 0.75
@@ -115,7 +115,7 @@ local entityConfig = {
         end,
 
         OnStartMoving = function(model, actions)
-			task.wait(0.5)
+			task.wait(0.3)
             for _, v in pairs(model.ReboundNew:GetChildren()) do
                 if v:IsA("Sound") then
                     v:Play()
@@ -179,7 +179,7 @@ task.spawn(function()
 
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
-                Speed = 45,
+                Speed = 50,
                 HeightOffset = 5,
                 FloorYOffset = -2,
                 DelayTime = 0.75,
@@ -212,14 +212,14 @@ task.spawn(function()
                         model.ReboundNew.Close.Volume = 0.75
                         model.ReboundNew.Idle.Volume = 0.75
                         model.ReboundNew.Sound.Volume = 3
-						model.Rebound_Cue.Volume = 0.5
+						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
                         model.Rebound_Cue:Play()
                         model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
                     end,
 
                     OnStartMoving = function(model, actions)
-                        task.wait(0.5)
+                        task.wait(0.3)
 						for _, v in pairs(model.ReboundNew:GetChildren()) do
                             if v:IsA("Sound") then
                                 v:Play()
