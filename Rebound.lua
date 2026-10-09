@@ -10,10 +10,9 @@ local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Ma
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
 local function customSound(name, link)
-	if isfile(name .. ".mp3") then
-		delfile(name .. ".mp3")
+	if not isfile(name .. ".mp3") then
+		writefile(name .. ".mp3", game:HttpGet(link))
     end
-    writefile(name .. ".mp3", game:HttpGet(link))
 
 	if getcustomasset then
 		return getcustomasset(name .. ".mp3")
