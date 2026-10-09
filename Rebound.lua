@@ -104,11 +104,11 @@ local entityConfig = {
 			model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
             model.Rebound_Cue:Play()
             model.Rebound_Cue2:Play()
-            model.ReboundNew.Close.Volume = 0.75
-            model.ReboundNew.Idle.Volume = 0.75
+            model.ReboundNew.Close.Volume = 0.35
+            model.ReboundNew.Idle.Volume = 0.35
             model.ReboundNew.Sound.Volume = 3
 
-            task.wait(3.75)
+            task.wait(3.5)
             model.Rebound_Cue.TimePosition = 0
             model.Rebound_Cue:Play()
 			model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
@@ -175,14 +175,14 @@ task.spawn(function()
 
         if not isPresent then
             reboundsLeft = reboundsLeft - 1
-            task.wait(3)
+            task.wait(2.5)
 
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
                 Speed = 50,
                 HeightOffset = 5,
                 FloorYOffset = -2,
-                DelayTime = 0.25,
+                DelayTime = 0.75,
                 SpawnOffsetRooms = 5,
                 AttackType = "Front",
 
@@ -209,8 +209,8 @@ task.spawn(function()
                 Callbacks = {
                     OnSpawned = function(model, actions)
                         isPresent = true
-                        model.ReboundNew.Close.Volume = 0.75
-                        model.ReboundNew.Idle.Volume = 0.75
+                        model.ReboundNew.Close.Volume = 0.35
+                        model.ReboundNew.Idle.Volume = 0.35
                         model.ReboundNew.Sound.Volume = 3
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
