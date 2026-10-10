@@ -452,7 +452,7 @@ local function checkLineOfSight(entityModel: Instance): (boolean, Model?)
 	if not character or not character:FindFirstChild("HumanoidRootPart") then return false, nil end
 
 	local entityPos = entityModel:IsA("Model") and entityModel:GetPivot().Position or entityModel.Position
-	local playerPos = character.HumanoidRootPart.Position
+	local playerPos = character.UpperTorso.Position or character.HumanoidRootPart.Position
 
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -492,7 +492,7 @@ local function checkAdvancedHitbox(
 
 	local targetParts = {}
 	for _, child in ipairs(character:GetChildren()) do
-		if child:IsA("BasePart") and child.Name == "HumanoidRootPart" then
+		if child:IsA("BasePart") and child.Name == "UpperTorso" then
 			table.insert(targetParts, child)
 		end
 	end
