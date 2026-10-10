@@ -279,6 +279,13 @@ local function performCrucifixion(
 	end
 
 	local typeData = CrucifixStorage.CrucifixTypes["guiding"]
+
+	if ReplicatedStorage.GameData.Floor.Value == "Hotel" or ReplicatedStorage.GameData.Floor.Value == "Mines" then
+		typeData = CrucifixStorage.CrucifixTypes["guiding"]
+	else
+		typeData = CrucifixStorage.CrucifixTypes["curious"]
+	end
+	
 	local color = typeData.Color
 
 	for _, v in ipairs(repentance:GetDescendants()) do
