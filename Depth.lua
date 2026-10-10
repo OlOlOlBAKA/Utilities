@@ -121,7 +121,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
                         model.Slam:Play()
-				        Main_Game.camShaker:ShakeOnce(6, 32, 0.25, 1)  
+				        Main_Game.camShaker:ShakeOnce(6, 32, 0.1, 1.5)  
                     end
 			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
 				       _G.SurviveDepth = true
