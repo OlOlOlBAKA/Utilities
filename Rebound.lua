@@ -104,7 +104,7 @@ local entityConfig = {
             model.Rebound_Cue2:Play()
             model.ReboundNew.Close.Volume = 0.35
             model.ReboundNew.Idle.Volume = 0.35
-            model.ReboundNew.Sound.Volume = 0.5
+            model.ReboundNew.Sound.Volume = 1
 			local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
 			distortion.Level = 0.5
 			model.ReboundNew.Sound.RollOffMaxDistance = 500
@@ -212,7 +212,7 @@ task.spawn(function()
                         isPresent = true
                         model.ReboundNew.Close.Volume = 0.35
                         model.ReboundNew.Idle.Volume = 0.35
-                        model.ReboundNew.Sound.Volume = 0.5
+                        model.ReboundNew.Sound.Volume = 1
 						local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
 						distortion.Level = 0.5
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
