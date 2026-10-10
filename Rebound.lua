@@ -211,7 +211,7 @@ task.spawn(function()
                         isPresent = true
                         model.ReboundNew.Close.Volume = 0.35
                         model.ReboundNew.Idle.Volume = 0.35
-                        model.ReboundNew.Sound.Volume = 1
+                        model.ReboundNew.Sound.Volume = 1.5
 						local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
