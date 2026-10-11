@@ -949,45 +949,70 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local reachDistance = cfg.ReachDistance or 2
 		local customHeight = cfg.HeightOffset or heightOffset
 
+		-- Determine initial target instance reference
+		local targetInstance: Instance? = if typeof(target) == "Instance" then target else nil
+
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
-			local currentTargetPos = resolveTargetPosition(target)
+			-- Dynamically fetch the absolute latest target position every frame
+			local currentTargetPos: Vector3? = nil
+			if targetInstance and targetInstance.Parent then
+				if targetInstance:IsA("BasePart") then
+					currentTargetPos = targetInstance.Position
+				elseif targetInstance:IsA("Model") then
+					currentTargetPos = targetInstance:GetPivot().Position
+				end
+			elseif typeof(target) == "Vector3" then
+				currentTargetPos = target
+			end
+
 			if not currentTargetPos then break end
 
 			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+			local targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
 			
-			local difference = (groundTargetPos - entityPos)
+			local difference = (targetDestination - entityPos)
 			local distance = difference.Magnitude
 
-			-- Target reached check
+			-- Stop if within reach distance
 			if distance <= reachDistance then break end
 
-			-- Move a small step toward the target based on delta time
+			-- Wait for frame delta time
 			local stepTime = RunService.Heartbeat:Wait()
 			
-			-- Re-check flags after yielding
 			if not isMoveToActive or not model or not model.Parent or skipCurrentRoom or isBeingCrucified or isStopped then
 				break
 			end
 
-			-- Re-fetch current position after yield
+			-- Re-fetch current position after yield to prevent overshooting
 			entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			groundTargetPos = alignToFloorLevel(resolveTargetPosition(target) or currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-			difference = (groundTargetPos - entityPos)
-			distance = difference.Magnitude
+			
+			-- Re-calculate latest target position
+			if targetInstance and targetInstance.Parent then
+				if targetInstance:IsA("BasePart") then
+					currentTargetPos = targetInstance.Position
+				elseif targetInstance:IsA("Model") then
+					currentTargetPos = targetInstance:GetPivot().Position
+				end
+			end
 
-			if distance > 0.05 then
-				local unitDirection = difference.Unit
-				local moveStep = math.min(distance, moveSpeed * stepTime)
-				local nextPosition = entityPos + (unitDirection * moveStep)
+			if currentTargetPos then
+				targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
+				difference = (targetDestination - entityPos)
+				distance = difference.Magnitude
 
-				-- Look towards target movement direction
-				local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
+				if distance > 0.05 then
+					local unitDirection = difference.Unit
+					local moveStep = math.min(distance, moveSpeed * stepTime)
+					local nextPosition = entityPos + (unitDirection * moveStep)
 
-				if model:IsA("BasePart") then
-					model.CFrame = targetCFrame
-				elseif model:IsA("Model") then
-					model:PivotTo(targetCFrame)
+					-- Instantly orient entity toward moving target
+					local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
+
+					if model:IsA("BasePart") then
+						model.CFrame = targetCFrame
+					elseif model:IsA("Model") then
+						model:PivotTo(targetCFrame)
+					end
 				end
 			end
 		end
@@ -995,6 +1020,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 		regenPathRequested = true
 	end
+
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
