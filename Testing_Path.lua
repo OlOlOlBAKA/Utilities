@@ -11,11 +11,11 @@ local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
 
 local function customSound(name, link)
 	if not isfile(name .. ".mp3") then
-		  writefile(name .. ".mp3", game:HttpGet(link))
-  end
+		writefile(name .. ".mp3", game:HttpGet(link))
+    end
 
 	if getcustomasset then
-		  return getcustomasset(name .. ".mp3")
+		return getcustomasset(name .. ".mp3")
 	end
 end
 
@@ -59,7 +59,7 @@ local entityConfig = {
     Speed = 70,
     HeightOffset = 5,
     FloorYOffset = -2,
-    DelayTime = 4,
+    DelayTime = 4.5,
     SpawnOffsetRooms = 5,
     AttackType = "Front",
 
@@ -102,8 +102,10 @@ local entityConfig = {
 			model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
             model.Rebound_Cue:Play()
             model.Rebound_Cue2:Play()
-            model.ReboundNew.Close.Volume = 0.35
-            model.ReboundNew.Idle.Volume = 0.35
+            model.ReboundNew.Close.Volume = 0.5
+            model.ReboundNew.Idle.Volume = 0.5
+			model.ReboundNew.Close.RollOffMaxDistance = 50
+			model.ReboundNew.Idle.RollOffMaxDistance = 50
             model.ReboundNew.Sound.Volume = 1
 			local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
 			distortion.Level = 0.5
@@ -116,7 +118,7 @@ local entityConfig = {
         end,
 
         OnStartMoving = function(model, actions)
-			task.wait(0.4)
+			task.wait(0.25)
             for _, v in pairs(model.ReboundNew:GetChildren()) do
                 if v:IsA("Sound") then
                     v:Play()
@@ -176,14 +178,14 @@ task.spawn(function()
 
         if not isPresent then
             reboundsLeft = reboundsLeft - 1
-            task.wait(2.5)
+            task.wait(2)
 
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
                 Speed = 70,
                 HeightOffset = 5,
                 FloorYOffset = -2,
-                DelayTime = 0.75,
+                DelayTime = 1,
                 SpawnOffsetRooms = 5,
                 AttackType = "Front",
 
@@ -210,8 +212,10 @@ task.spawn(function()
                 Callbacks = {
                     OnSpawned = function(model, actions)
                         isPresent = true
-                        model.ReboundNew.Close.Volume = 0.35
-                        model.ReboundNew.Idle.Volume = 0.35
+                        model.ReboundNew.Close.Volume = 0.5
+                        model.ReboundNew.Idle.Volume = 0.5
+			            model.ReboundNew.Close.RollOffMaxDistance = 50
+			            model.ReboundNew.Idle.RollOffMaxDistance = 50
                         model.ReboundNew.Sound.Volume = 1
 						local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
 						distortion.Level = 0.5
@@ -223,7 +227,7 @@ task.spawn(function()
                     end,
 
                     OnStartMoving = function(model, actions)
-                        task.wait(0.4)
+                        task.wait(0.25)
 						for _, v in pairs(model.ReboundNew:GetChildren()) do
                             if v:IsA("Sound") then
                                 v:Play()
