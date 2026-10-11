@@ -111,7 +111,8 @@ local CrucifixStorage = {
 type MoveToConfig = {
 	Speed: number?,
 	ReachDistance: number?,
-	HeightOffset: number?
+	HeightOffset: number?,
+	Offset: Vector3?
 }
 
 type ActionsHandle = {
@@ -948,28 +949,35 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local moveSpeed = cfg.Speed or speed
 		local reachDistance = cfg.ReachDistance or 2
 		local customHeight = cfg.HeightOffset or heightOffset
+		local offset = cfg.Offset or Vector3.zero -- Offset relative to target facing direction
 
-		-- Helper function to fetch the LIVE Position of any target type on demand
+		-- Helper function to fetch the LIVE CFrame/Position with offset applied
 		local function getLiveTargetPosition(): Vector3?
 			if typeof(target) == "Vector3" then
-				return target
+				return target + offset
 			elseif typeof(target) == "Instance" then
+				local targetCFrame: CFrame? = nil
+
 				if target:IsA("BasePart") then
-					return target.Position
+					targetCFrame = target.CFrame
 				elseif target:IsA("Model") then
-					-- Checks PrimaryPart / HumanoidRootPart first for player characters, then falls back to Pivot
 					local primary = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart", true)
 					if primary then
-						return primary.Position
+						targetCFrame = primary.CFrame
+					else
+						targetCFrame = target:GetPivot()
 					end
-					return target:GetPivot().Position
+				end
+
+				if targetCFrame then
+					-- Transforms relative offset to world space (e.g., -Z is FRONT of target)
+					return (targetCFrame * CFrame.new(offset)).Position
 				end
 			end
 			return nil
 		end
 
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
-			-- Fetch the exact live position on this frame
 			local currentTargetPos = getLiveTargetPosition()
 			if not currentTargetPos then break end
 
@@ -979,7 +987,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local difference = (targetDestination - entityPos)
 			local distance = difference.Magnitude
 
-			-- Stop if reached target
+			-- Stop if reached target offset
 			if distance <= reachDistance then break end
 
 			-- Frame step
@@ -989,7 +997,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				break
 			end
 
-			-- Re-fetch live target position after yield to track movement that happened during the frame
+			-- Re-fetch live target position after yield
 			currentTargetPos = getLiveTargetPosition()
 			if not currentTargetPos then break end
 
@@ -1003,7 +1011,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				local moveStep = math.min(distance, moveSpeed * stepTime)
 				local nextPosition = entityPos + (unitDirection * moveStep)
 
-				-- Orient entity toward the updated target direction
+				-- Orient entity toward movement direction
 				local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
 
 				if model:IsA("BasePart") then
@@ -1017,6 +1025,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 		regenPathRequested = true
 	end
+
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
