@@ -18,12 +18,12 @@ local function loadCustomFont(fontUrl, fileName, fontName)
     local ttfFileName = fileName .. ".ttf"
     local jsonFileName = fileName .. ".font"
 
-    -- 1. Download TTF file only if it doesn't exist
+    -- Download TTF file only if it doesn't exist
     if not isfile(ttfFileName) then
         writefile(ttfFileName, game:HttpGet(fontUrl))
     end
 
-    -- 2. Create .font JSON file only if it doesn't exist
+    -- Create .font JSON file only if it doesn't exist
     if not isfile(jsonFileName) then
         local ttfAssetId = getcustomasset(ttfFileName)
         local fontConfig = {
@@ -40,7 +40,7 @@ local function loadCustomFont(fontUrl, fileName, fontName)
         writefile(jsonFileName, HttpService:JSONEncode(fontConfig))
     end
 
-    -- 3. Return the Font object directly from the cached .font asset
+    -- Return the Font object directly from the cached .font asset
     local customFontAsset = getcustomasset(jsonFileName)
     return Font.new(customFontAsset)
 end
@@ -224,7 +224,7 @@ local function getClosestMonsterDistance()
 	
 	-- Search Workspace for any object named RushMoving, AmbushMoving, or DepthMoving
 	for _, object in Workspace:GetDescendants() do
-		if object.Name == "RushMoving" or object.Name == "AmbushMoving" or object.Name == "DepthMoving" then
+		if object.Name == "RushMoving" or object.Name == "AmbushMoving" or object.Name == "DepthMoving"  or object.Name == "Rebound" or object.Name == "A-120" then
 			local objectPos = nil
 			
 			if object:IsA("Model") then
@@ -250,16 +250,12 @@ local renderConnection
 renderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 	local mode = tapeAction.Value
 	
-	-- END Mode: Smoothly fade everything out over 1 second, then destroy
+	-- END Mode: Smoothly turn screen black over 2 seconds (same as PAUSE), fade UI, then destroy
 	if mode == "END" then
-		-- Smoothly fade out all UI elements to 1 (invisible) over 1 second
-		mainGroup.GroupTransparency = math.min(1, mainGroup.GroupTransparency + (deltaTime / 1))
-		-- Fade black pause overlay out as well
-		pauseOverlay.BackgroundTransparency = math.min(1, pauseOverlay.BackgroundTransparency + (deltaTime / 1))
-		-- Smoothly reduce blur size to 0 over 1 second
-		blurEffect.Size = math.max(0, blurEffect.Size - (7 * deltaTime / 1))
+		pauseOverlay.BackgroundTransparency = math.max(0, pauseOverlay.BackgroundTransparency - (deltaTime / 2))
+		mainGroup.GroupTransparency = math.min(1, mainGroup.GroupTransparency + (deltaTime / 2))
+		blurEffect.Size = math.max(0, blurEffect.Size - (7 * deltaTime / 2))
 
-		-- Cleanup when fully invisible
 		if mainGroup.GroupTransparency >= 1 then
 			screenGui:Destroy()
 			if blurEffect then
@@ -295,17 +291,20 @@ renderConnection = RunService.RenderStepped:Connect(function(deltaTime)
 	end
 	
 	-- Mode Handling: Static Image Transparency
-	if mode == "REWIND" then
+	if mode == "REWIND" or mode == "PAUSE" then
+		-- Full static visibility during rewind or pause
 		staticImage.ImageTransparency = 0
 	elseif mode == "PLAY" or mode == "REPLAY" then
 		local targetTransparency = BASE_TRANSPARENCY
 		local closestDist = getClosestMonsterDistance()
 		
+		-- Ramp up static noise as entity gets closer (150 -> 0 studs distance)
 		if closestDist <= MAX_DETECTION_DIST then
 			local alpha = 1 - math.clamp(closestDist / MAX_DETECTION_DIST, 0, 1)
 			targetTransparency = BASE_TRANSPARENCY - alpha * (BASE_TRANSPARENCY - MIN_TRANSPARENCY)
 		end
 		
+		-- Smoothly interpolate current transparency towards target transparency
 		local currentTransparency = staticImage.ImageTransparency
 		staticImage.ImageTransparency = currentTransparency + (targetTransparency - currentTransparency) * math.clamp(deltaTime * FADE_SPEED, 0, 1)
 	end
