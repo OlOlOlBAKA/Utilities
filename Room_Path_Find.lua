@@ -521,12 +521,32 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local distance = (endPos - startPos).Magnitude
 	if distance ~= distance or distance == 0 then return {} end
 
+	for _,part in ipairs(roomFolder:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if part.Name == "Collision" or
+				part.Name == "Door" or 
+				part.Name == "LeftGate" or 
+				part.Name == "RightGate" or 
+				part.Name == "Bars" then
+                if not part:FindFirstChild("PathfindingModifier") then
+                    local skip = Instance.new("PathfindingModifier")
+                    skip.Label = "Skip"
+                    skip.PassThrough = true
+                    skip.Parent = part
+                end
+            end
+        end
+    end
+	
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 1,
 		AgentHeight = 2.5,
 		AgentCanJump = false,
 		WaypointSpacing = 3.5,
-		Costs = { Default = 1 }
+		Costs = { 
+			Default = 1,
+			Skip = 1,
+		}
 	})
 
 	local success = pcall(function()
