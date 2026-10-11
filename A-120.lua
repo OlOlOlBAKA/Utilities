@@ -93,9 +93,9 @@ end)
                         task.wait(0.75)
 				        --actions.Stop()
                         --task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position + (playerCharacter.PrimaryPart.CFrame.LookVector * 2), {
+                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position, {
                             Speed = 40,
-                            ReachDistance = 3,
+                            ReachDistance = 5,
                             HeightOffset = 5,
                         })
                         --task.wait(0.1)
@@ -110,8 +110,8 @@ end)
                 end,
                 
                 OnCrucifixion = function(model: Model | BasePart, actions)
-		    model:SetAttribute("Crucified", true)
-	        end,
+		            model:SetAttribute("Crucified", true)
+	            end,
 
                 OnDespawn = function(model, actions)
                 end
