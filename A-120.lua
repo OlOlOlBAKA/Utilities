@@ -93,7 +93,7 @@ end)
                         task.wait(0.75)
 				        --actions.Stop()
                         --task.wait(0.1)
-                        actions.MoveTo(playerCharacter.PrimaryPart.CFrame.Position, {
+                        actions.MoveTo(playerCharacter.PrimaryPart, {
                             Speed = 40,
                             ReachDistance = 5,
                             HeightOffset = 5,
