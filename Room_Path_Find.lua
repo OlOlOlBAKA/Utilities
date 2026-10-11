@@ -949,22 +949,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local reachDistance = cfg.ReachDistance or 2
 		local customHeight = cfg.HeightOffset or heightOffset
 
-		-- Determine initial target instance reference
-		local targetInstance: Instance? = if typeof(target) == "Instance" then target else nil
+		-- Helper function to fetch the LIVE Position of any target type on demand
+		local function getLiveTargetPosition(): Vector3?
+			if typeof(target) == "Vector3" then
+				return target
+			elseif typeof(target) == "Instance" then
+				if target:IsA("BasePart") then
+					return target.Position
+				elseif target:IsA("Model") then
+					-- Checks PrimaryPart / HumanoidRootPart first for player characters, then falls back to Pivot
+					local primary = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart", true)
+					if primary then
+						return primary.Position
+					end
+					return target:GetPivot().Position
+				end
+			end
+			return nil
+		end
 
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
-			-- Dynamically fetch the absolute latest target position every frame
-			local currentTargetPos: Vector3? = nil
-			if targetInstance and targetInstance.Parent then
-				if targetInstance:IsA("BasePart") then
-					currentTargetPos = targetInstance.Position
-				elseif targetInstance:IsA("Model") then
-					currentTargetPos = targetInstance:GetPivot().Position
-				end
-			elseif typeof(target) == "Vector3" then
-				currentTargetPos = target
-			end
-
+			-- Fetch the exact live position on this frame
+			local currentTargetPos = getLiveTargetPosition()
 			if not currentTargetPos then break end
 
 			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
@@ -973,46 +979,37 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local difference = (targetDestination - entityPos)
 			local distance = difference.Magnitude
 
-			-- Stop if within reach distance
+			-- Stop if reached target
 			if distance <= reachDistance then break end
 
-			-- Wait for frame delta time
+			-- Frame step
 			local stepTime = RunService.Heartbeat:Wait()
 			
 			if not isMoveToActive or not model or not model.Parent or skipCurrentRoom or isBeingCrucified or isStopped then
 				break
 			end
 
-			-- Re-fetch current position after yield to prevent overshooting
+			-- Re-fetch live target position after yield to track movement that happened during the frame
+			currentTargetPos = getLiveTargetPosition()
+			if not currentTargetPos then break end
+
 			entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			
-			-- Re-calculate latest target position
-			if targetInstance and targetInstance.Parent then
-				if targetInstance:IsA("BasePart") then
-					currentTargetPos = targetInstance.Position
-				elseif targetInstance:IsA("Model") then
-					currentTargetPos = targetInstance:GetPivot().Position
-				end
-			end
+			targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
+			difference = (targetDestination - entityPos)
+			distance = difference.Magnitude
 
-			if currentTargetPos then
-				targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
-				difference = (targetDestination - entityPos)
-				distance = difference.Magnitude
+			if distance > 0.05 then
+				local unitDirection = difference.Unit
+				local moveStep = math.min(distance, moveSpeed * stepTime)
+				local nextPosition = entityPos + (unitDirection * moveStep)
 
-				if distance > 0.05 then
-					local unitDirection = difference.Unit
-					local moveStep = math.min(distance, moveSpeed * stepTime)
-					local nextPosition = entityPos + (unitDirection * moveStep)
+				-- Orient entity toward the updated target direction
+				local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
 
-					-- Instantly orient entity toward moving target
-					local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
-
-					if model:IsA("BasePart") then
-						model.CFrame = targetCFrame
-					elseif model:IsA("Model") then
-						model:PivotTo(targetCFrame)
-					end
+				if model:IsA("BasePart") then
+					model.CFrame = targetCFrame
+				elseif model:IsA("Model") then
+					model:PivotTo(targetCFrame)
 				end
 			end
 		end
@@ -1020,7 +1017,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 		regenPathRequested = true
 	end
-
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
