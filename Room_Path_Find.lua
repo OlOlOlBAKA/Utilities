@@ -733,7 +733,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				return
 			end
 
-			if isMoving and not isStopped and not isBeingCrucified then
+			if (isMoving or isMoveToActive) and not isStopped and not isBeingCrucified then
 				local character = LocalPlayer.Character
 				if character and character:FindFirstChild("HumanoidRootPart") then
 					local hrpPos = character.HumanoidRootPart.Position
