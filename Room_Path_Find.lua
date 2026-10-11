@@ -948,50 +948,48 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local moveSpeed = cfg.Speed or speed
 		local reachDistance = cfg.ReachDistance or 2
 		local customHeight = cfg.HeightOffset or heightOffset
-		local lastTargetPos: Vector3? = nil
 
-		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified do
+		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
 			local currentTargetPos = resolveTargetPosition(target)
 			if not currentTargetPos then break end
 
 			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			if (currentTargetPos - entityPos).Magnitude <= reachDistance then break end
+			local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+			
+			local difference = (groundTargetPos - entityPos)
+			local distance = difference.Magnitude
 
-			if not lastTargetPos or (currentTargetPos - lastTargetPos).Magnitude > 2 then
-				lastTargetPos = currentTargetPos
-				local groundTargetPos = alignToFloorLevel(currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
-				
-				local dist = (groundTargetPos - entityPos).Magnitude
-				if dist > reachDistance then
-					local travelTime = math.max(0.01, dist / moveSpeed)
-					local direction = (groundTargetPos - entityPos).Unit
-					local targetCFrame = CFrame.lookAt(groundTargetPos, groundTargetPos + direction)
-					local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Linear)
+			-- Target reached check
+			if distance <= reachDistance then break end
 
-					if model:IsA("BasePart") then
-						currentTween = TweenService:Create(model, tweenInfo, { CFrame = targetCFrame })
-						currentTween:Play()
-						currentTween.Completed:Wait()
-						currentTween = nil
-					elseif model:IsA("Model") then
-						local CFrameValue = Instance.new("CFrameValue")
-						CFrameValue.Value = model:GetPivot()
+			-- Move a small step toward the target based on delta time
+			local stepTime = RunService.Heartbeat:Wait()
+			
+			-- Re-check flags after yielding
+			if not isMoveToActive or not model or not model.Parent or skipCurrentRoom or isBeingCrucified or isStopped then
+				break
+			end
 
-						local connection = CFrameValue.Changed:Connect(function(newCFrame)
-							if model and model.Parent then model:PivotTo(newCFrame) end
-						end)
+			-- Re-fetch current position after yield
+			entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+			groundTargetPos = alignToFloorLevel(resolveTargetPosition(target) or currentTargetPos, nil, floorYOffset) + Vector3.new(0, customHeight, 0)
+			difference = (groundTargetPos - entityPos)
+			distance = difference.Magnitude
 
-						currentTween = TweenService:Create(CFrameValue, tweenInfo, { Value = targetCFrame })
-						currentTween:Play()
-						currentTween.Completed:Wait()
+			if distance > 0.05 then
+				local unitDirection = difference.Unit
+				local moveStep = math.min(distance, moveSpeed * stepTime)
+				local nextPosition = entityPos + (unitDirection * moveStep)
 
-						connection:Disconnect()
-						CFrameValue:Destroy()
-						currentTween = nil
-					end
+				-- Look towards target movement direction
+				local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
+
+				if model:IsA("BasePart") then
+					model.CFrame = targetCFrame
+				elseif model:IsA("Model") then
+					model:PivotTo(targetCFrame)
 				end
 			end
-			task.wait(0.05)
 		end
 
 		isMoveToActive = false
