@@ -529,6 +529,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 				m.Name == "GardenGate" then
                 for _,p in ipairs(m:GetDescendants()) do
 					if p:IsA("BasePart") then
+						p.CanQuery = false
 						if not p:FindFirstChild("PathfindingModifier") then
                             local skip = Instance.new("PathfindingModifier")
                             skip.Label = "Skip"
