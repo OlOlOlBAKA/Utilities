@@ -526,7 +526,9 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
             if m.Name == "MinesGate" or
 				m.Name == "BreakBoards" or 
 				m.Name == "MinecartMoving" or 
-				m.Name == "GardenGate" then
+				m.Name == "GardenGate" or
+				m.Name == "Door" or
+				m.Name == "DoorNormal" then
                 for _,p in ipairs(m:GetDescendants()) do
 					if p:IsA("BasePart") then
 						p.CanQuery = false
@@ -975,7 +977,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local customHeight = cfg.HeightOffset or heightOffset
 		local offset = cfg.Offset or Vector3.zero
 
-		-- Helper to get the live destination with offset applied
 		local function getLiveTargetPosition(): Vector3?
 			if typeof(target) == "Vector3" then
 				return target + offset
@@ -998,7 +999,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			return nil
 		end
 
-		-- Create a path object with your modifier costs
 		local path = PathfindingService:CreatePath({
 			AgentRadius = 1,
 			AgentHeight = 2.5,
@@ -1006,13 +1006,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			WaypointSpacing = 4,
 			Costs = {
 				Default = 1,
-				Skip = 1 -- Matches your room pathfinding modifier label
+				Skip = 1
 			}
 		})
 
 		local waypoints = {}
 		local currentWaypointIndex = 1
 		local lastPathComputeTick = 0
+		local isComputingPath = false
 
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
 			local currentTargetPos = getLiveTargetPosition()
@@ -1024,24 +1025,29 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local distanceToTarget = (targetDestination - entityPos).Magnitude
 			if distanceToTarget <= reachDistance then break end
 
-			-- Recompute path every 0.5 seconds or if we don't have waypoints yet to track moving targets dynamically
+			-- Request new path in background thread so it NEVER freezes the movement loop
 			local tickTime = os.clock()
-			if tickTime - lastPathComputeTick > 0.5 or #waypoints == 0 then
+			if (tickTime - lastPathComputeTick > 0.6 or #waypoints == 0) and not isComputingPath then
 				lastPathComputeTick = tickTime
-				local success, err = pcall(function()
-					path:ComputeAsync(entityPos, targetDestination)
-				end)
+				isComputingPath = true
 
-				if success and path.Status == Enum.PathStatus.Success then
-					waypoints = path:GetWaypoints()
-					currentWaypointIndex = 2 -- Index 1 is usually current position, start at 2
-				else
-					-- Fallback to direct movement if pathfinding fails
-					waypoints = {}
-				end
+				task.spawn(function()
+					local success, err = pcall(function()
+						path:ComputeAsync(entityPos, targetDestination)
+					end)
+
+					if isMoveToActive and success and path.Status == Enum.PathStatus.Success then
+						local newWaypoints = path:GetWaypoints()
+						if #newWaypoints > 0 then
+							waypoints = newWaypoints
+							currentWaypointIndex = math.min(2, #waypoints) -- Smoothly transition to next point
+						end
+					end
+					isComputingPath = false
+				end)
 			end
 
-			-- Move along computed path waypoints if available, otherwise move direct
+			-- Follow current waypoints smoothly
 			local targetWaypointPos = targetDestination
 			if #waypoints > 0 and currentWaypointIndex <= #waypoints then
 				targetWaypointPos = waypoints[currentWaypointIndex].Position + Vector3.new(0, customHeight, 0)
@@ -1052,7 +1058,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 				end
 			end
 
-			-- Frame step execution
 			local stepTime = RunService.Heartbeat:Wait()
 			
 			if not isMoveToActive or not model or not model.Parent or skipCurrentRoom or isBeingCrucified or isStopped then
