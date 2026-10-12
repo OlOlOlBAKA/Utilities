@@ -973,15 +973,14 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		local moveSpeed = cfg.Speed or speed
 		local reachDistance = cfg.ReachDistance or 2
 		local customHeight = cfg.HeightOffset or heightOffset
-		local offset = cfg.Offset or Vector3.zero -- Offset relative to target facing direction
+		local offset = cfg.Offset or Vector3.zero
 
-		-- Helper function to fetch the LIVE CFrame/Position with offset applied
+		-- Helper to get the live destination with offset applied
 		local function getLiveTargetPosition(): Vector3?
 			if typeof(target) == "Vector3" then
 				return target + offset
 			elseif typeof(target) == "Instance" then
 				local targetCFrame: CFrame? = nil
-
 				if target:IsA("BasePart") then
 					targetCFrame = target.CFrame
 				elseif target:IsA("Model") then
@@ -992,14 +991,28 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						targetCFrame = target:GetPivot()
 					end
 				end
-
 				if targetCFrame then
-					-- Transforms relative offset to world space (e.g., -Z is FRONT of target)
 					return (targetCFrame * CFrame.new(offset)).Position
 				end
 			end
 			return nil
 		end
+
+		-- Create a path object with your modifier costs
+		local path = PathfindingService:CreatePath({
+			AgentRadius = 1,
+			AgentHeight = 2.5,
+			AgentCanJump = false,
+			WaypointSpacing = 4,
+			Costs = {
+				Default = 1,
+				Skip = 1 -- Matches your room pathfinding modifier label
+			}
+		})
+
+		local waypoints = {}
+		local currentWaypointIndex = 1
+		local lastPathComputeTick = 0
 
 		while isMoveToActive and model and model.Parent and not skipCurrentRoom and not isBeingCrucified and not isStopped do
 			local currentTargetPos = getLiveTargetPosition()
@@ -1008,34 +1021,53 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
 			local targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
 			
-			local difference = (targetDestination - entityPos)
-			local distance = difference.Magnitude
+			local distanceToTarget = (targetDestination - entityPos).Magnitude
+			if distanceToTarget <= reachDistance then break end
 
-			-- Stop if reached target offset
-			if distance <= reachDistance then break end
+			-- Recompute path every 0.5 seconds or if we don't have waypoints yet to track moving targets dynamically
+			local tickTime = os.clock()
+			if tickTime - lastPathComputeTick > 0.5 or #waypoints == 0 then
+				lastPathComputeTick = tickTime
+				local success, err = pcall(function()
+					path:ComputeAsync(entityPos, targetDestination)
+				end)
 
-			-- Frame step
+				if success and path.Status == Enum.PathStatus.Success then
+					waypoints = path:GetWaypoints()
+					currentWaypointIndex = 2 -- Index 1 is usually current position, start at 2
+				else
+					-- Fallback to direct movement if pathfinding fails
+					waypoints = {}
+				end
+			end
+
+			-- Move along computed path waypoints if available, otherwise move direct
+			local targetWaypointPos = targetDestination
+			if #waypoints > 0 and currentWaypointIndex <= #waypoints then
+				targetWaypointPos = waypoints[currentWaypointIndex].Position + Vector3.new(0, customHeight, 0)
+				
+				-- If close to current waypoint, advance to the next one
+				if (entityPos * Vector3.new(1,0,1) - targetWaypointPos * Vector3.new(1,0,1)).Magnitude < 3 then
+					currentWaypointIndex += 1
+				end
+			end
+
+			-- Frame step execution
 			local stepTime = RunService.Heartbeat:Wait()
 			
 			if not isMoveToActive or not model or not model.Parent or skipCurrentRoom or isBeingCrucified or isStopped then
 				break
 			end
 
-			-- Re-fetch live target position after yield
-			currentTargetPos = getLiveTargetPosition()
-			if not currentTargetPos then break end
-
 			entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
-			targetDestination = currentTargetPos + Vector3.new(0, customHeight, 0)
-			difference = (targetDestination - entityPos)
-			distance = difference.Magnitude
+			local diff = (targetWaypointPos - entityPos)
+			local distToWaypoint = diff.Magnitude
 
-			if distance > 0.05 then
-				local unitDirection = difference.Unit
-				local moveStep = math.min(distance, moveSpeed * stepTime)
+			if distToWaypoint > 0.05 then
+				local unitDirection = diff.Unit
+				local moveStep = math.min(distToWaypoint, moveSpeed * stepTime)
 				local nextPosition = entityPos + (unitDirection * moveStep)
 
-				-- Orient entity toward movement direction
 				local targetCFrame = CFrame.lookAt(nextPosition, nextPosition + unitDirection)
 
 				if model:IsA("BasePart") then
@@ -1049,7 +1081,6 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		isMoveToActive = false
 		regenPathRequested = true
 	end
-
 
 	local function moveAlongWaypoints(startPos: Vector3, endPos: Vector3, roomFolder: Instance?, startNode: Vector3?, endNode: Vector3?)
 		local heightVector = Vector3.new(0, heightOffset, 0)
