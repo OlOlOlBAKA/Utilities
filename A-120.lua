@@ -1,11 +1,74 @@
 local CollectionService = game:GetService("CollectionService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 -- CREDIT TO REGULAR VYNIXU
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
-local Main_Game = require(game.Players.LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+local Main_Game = require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
 
 local ROOT = "https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main"
+
+-- Configuration
+local maxShakeDistance = 200 -- Maximum distance where player feels the shake
+local baseMagnitude = 8    -- Max shake magnitude when right next to the entity
+local baseRoughness = 14    -- Shake frequency
+local fadeOutTime = 0.2    -- Fade time
+local loudnessThreshold = 250 -- Minimum PlaybackLoudness required to trigger a shake pulse
+local cooldown = 0.2       -- Minimum time between shakes to prevent overlapping spam
+
+local function startPlaybackLoudnessShake(model)
+	task.spawn(function()
+		-- Safely locate the sound inside model.Main
+		local mainPart = model and model:FindFirstChild("Main")
+		local sound = mainPart and mainPart:FindFirstChild("PlaySound")
+		
+		if not sound then
+			local foundMain = model:WaitForChild("Main", 5)
+			sound = foundMain and foundMain:WaitForChild("PlaySound", 5)
+		end
+
+		if not sound then return end
+
+		local lastShakeTime = 0
+
+		while model and model.Parent do
+			local character = LocalPlayer.Character
+			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+			
+			if rootPart and sound.IsPlaying then
+				local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
+				local distance = (rootPart.Position - entityPos).Magnitude
+
+				if distance <= maxShakeDistance then
+					local loudness = sound.PlaybackLoudness
+
+					-- Trigger shake only when sound is loud enough and cooldown has passed
+					local currentTime = os.clock()
+					if loudness > loudnessThreshold and (currentTime - lastShakeTime >= cooldown) then
+						lastShakeTime = currentTime
+
+						-- Factor 1: Distance intensity (1.0 close, 0.0 at max distance)
+						local distanceIntensity = 1 - (distance / maxShakeDistance)
+						
+						-- Factor 2: Sound loudness intensity (scales higher on louder peaks)
+						local loudnessFactor = math.clamp(loudness / 250, 0.3, 1.0)
+
+						-- Combined final magnitude
+						local currentMagnitude = baseMagnitude * distanceIntensity * loudnessFactor
+
+						if Main_Game and Main_Game.camShaker and currentMagnitude > 1 then
+							Main_Game.camShaker:ShakeOnce(currentMagnitude, baseRoughness, 0, fadeOutTime)
+						end
+					end
+				end
+			end
+
+			RunService.Heartbeat:Wait()
+		end
+	end)
+end
 
 
 local function Shake()
@@ -63,7 +126,7 @@ end)
             ReboundTime = 1.5,
             ReboundDelayTime = 1.0,
 
-            EnableCameraShake = true,
+            EnableCameraShake = false,
             ShakeValues = {1.5, 20, 0.1, 1},
             ShakeRadius = 100,
 
@@ -72,6 +135,7 @@ end)
             Callbacks = {
                 OnSpawned = function(model, actions)
                     model.PrimaryPart = model.Main
+			        startPlaybackLoudnessShake(model)
 			        for _,v in ipairs(model.Main:GetChildren()) do
 				        if v:IsA("Sound") then
 					        v.RollOffMaxDistance = v.RollOffMaxDistance * 1.5
