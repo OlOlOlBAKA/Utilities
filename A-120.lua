@@ -105,7 +105,7 @@ end)
 
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
-            Speed = 40,
+            Speed = 50,
             HeightOffset = 6,
             FloorYOffset = -2,
             DelayTime = 5,
@@ -113,7 +113,7 @@ end)
             AttackType = "Front",
 
             HitboxRange = 30,
-            RaycastHitbox = false,
+            RaycastHitbox = true,
             SphereRadius = 3.5,
             Damage = 100,
 
@@ -158,7 +158,7 @@ end)
 				        --actions.Stop()
                         --task.wait(0.1)
                         actions.MoveTo(playerCharacter.PrimaryPart, {
-                            Speed = 40,
+                            Speed = 50,
                             ReachDistance = 2,
                             HeightOffset = 3,
 						    Offset = Vector3.new(0,0,-5),
