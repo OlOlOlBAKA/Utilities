@@ -772,42 +772,45 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 
 						if canHit then
-							local hasCrucifix, tool = checkForEquippedCrucifix(character)
-							if hasCrucifix and tool then
-								isBeingCrucified = true
-								isStopped = true
-								if currentTween then currentTween:Cancel(); currentTween = nil end
-								task.spawn(function()
-									if tool:FindFirstChildWhichIsA("RemoteEvent") then
-										ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
-										task.wait()
-										if Workspace:FindFirstChild("Drops") then
-											Workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
+							local hasLoS = checkLineOfSight(model)
+							if useRaycastHitbox and hasLoS or not useRaycastHitbox then
+								local hasCrucifix, tool = checkForEquippedCrucifix(character)
+								if hasCrucifix and tool then
+									isBeingCrucified = true
+									isStopped = true
+									if currentTween then currentTween:Cancel(); currentTween = nil end
+									task.spawn(function()
+										if tool:FindFirstChildWhichIsA("RemoteEvent") then
+											ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
+											task.wait()
+											if Workspace:FindFirstChild("Drops") then
+												Workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
+											end
+										else
+											tool:Destroy()
 										end
-									else
-										tool:Destroy()
+									end)
+									
+									stopCameraShake(false)
+
+									if type(callbacks.OnCrucifixion) == "function" then
+										task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
 									end
-								end)
-								
-								stopCameraShake(false)
 
-								if type(callbacks.OnCrucifixion) == "function" then
-									task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
-								end
+									task.spawn(function()
+										-- Passes Main_Game.camShaker directly to crucifixion routine
+										performCrucifixion(model, character, Main_Game.camShaker)
+										isMovementFinished = true
+									end)
+									return
+								else
+									hasHitPlayerThisPass = true
+									local humanoid = character:FindFirstChildOfClass("Humanoid")
+									if humanoid then humanoid:TakeDamage(damageAmount) end
 
-								task.spawn(function()
-									-- Passes Main_Game.camShaker directly to crucifixion routine
-									performCrucifixion(model, character, Main_Game.camShaker)
-									isMovementFinished = true
-								end)
-								return
-							else
-								hasHitPlayerThisPass = true
-								local humanoid = character:FindFirstChildOfClass("Humanoid")
-								if humanoid then humanoid:TakeDamage(damageAmount) end
-
-								if type(callbacks.OnKillPlayer) == "function" then
-									task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									if type(callbacks.OnKillPlayer) == "function" then
+										task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
+									end
 								end
 							end
 						end
