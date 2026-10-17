@@ -768,7 +768,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if not isBeingCrucified and character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
-							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius) and checkLineOfSight(model)
+							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
 						end
 
 						if canHit then
