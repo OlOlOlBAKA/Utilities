@@ -126,9 +126,8 @@ end)
             ReboundTime = 1.5,
             ReboundDelayTime = 1.0,
 
-            EnableCameraShake = false,
-            ShakeValues = {1.5, 20, 0.1, 1},
-            ShakeRadius = 100,
+            ShakeValues = {0, 0, 0, 0},
+            ShakeRadius = 0,
 
             ShowPath = false,
 
