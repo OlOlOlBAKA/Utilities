@@ -1,4 +1,6 @@
-
+--!nocheck
+-- CREDIT AND INSPIRED BY REGULAR VYNIXU
+-- \\ Safe Global Function Loading // --
 local httpSuccess, rawCode = pcall(function()
 	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
 end)
@@ -373,6 +375,7 @@ local function performCrucifixion(
 	return true
 end
 
+-- Weak table cache to automatically GC deleted room references
 local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -773,7 +776,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 						if canHit then
 							local hasLoS = checkLineOfSight(model)
-							if useRaycastHitbox and hasLoS or not useRaycastHitbox then
+							if hasLoS then
 								local hasCrucifix, tool = checkForEquippedCrucifix(character)
 								if hasCrucifix and tool then
 									isBeingCrucified = true
@@ -826,15 +829,16 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					
+					-- 3. VYNIXU DISTANCE-BASED CAMERA SHAKE
 					if distance <= shakeRadius then
 						local cloned = {}
 						for i, v in ipairs(shakeValues) do
 							cloned[i] = v
 						end
 
-						cloned[1] = shakeValues[1] / shakeRadius * (shakeRadius - distance)
-						cloned[2] = shakeValues[2] / shakeRadius * (shakeRadius - distance)
+						-- Scale Magnitude and Roughness based on proximity
+						cloned[1] = shakeValues[1] / shakeRadius * (shakeRadius - distance) -- Magnitude
+						cloned[2] = shakeValues[2] / shakeRadius * (shakeRadius - distance) -- Roughness
 
 						Main_Game.camShaker:ShakeOnce(table.unpack(cloned))
 					end
