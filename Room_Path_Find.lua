@@ -1,6 +1,4 @@
---!nocheck
--- CREDIT AND INSPIRED BY REGULAR VYNIXU
--- \\ Safe Global Function Loading // --
+
 local httpSuccess, rawCode = pcall(function()
 	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
 end)
@@ -375,7 +373,6 @@ local function performCrucifixion(
 	return true
 end
 
--- Weak table cache to automatically GC deleted room references
 local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local function getRoomFloorParts(roomFolder: Instance): { BasePart }
@@ -752,7 +749,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function startCameraShake()
-		if not RunService:IsClient() or not enableShake or renderConnection or not Main_Game or not Main_Game.camShaker then return end
+		if not RunService:IsClient() or renderConnection or not Main_Game or not Main_Game.camShaker then return end
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
 			if isMovementFinished or not model or not model.Parent then
@@ -771,49 +768,46 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 					if not isBeingCrucified and character:GetAttribute("Hiding") ~= true and distance <= (hitboxRange + (speed * dt)) and not hasHitPlayerThisPass then
 						local canHit = true
 						if useRaycastHitbox then
-							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius)
+							canHit = checkAdvancedHitbox(model, character, lastEntityPosition, sphereRadius) and checkLineOfSight(model)
 						end
 
 						if canHit then
-							local hasLoS = checkLineOfSight(model)
-							if hasLoS then
-								local hasCrucifix, tool = checkForEquippedCrucifix(character)
-								if hasCrucifix and tool then
-									isBeingCrucified = true
-									isStopped = true
-									if currentTween then currentTween:Cancel(); currentTween = nil end
-									task.spawn(function()
-										if tool:FindFirstChildWhichIsA("RemoteEvent") then
-											ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
-											task.wait()
-											if Workspace:FindFirstChild("Drops") then
-												Workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
-											end
-										else
-											tool:Destroy()
+							local hasCrucifix, tool = checkForEquippedCrucifix(character)
+							if hasCrucifix and tool then
+								isBeingCrucified = true
+								isStopped = true
+								if currentTween then currentTween:Cancel(); currentTween = nil end
+								task.spawn(function()
+									if tool:FindFirstChildWhichIsA("RemoteEvent") then
+										ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
+										task.wait()
+										if Workspace:FindFirstChild("Drops") then
+											Workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
 										end
-									end)
-									
-									stopCameraShake(false)
-
-									if type(callbacks.OnCrucifixion) == "function" then
-										task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
+									else
+										tool:Destroy()
 									end
+								end)
+								
+								stopCameraShake(false)
 
-									task.spawn(function()
-										-- Passes Main_Game.camShaker directly to crucifixion routine
-										performCrucifixion(model, character, Main_Game.camShaker)
-										isMovementFinished = true
-									end)
-									return
-								else
-									hasHitPlayerThisPass = true
-									local humanoid = character:FindFirstChildOfClass("Humanoid")
-									if humanoid then humanoid:TakeDamage(damageAmount) end
+								if type(callbacks.OnCrucifixion) == "function" then
+									task.spawn(callbacks.OnCrucifixion, model, actionsHandle)
+								end
 
-									if type(callbacks.OnKillPlayer) == "function" then
-										task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
-									end
+								task.spawn(function()
+									-- Passes Main_Game.camShaker directly to crucifixion routine
+									performCrucifixion(model, character, Main_Game.camShaker)
+									isMovementFinished = true
+								end)
+								return
+							else
+								hasHitPlayerThisPass = true
+								local humanoid = character:FindFirstChildOfClass("Humanoid")
+								if humanoid then humanoid:TakeDamage(damageAmount) end
+
+								if type(callbacks.OnKillPlayer) == "function" then
+									task.spawn(callbacks.OnKillPlayer, model, character, actionsHandle)
 								end
 							end
 						end
@@ -829,16 +823,15 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 						end
 					end
 
-					-- 3. VYNIXU DISTANCE-BASED CAMERA SHAKE
-					if distance <= shakeRadius then
+					
+					if enableShake and distance <= shakeRadius then
 						local cloned = {}
 						for i, v in ipairs(shakeValues) do
 							cloned[i] = v
 						end
 
-						-- Scale Magnitude and Roughness based on proximity
-						cloned[1] = shakeValues[1] / shakeRadius * (shakeRadius - distance) -- Magnitude
-						cloned[2] = shakeValues[2] / shakeRadius * (shakeRadius - distance) -- Roughness
+						cloned[1] = shakeValues[1] / shakeRadius * (shakeRadius - distance)
+						cloned[2] = shakeValues[2] / shakeRadius * (shakeRadius - distance)
 
 						Main_Game.camShaker:ShakeOnce(table.unpack(cloned))
 					end
