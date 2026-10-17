@@ -36,6 +36,8 @@ local function startPlaybackLoudnessShake(model)
 		while model and model.Parent do
 			local character = LocalPlayer.Character
 			local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+			if model:GetAttribute("Despawned") == true then break end
 			
 			if rootPart and sound.IsPlaying then
 				local entityPos = model:IsA("Model") and model:GetPivot().Position or model.Position
@@ -175,9 +177,11 @@ end)
                 
                 OnCrucifixion = function(model: Model | BasePart, actions)
 		            model:SetAttribute("Crucified", true)
+			        model:SetAttribute("Despawned", true)
 	            end,
 
                 OnDespawn = function(model, actions)
+			        model:SetAttribute("Despawned", true)
                 end
             }
         }
