@@ -667,7 +667,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	local reboundTime = options.ReboundTime or 0
 	local reboundDelayTime = options.ReboundDelayTime or 0
 
-	local enableShake = if options.EnableCameraShake ~= nil then options.EnableCameraShake else true end
+	local enableShake = true
 	local shakeAmount = options.ShakeAmount or 1.5
 	local shakeRadius = options.ShakeRadius or 120
 
