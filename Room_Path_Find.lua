@@ -993,10 +993,10 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		local path = PathfindingService:CreatePath({
-			AgentRadius = 1,
-			AgentHeight = 2.5,
+			AgentRadius = 0.5,
+			AgentHeight = 1,
 			AgentCanJump = false,
-			WaypointSpacing = 4,
+			WaypointSpacing = 5,
 			Costs = {
 				Default = 1,
 				Skip = 1
@@ -1035,6 +1035,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							waypoints = newWaypoints
 							currentWaypointIndex = math.min(2, #waypoints) -- Smoothly transition to next point
 						end
+					else
+						warn("Pathfinding Failed Status: ".. path.Status)
 					end
 					isComputingPath = false
 				end)
