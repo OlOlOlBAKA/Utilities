@@ -137,7 +137,11 @@ end)
                 OnSpawned = function(model, actions)
                     model.PrimaryPart = model.Main
 			        startPlaybackLoudnessShake(model)
-			
+			        for _,v in ipairs(model.Main.LightAttach:GetChildren()) do
+				        if v:IsA("ParticleEmitter") then
+					        v.Size = NumberSquence(3)
+				        end
+			        end
                 end,
 
                 OnStartMoving = function(model, actions)
@@ -158,7 +162,7 @@ end)
                             Speed = 50,
                             ReachDistance = 2,
                             HeightOffset = 3,
-						    Offset = Vector3.new(0,0,-5),
+						    Offset = Vector3.new(0,3,-5),
                         })
                         --task.wait(0.1)
                         --actions.Resume(2)
