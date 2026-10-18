@@ -108,7 +108,7 @@ end)
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
             Speed = 50,
-            HeightOffset = 5,
+            HeightOffset = 6,
             FloorYOffset = 0,
             DelayTime = 5,
             SpawnOffsetRooms = 5,
@@ -161,8 +161,8 @@ end)
                         actions.MoveTo(playerCharacter.PrimaryPart, {
                             Speed = 50,
                             ReachDistance = 2,
-                            HeightOffset = 1,
-						    Offset = Vector3.new(0,1,-5),
+                            HeightOffset = 2,
+						    Offset = Vector3.new(0,2,-5),
                         })
                         --task.wait(0.1)
                         --actions.Resume(2)
