@@ -109,7 +109,7 @@ end)
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
             Speed = 50,
             HeightOffset = 6,
-            FloorYOffset = -2,
+            FloorYOffset = -1.5,
             DelayTime = 5,
             SpawnOffsetRooms = 5,
             AttackType = "Front",
@@ -162,7 +162,7 @@ end)
                             Speed = 50,
                             ReachDistance = 2,
                             HeightOffset = 1,
-						    Offset = Vector3.new(0,1,-5),
+						    Offset = Vector3.new(0,1,0),
                         })
                         --task.wait(0.1)
                         --actions.Resume(2)
