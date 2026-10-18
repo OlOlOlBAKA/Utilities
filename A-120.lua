@@ -139,7 +139,7 @@ end)
 			        startPlaybackLoudnessShake(model)
 			        for _,v in ipairs(model.Main.LightAttach:GetChildren()) do
 				        if v:IsA("ParticleEmitter") then
-					        v.Size = NumberSquence(3)
+					        v.Size = NumberSquence.new(3)
 				        end
 			        end
                 end,
