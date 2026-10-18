@@ -137,11 +137,7 @@ end)
                 OnSpawned = function(model, actions)
                     model.PrimaryPart = model.Main
 			        startPlaybackLoudnessShake(model)
-			        for _,v in ipairs(model.Main:GetChildren()) do
-				        if v:IsA("Sound") then
-					        v.RollOffMaxDistance = v.RollOffMaxDistance * 1.5
-				        end
-				    end
+			
                 end,
 
                 OnStartMoving = function(model, actions)
