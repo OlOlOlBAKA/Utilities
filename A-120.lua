@@ -155,7 +155,7 @@ end)
 
                 OnEnterPlayerRoom = function(model, roomFolder, playerCharacter, actions)
                     if playerCharacter and playerCharacter.PrimaryPart then
-                        task.wait(0.75)
+                        task.wait(0.5)
 				        --actions.Stop()
                         --task.wait(0.1)
                         actions.MoveTo(playerCharacter.PrimaryPart, {
