@@ -1020,7 +1020,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 
 			-- Request new path in background thread so it NEVER freezes the movement loop
 			local tickTime = os.clock()
-			if (tickTime - lastPathComputeTick > 0.6 or #waypoints == 0) and not isComputingPath then
+			if (tickTime - lastPathComputeTick > 0.5 or #waypoints == 0) and not isComputingPath then
 				lastPathComputeTick = tickTime
 				isComputingPath = true
 
@@ -1036,7 +1036,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 							currentWaypointIndex = math.min(2, #waypoints) -- Smoothly transition to next point
 						end
 					else
-						warn("Pathfinding Failed Status: ".. path.Status)
+						warn("Pathfinding Failed")
+						waypoints = {}
 					end
 					isComputingPath = false
 				end)
