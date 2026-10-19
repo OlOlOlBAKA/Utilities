@@ -114,9 +114,9 @@ local entityConfig = {
             tremolo.Duty = 1
             tremolo.Frequency = 5
             local equalizer = Instance.new("EqualizerSoundEffect", model.ReboundNew.Sound)
-            equalizer.HighGain = -60
-            equalizer.MidGain = 10
-            equalizer.LowGain = 10
+            equalizer.HighGain = -40
+            equalizer.MidGain = 5
+            equalizer.LowGain = 5
 			model.ReboundNew.Sound.RollOffMaxDistance = 500
 
             task.wait(3.5)
@@ -232,9 +232,9 @@ task.spawn(function()
                         tremolo.Duty = 1
                         tremolo.Frequency = 5
                         local equalizer = Instance.new("EqualizerSoundEffect", model.ReboundNew.Sound)
-                        equalizer.HighGain = -60
-                        equalizer.MidGain = 10
-                        equalizer.LowGain = 10
+                        equalizer.HighGain = -40
+                        equalizer.MidGain = 5
+                        equalizer.LowGain = 5
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
                         model.Rebound_Cue:Play()
