@@ -106,9 +106,17 @@ local entityConfig = {
             model.ReboundNew.Idle.Volume = 0.5
 			model.ReboundNew.Close.RollOffMaxDistance = 50
 			model.ReboundNew.Idle.RollOffMaxDistance = 50
-            model.ReboundNew.Sound.Volume = 1
+            model.ReboundNew.Sound.Volume = 0.8
 			local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
-			distortion.Level = 0.5
+			distortion.Level = 0.75
+			local tremolo = Instance.new("TremoloSoundEffect", model.ReboundNew.Sound)
+            tremolo.Depth = 1
+            tremolo.Duty = 1
+            tremolo.Frequency = 5
+            local equalizer = Instance.new("EqualizerSoundEffect", model.ReboundNew.Sound)
+            equalizer.HighGain = -60
+            equalizer.MidGain = 10
+            equalizer.LowGain = 10
 			model.ReboundNew.Sound.RollOffMaxDistance = 500
 
             task.wait(3.5)
@@ -216,9 +224,19 @@ task.spawn(function()
                         model.ReboundNew.Idle.Volume = 0.5
 			            model.ReboundNew.Close.RollOffMaxDistance = 50
 			            model.ReboundNew.Idle.RollOffMaxDistance = 50
-                        model.ReboundNew.Sound.Volume = 1
+                        model.ReboundNew.Sound.Volume = 0.8
 						local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
-						distortion.Level = 0.5
+						distortion.Level = 0.75
+						local distortion = Instance.new("DistortionSoundEffect", model.ReboundNew.Sound)
+			            distortion.Level = 0.75
+			            local tremolo = Instance.new("TremoloSoundEffect", model.ReboundNew.Sound)
+                        tremolo.Depth = 1
+                        tremolo.Duty = 1
+                        tremolo.Frequency = 5
+                        local equalizer = Instance.new("EqualizerSoundEffect", model.ReboundNew.Sound)
+                        equalizer.HighGain = -60
+                        equalizer.MidGain = 10
+                        equalizer.LowGain = 10
 						model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
                         model.Rebound_Cue.TimePosition = 0
                         model.Rebound_Cue:Play()
