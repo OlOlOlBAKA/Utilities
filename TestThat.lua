@@ -364,6 +364,10 @@ toggleButton.MouseButton1Click:Connect(function()
 
                     fireproximityprompt(shopPrompt)
 
+                    task.delay(5, function()
+                        FishingShopUI.Window.Visible = true
+                    end)
+                    
                     if not waitUntil(function()
                         return FishingShopUI.Window.Visible
                     end, 15) then
