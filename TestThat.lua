@@ -341,7 +341,7 @@ toggleButton.MouseButton1Click:Connect(function()
 
                     if not waitUntil(function()
                         return confirm:IsOpened()
-                    end, 4) then
+                    end, 10) then
                         return false
                     end
 
@@ -349,7 +349,7 @@ toggleButton.MouseButton1Click:Connect(function()
 
                     return waitUntil(function()
                         return replica.Data.FishInventory[uid] == nil
-                    end, 5, 0.1)
+                    end, 10, 0.1)
                 end
 
                 local function autoSell()
@@ -366,7 +366,7 @@ toggleButton.MouseButton1Click:Connect(function()
 
                     if not waitUntil(function()
                         return FishingShopUI.Window.Visible
-                    end, 5) then
+                    end, 15) then
                         warn("[auto fish] shop didn't open")
                         return false
                     end
