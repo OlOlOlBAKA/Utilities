@@ -309,6 +309,10 @@ local function RunDread(controller, mode)
 					child.Enabled = false
 				end
 			end
+			coldBox:Destroy()
+		end
+		if liveSanity then 
+			liveSanity:Destroy()
 		end
 
 	elseif mode == "spawn" then
@@ -603,4 +607,5 @@ end
 
 task.spawn(function()
 	RunDread(controller, "spawn")
+	RunDread(controller, "cold")
 end)
