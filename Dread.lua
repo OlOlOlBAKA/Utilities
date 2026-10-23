@@ -411,8 +411,8 @@ local function RunDread(controller, mode)
 			if currentRoomModel and currentRoomModel:FindFirstChild("Door") then
 				pcall(function()
 					local door = currentRoomModel.Door
-					door.PrimaryPart.CFrame = CFrame.new(door.PrimaryPart.Position, activeChar.PrimaryPart.Position)
-					dreadEntity.PrimaryPart.CFrame = CFrame.new(activeChar.PrimaryPart.Position + (door.PrimaryPart.CFrame.LookVector * Vector3.new(1, 0, 1)).Unit * 64)
+					local doorCFrame = CFrame.new(door.PrimaryPart.Position, activeChar.PrimaryPart.Position)
+					dreadEntity.PrimaryPart.CFrame = CFrame.new(activeChar.PrimaryPart.Position + (doorCFrame.LookVector * Vector3.new(1, 0, 1)).Unit * 64)
 				end)
 			end
 		end
@@ -513,11 +513,14 @@ local function RunDread(controller, mode)
 				camTween.Completed:Wait()
 
 				-- DELAY: Hold for 1.5 seconds AFTER rotation is finished
-				task.wait(1.5)
+				RunService:BindToRenderStep("dreadfrozencam", Enum.RenderPriority.Camera + 1, function()
+					Camera.CFrame = camCF
+				end)
+				task.wait(1)
 
 				-- TRIGGER JUMPSCARE UI & KILL PLAYER
 				TriggerJumpscare(controller)
-
+				RunService:UnbindFromRenderStep("dreadfrozencam")
 				if controller.char and controller.char.PrimaryPart then
 					controller.char.PrimaryPart.Anchored = false
 				end
