@@ -53,8 +53,8 @@ local lastProcessedRoom = -1
 local GLOBAL_BLACKLIST_ROOMS = {50, 100}
 
 local ENTITY_TABLE = {
-    {Name = "A-120",     Weight = 0.75, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
-    {Name = "Depth",    Weight = 1.5,  MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
+    {Name = "A-120",     Weight = 0.25, MinRoom = 12, MaxRoom = 95, CanSpawnInDark = true},
+    {Name = "Depth",    Weight = 1,  MinRoom = 5,  MaxRoom = 89, CanSpawnInDark = false},
     {Name = "Rebound",  Weight = 0.5,  MinRoom = 10, MaxRoom = 94, CanSpawnInDark = true}
 }
 
@@ -130,6 +130,7 @@ local function spawnEntity(entityName, roomNumber)
     if entityName == "Rebound" then
         task.spawn(function()
             while activeEntities["Rebound"] do
+                task.wait()
                 local entityModel = workspace:WaitForChild("Rebound", 15)
                 
                 if entityModel then
