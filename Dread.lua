@@ -513,7 +513,7 @@ local function RunDread(controller, mode)
 				camTween.Completed:Wait()
 
 				-- DELAY: Hold for 1.5 seconds AFTER rotation is finished
-				RunService:BindToRenderStep("dreadfrozencam", Enum.RenderPriority.Camera + 1, function()
+				RunService:BindToRenderStep("dreadfrozencam", Enum.RenderPriority.Camera.Value + 1, function()
 					Camera.CFrame = camCF
 				end)
 				task.wait(1)
