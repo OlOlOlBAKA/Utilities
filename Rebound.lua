@@ -177,19 +177,21 @@ task.spawn(function()
 
         latestRoom.Changed:Wait()
 		local hasHidingSpot = false
-
-		task.spawn(function()
-			latestRoom.Changed:Connect(function()
-				for _,v in ipairs(roomAsset:GetChildren()) do
-			        if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
-				        hasHidingSpot = true
-						print("Has")
-				        break
-				    else
-						hasHidingSpot = false
-					end
-			    end
-			end)
+		local loopConnection
+		
+		loopConnection = latestRoom.Changed:Connect(function()
+			if reboundsLeft < 1 then
+				loopConnection:Disconnect()
+			end
+			for _,v in ipairs(roomAsset:GetChildren()) do
+			    if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
+				    hasHidingSpot = true
+					print("Has")
+				    break
+				else
+					hasHidingSpot = false
+				end
+			end
 		end)
 			
         if isCrucified then
