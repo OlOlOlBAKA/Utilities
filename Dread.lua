@@ -734,8 +734,8 @@ local function RunDread(controller, mode)
 					flange.Rate = 0.8
 					local tremolo = Instance.new("TremoloSoundEffect", repent)
 					tremolo.Depth = 1
-					tremolo.Mix = 1
-					tremolo.Rate = 0.8
+					tremolo.Duty = 0.94
+					tremolo.Frequency = 20
 					repent:Play()
 					task.spawn(function()
 					    performCrucifixion(dreadEntity, controller.char, Main_Game.camShaker)
