@@ -714,6 +714,29 @@ local function RunDread(controller, mode)
 							tool:Destroy()
 						end
 					end)
+					local part = dreadEntity.Main
+					local repent = Instance.new("Sound", part)
+					repent.SoundId = "rbxassetid://9125713379"
+					repent.PlaybackSpeed = 0.8
+					repent.RollOffMaxDistance = 1000
+					repent.RollOffMinDistance = 4
+					repent.Volume = 0.3
+					repent.Name = "Repent"
+					local distortion = Instance.new("DistortionSoundEffect", repent)
+					distortion.Level = 0.89
+					local equalizer = Instance.new("EqualizerSoundEffect", repent)
+					equalizer.HighGain = 2
+					equalizer.LowGain = -6.2
+					equalizer.MidGain = -0.8
+					local flange = Instance.new("FlangeSoundEffect", repent)
+					flange.Depth = 1
+					flange.Mix = 1
+					flange.Rate = 0.8
+					local tremolo = Instance.new("TremoloSoundEffect", repent)
+					tremolo.Depth = 1
+					tremolo.Mix = 1
+					tremolo.Rate = 0.8
+					repent:Play()
 					task.spawn(function()
 					    performCrucifixion(dreadEntity, controller.char, Main_Game.camShaker)
 					end)
