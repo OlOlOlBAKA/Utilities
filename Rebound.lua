@@ -163,6 +163,9 @@ task.spawn(function()
     local latestRoom = ReSt.GameData.LatestRoom
 
     while reboundsLeft > 0 do
+		local currentRoom = workspace.CurrentRooms[LatestRoom.Value]
+		local roomAsset = currentRoom:FindFirstChild("Assets")
+
         if isCrucified then
             print("Rebound got crucified, the spawn loop is ended")
             break
@@ -173,7 +176,20 @@ task.spawn(function()
         end
 
         latestRoom.Changed:Wait()
+		local hasHidingSpot = false
 
+		task.spawn(function()
+			latestRoom.Changed:Connect(function()
+				for _,v in ipairs(roomAsset:GetChildren()) do
+			        if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
+				        hasHidingSpot = true
+						print("Has")
+				        break
+					end
+			    end
+			end)
+		end)
+			
         if isCrucified then
             print("Rebound got crucified during room wait, ending loop")
             break
@@ -184,7 +200,7 @@ task.spawn(function()
             break
         end
 
-        if not isPresent then
+        if not isPresent and hasHidingSpot then
             reboundsLeft = reboundsLeft - 1
             task.wait(2)
 
@@ -243,7 +259,7 @@ task.spawn(function()
                     end,
 
                     OnStartMoving = function(model, actions)
-                        task.wait(0.25)
+                        task.wait(0.5)
 						for _, v in pairs(model.ReboundNew:GetChildren()) do
                             if v:IsA("Sound") then
                                 v:Play()
@@ -265,6 +281,7 @@ task.spawn(function()
 
                     OnDespawn = function(model, actions)
                         isPresent = false
+						hasHidingSpot = false
                     end
                 }
             }
