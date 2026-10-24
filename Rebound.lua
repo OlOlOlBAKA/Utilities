@@ -163,7 +163,7 @@ task.spawn(function()
     local latestRoom = ReSt.GameData.LatestRoom
 
     while reboundsLeft > 0 do
-		local currentRoom = workspace.CurrentRooms[LatestRoom.Value]
+		local currentRoom = workspace.CurrentRooms[latestRoom.Value]
 		local roomAsset = currentRoom:FindFirstChild("Assets")
 
         if isCrucified then
@@ -176,23 +176,18 @@ task.spawn(function()
         end
 
         latestRoom.Changed:Wait()
+		task.wait(2)
 		local hasHidingSpot = false
-		local loopConnection
 		
-		loopConnection = latestRoom.Changed:Connect(function()
-			if reboundsLeft < 1 then
-				loopConnection:Disconnect()
+		for _,v in ipairs(roomAsset:GetChildren()) do
+			if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
+				hasHidingSpot = true
+				print("Has")
+				break
+			else
+				hasHidingSpot = false
 			end
-			for _,v in ipairs(roomAsset:GetChildren()) do
-			    if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
-				    hasHidingSpot = true
-					print("Has")
-				    break
-				else
-					hasHidingSpot = false
-				end
-			end
-		end)
+		end
 			
         if isCrucified then
             print("Rebound got crucified during room wait, ending loop")
@@ -204,7 +199,6 @@ task.spawn(function()
             break
         end
 
-        task.wait(2)
         if not isPresent and hasHidingSpot then
             reboundsLeft = reboundsLeft - 1
 
@@ -291,7 +285,7 @@ task.spawn(function()
 
             PathfindingMovement.MoveThroughRooms(entityConfig2)
         else
-            print("Another Rebound is present, will try next door")
+            print("Another Rebound is present or No hiding spot, will try next door")
         end
     end
 end)
