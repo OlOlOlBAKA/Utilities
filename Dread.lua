@@ -746,9 +746,9 @@ local function RunDread(controller, mode)
 					nf.Lifetime = NumberRange.new(0.5,1)
 					nf.Rate = NumberRange.new(15)
 					nf.Rotation = NumberRange.new(-8,8)
-					nf.RotationSpeed = NumberRange.new(-12,12)
+					nf.RotSpeed = NumberRange.new(-12,12)
 					nf.Speed = NumberRange.new(1)
-					nf.SpreadAngle = NumberRange.new(360)
+					nf.SpreadAngle = Vector2.new(360)
 					nf.Enabled = true
 					nf.Parent = attachment
 
