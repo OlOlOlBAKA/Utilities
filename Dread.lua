@@ -214,8 +214,8 @@ local function performCrucifixion(
 		end
 	end)
 
-	TweenService:Create(pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
-	task.delay(2, pentagram.Circle.Destroy, pentagram.Circle)
+	--TweenService:Create(pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
+	--task.delay(2, pentagram.Circle.Destroy, pentagram.Circle)
 
 	handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
 	TweenService:Create(handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
