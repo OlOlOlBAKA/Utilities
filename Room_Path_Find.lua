@@ -273,6 +273,13 @@ local function performCrucifixion(
 				end)
 			elseif v.Name == "BeamChain" then
 				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			elseif v.Name == "BeamGlow" then
+				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			end
+		end
+		for _,v in ipairs(pentagram.Circle:GetChildren()) do
+			if v:IsA("ParticleEmitter") then
+				v.Enabled = false
 			end
 		end
 	end
@@ -313,9 +320,6 @@ local function performCrucifixion(
 			entityModel:Destroy()
 		end
 	end)
-
-	TweenService:Create(pentagram.Circle, TweenInfo.new(2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { CFrame = pentagram.Circle.CFrame - Vector3.new(0, 25, 0) }):Play()
-	task.delay(2, pentagram.Circle.Destroy, pentagram.Circle)
 
 	handle.BodyPosition.Position = (character:GetPivot() * CFrame.new(1, 4, -6)).Position
 	TweenService:Create(handle.BodyAngularVelocity, TweenInfo.new(4, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { AngularVelocity = Vector3.new(0, 40, 0) }):Play()
