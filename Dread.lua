@@ -723,7 +723,6 @@ local function RunDread(controller, mode)
 					end
 					dreadEntity:FindFirstChild("BillboardGui"):Destroy()
 					local nf = attachment.ParticleEmitter:Clone()
-					nf.Parent = attachment
 					nf.Brightness = 15
 					nf.LightEmission = 0.55
 					nf.LightInfluence = 0.1
@@ -751,6 +750,8 @@ local function RunDread(controller, mode)
 					nf.RotationSpeed = NumberRange.new(-12,12)
 					nf.Speed = NumberRange.new(1)
 					nf.SpreadAngle = NumberRange.new(360)
+					nf.Enabled = true
+					nf.Parent = attachment
 
 					local repent = Instance.new("Sound", part)
 					repent:SetAttribute("VolumeIgnore", true)
