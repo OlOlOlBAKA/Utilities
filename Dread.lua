@@ -715,6 +715,43 @@ local function RunDread(controller, mode)
 						end
 					end)
 					local part = dreadEntity.Main
+					local attachment = part.Attachment
+					for _,sound in ipairs(part:GetChildren()) do
+						if sound:IsA("Sound") then
+							sound.Volume = 0
+						end
+					end
+					dreadEntity:FindFirstChild("BillboardGui"):Destroy()
+					local nf = attachment.ParticleEmitter:Clone()
+					nf.Parent = attachment
+					nf.Brightness = 15
+					nf.LightEmission = 0.55
+					nf.LightInfluence = 0.1
+					nf.Size = NumberSequence.new(7)
+					nf.Squash = NumberSequence.new(0.2)
+					nf.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0,1),
+						NumberSequenceKeypoint.new(0.5,0.5),
+						NumberSequenceKeypoint.new(1,1)
+					})
+					nf.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+						ColorSequenceKeypoint.new(0.0744, Color3.fromRGB(103, 125, 133)),
+						ColorSequenceKeypoint.new(0.464, Color3.fromRGB(0, 0, 0)),
+						ColorSequenceKeypoint.new(0.578, Color3.fromRGB(50, 50, 50)),
+						ColorSequenceKeypoint.new(0.599, Color3.fromRGB(75, 0, 0)),
+						ColorSequenceKeypoint.new(0.689, Color3.fromRGB(255, 200, 89)),
+                        ColorSequenceKeypoint.new(0.746, Color3.fromRGB(31, 31, 31)),     
+                        ColorSequenceKeypoint.new(0.867, Color3.fromRGB(0, 0, 0)),
+                        ColorSequenceKeypoint.new(1, Color3.fromRGB(103, 125, 133))     
+                    })
+					nf.LifeTime = NumberRange.new(0.5,1)
+					nf.Rate = NumberRange.new(15)
+					nf.Rotation = NumberRange.new(-8,8)
+					nf.RotationSpeed = NumberRange.new(-12,12)
+					nf.Speed = NumberRange.new(1)
+					nf.SpreadAngle = NumberRange.new(360)
+
 					local repent = Instance.new("Sound", part)
 					repent:SetAttribute("VolumeIgnore", true)
 					repent.SoundId = "rbxassetid://9125713379"
