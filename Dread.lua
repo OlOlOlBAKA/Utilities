@@ -727,7 +727,6 @@ local function RunDread(controller, mode)
 					nf.LightEmission = 0.55
 					nf.LightInfluence = 0.1
 					nf.Size = NumberSequence.new(7)
-					nf.Squash = NumberSequence.new(0.2)
 					nf.Transparency = NumberSequence.new({
 						NumberSequenceKeypoint.new(0,1),
 						NumberSequenceKeypoint.new(0.5,0.5),
@@ -744,7 +743,7 @@ local function RunDread(controller, mode)
                         ColorSequenceKeypoint.new(0.867, Color3.fromRGB(0, 0, 0)),
                         ColorSequenceKeypoint.new(1, Color3.fromRGB(103, 125, 133))     
                     })
-					nf.LifeTime = NumberRange.new(0.5,1)
+					nf.Lifetime = NumberRange.new(0.5,1)
 					nf.Rate = NumberRange.new(15)
 					nf.Rotation = NumberRange.new(-8,8)
 					nf.RotationSpeed = NumberRange.new(-12,12)
