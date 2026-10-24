@@ -163,8 +163,6 @@ task.spawn(function()
     local latestRoom = ReSt.GameData.LatestRoom
 
     while reboundsLeft > 0 do
-		local currentRoom = workspace.CurrentRooms[latestRoom.Value]
-		local roomAsset = currentRoom:FindFirstChild("Assets")
 
         if isCrucified then
             print("Rebound got crucified, the spawn loop is ended")
@@ -177,6 +175,9 @@ task.spawn(function()
 
         latestRoom.Changed:Wait()
 		task.wait(2)
+		local currentRoom = workspace.CurrentRooms[latestRoom.Value]
+		local roomAsset = currentRoom:FindFirstChild("Assets")
+		
 		local hasHidingSpot = false
 		
 		for _,v in ipairs(roomAsset:GetDescendants()) do
