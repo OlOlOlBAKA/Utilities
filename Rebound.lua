@@ -202,9 +202,9 @@ task.spawn(function()
             break
         end
 
+        task.wait(2)
         if not isPresent and hasHidingSpot then
             reboundsLeft = reboundsLeft - 1
-            task.wait(2)
 
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
