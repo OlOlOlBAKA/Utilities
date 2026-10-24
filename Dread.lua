@@ -32,6 +32,7 @@ local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 local mainUI = playerGui:WaitForChild("MainUI")
 local initiator = mainUI:WaitForChild("Initiator")
 local mainGame = initiator:WaitForChild("Main_Game")
+local Main_Game = require(initiator:WaitForChild("Main_Game"))
 local remoteListener = mainGame:WaitForChild("RemoteListener")
 
 local modulesFolder = remoteListener:WaitForChild("Modules")
@@ -702,7 +703,20 @@ local function RunDread(controller, mode)
 				-- TRIGGER JUMPSCARE UI & KILL PLAYER
 				local hasCrucifix, tool = checkForEquippedCrucifix(controller.char)
 				if hasCrucifix and tool then
-					performCrucifixion(dreadEntity, controller.char, mainGame.camShaker)
+					task.spawn(function()
+						if tool:FindFirstChildWhichIsA("RemoteEvent") then
+							ReplicatedStorage.RemotesFolder.DropItem:FireServer(tool)
+						    task.wait()
+							if workspace:FindFirstChild("Drops") then
+								workspace.Drops:WaitForChild(tool.Name, 3):Destroy()
+							end
+						else
+							tool:Destroy()
+						end
+					end)
+					task.spawn(function()
+					    performCrucifixion(dreadEntity, controller.char, Main_Game.camShaker)
+					end)
 				else
 					TriggerJumpscare(controller)
 				end
