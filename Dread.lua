@@ -716,6 +716,7 @@ local function RunDread(controller, mode)
 					end)
 					local part = dreadEntity.Main
 					local repent = Instance.new("Sound", part)
+					repent:SetAttribute("VolumeIgnore", true)
 					repent.SoundId = "rbxassetid://9125713379"
 					repent.PlaybackSpeed = 0.8
 					repent.RollOffMaxDistance = 1000
@@ -763,6 +764,7 @@ local function RunDread(controller, mode)
 				end
 			end
 		end
+		coldBox:Destroy()
 
 		if ambienceColdSound then ambienceColdSound:Stop() end
 		if ambienceSound then ambienceSound:Stop() end
@@ -770,7 +772,7 @@ local function RunDread(controller, mode)
 		if activeVignette then activeVignette.Visible = false end
 		isDreadActive = false
 
-		if dreadEntity then dreadEntity:Destroy() end
+		
 		if shake1 then shake1:StartFadeOut(0.1) end
 		if shake2 then shake2:StartFadeOut(0.1) end
 
@@ -788,6 +790,7 @@ local function RunDread(controller, mode)
 
 			task.wait(1)
 		else
+			if dreadEntity then dreadEntity:Destroy() end
 			if shake1 then shake1:StartFadeOut(0.1) end
 			if shake2 then shake2:StartFadeOut(0.1) end
 		end
