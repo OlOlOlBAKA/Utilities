@@ -120,8 +120,14 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
+				        model.Slam.SoundId = "rbxassetid://9114149321"
+				        model.Slam:FindFirstChild("DistortionSoundEffect").Level = 0.8
+				        local echo = model.Slam:FindFirstChild("EchoSoundEffect")
+				        echo.Delay = 0.075
+				        echo.Feedback = 0.2
+				        echo.WetLevel = 1
                         model.Slam:Play()
-				        Main_Game.camShaker:ShakeOnce(6, 32, 0.1, 1.5)  
+				        Main_Game.camShaker:ShakeOnce(6, 32, 0.1, 1)  
                     end
 			        if game.Players.LocalPlayer:GetAttribute("Alive") == true and _G.SurviveDepth == false then
 				       _G.SurviveDepth = true
