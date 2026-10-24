@@ -520,7 +520,7 @@ local function RunDread(controller, mode)
 				RunService:BindToRenderStep("dreadfrozencam", Enum.RenderPriority.Camera.Value + 1, function()
 					Camera.CFrame = camCF
 				end)
-				task.wait(1)
+				task.wait(0.5)
 
 				-- TRIGGER JUMPSCARE UI & KILL PLAYER
 				TriggerJumpscare(controller)
