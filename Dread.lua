@@ -727,6 +727,8 @@ local function RunDread(controller, mode)
 					nf.LightEmission = 0.55
 					nf.LightInfluence = 0.1
 					nf.Size = NumberSequence.new(7)
+					nf.Squash = NumberSequence.new(0.2)
+					nf.Texture = "rbxassetid://16529167874"
 					nf.Transparency = NumberSequence.new({
 						NumberSequenceKeypoint.new(0,1),
 						NumberSequenceKeypoint.new(0.5,0.5),
@@ -744,7 +746,7 @@ local function RunDread(controller, mode)
                         ColorSequenceKeypoint.new(1, Color3.fromRGB(103, 125, 133))     
                     })
 					nf.Lifetime = NumberRange.new(0.5,1)
-					nf.Rate = NumberRange.new(15)
+					nf.Rate = 15
 					nf.Rotation = NumberRange.new(-8,8)
 					nf.RotSpeed = NumberRange.new(-12,12)
 					nf.Speed = NumberRange.new(1)
@@ -863,5 +865,4 @@ end
 
 task.spawn(function()
 	RunDread(controller, "spawn")
-	RunDread(controller, "cold")
 end)
