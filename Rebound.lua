@@ -179,8 +179,8 @@ task.spawn(function()
 		task.wait(2)
 		local hasHidingSpot = false
 		
-		for _,v in ipairs(roomAsset:GetChildren()) do
-			if v:IsA("Model") and v:FindFirstChild("HiddenPlayer") then
+		for _,v in ipairs(roomAsset:GetDescendants()) do
+			if v.Name == "HiddenPlayer" then
 				hasHidingSpot = true
 				print("Has")
 				break
