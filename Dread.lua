@@ -173,6 +173,13 @@ local function performCrucifixion(
 				end)
 			elseif v.Name == "BeamChain" then
 				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			elseif v.Name == "BeamGlow" then
+				TweenService:Create(v, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Brightness = 0 }):Play()
+			end
+		end
+		for _,v in ipairs(pentagram.Circle:GetChildren()) do
+			if v:IsA("ParticleEmitter") then
+				v.Enabled = false
 			end
 		end
 	end
