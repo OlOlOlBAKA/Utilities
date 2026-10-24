@@ -185,6 +185,8 @@ task.spawn(function()
 				        hasHidingSpot = true
 						print("Has")
 				        break
+				    else
+						hasHidingSpot = false
 					end
 			    end
 			end)
@@ -281,7 +283,6 @@ task.spawn(function()
 
                     OnDespawn = function(model, actions)
                         isPresent = false
-						hasHidingSpot = false
                     end
                 }
             }
