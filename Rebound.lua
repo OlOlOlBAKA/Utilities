@@ -234,6 +234,9 @@ task.spawn(function()
 
                 Callbacks = {
                     OnSpawned = function(model, actions)
+						if reboundsLeft == 0 then
+							model:SetAttribute("LastRebound", true)
+						end
                         isPresent = true
                         model.ReboundNew.Close.Volume = 0.5
                         model.ReboundNew.Idle.Volume = 0.5
@@ -279,9 +282,6 @@ task.spawn(function()
                     end,
 
                     OnDespawn = function(model, actions)
-						if reboundsLeft == 0 then
-							model:SetAttribute("LastRebound", true)
-						end
                         isPresent = false
                     end
                 }
