@@ -120,7 +120,7 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnDespawn = function(model, actions)
                     if model:FindFirstChild("Slam") then
-				        model.Slam.Parent = model.Slam.DepthNew
+				        model.Slam.Parent = model.DepthNew
 				        model.Slam.SoundId = "rbxassetid://9114149321"
 				        Instance.new("DistortionSoundEffect", model.Slam).Level = 0.95
 				        local echo = model.Slam:FindFirstChild("EchoSoundEffect")
