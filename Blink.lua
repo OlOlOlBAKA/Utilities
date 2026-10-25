@@ -66,7 +66,7 @@ end
 local r = Random.new(GameSeed.Value)
 
 local entityConfig = {
-	spawnOffset = Vector3.new(0, 6, 0),
+	spawnOffset = Vector3.new(0, 3, 0),
 	crucifixRange = 85,
 	canBeCrucified = false,
 	shakerInstance = Main_Game.camShaker,
@@ -159,7 +159,9 @@ local entityConfig = {
 			end)
 
 			LatestRoom.Changed:Wait()
-			handle.Destroy()
+			if not model:GetAttribute("Crucified") == true then
+				handle.Destroy()
+			end
 		end,
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
