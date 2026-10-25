@@ -106,6 +106,7 @@ local entityConfig = {
 			model.Main.Attachment.Sparkles.Enabled = true
 			task.wait(1)
 			model.Main.Spawn:Play()
+			model.Main.Whisper:Play()
 			model.Main.Attachment.Closed.Enabled = true
 			task.spawn(function()
 				while model and model.Parent do
