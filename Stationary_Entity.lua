@@ -46,89 +46,90 @@ local CrucifixStorage = {
 	}
 }
 
-local function getPosition(inst: Instance): Vector3?
-	if inst:IsA("BasePart") then
-		return inst.Position
-	elseif inst:IsA("Model") then
-		return inst:GetPivot().Position
-	elseif inst:IsA("Attachment") then
-		return inst.WorldPosition
-	end
-	return nil
-end
-
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
+	-- 1. Get the room's spatial bounding center (X and Z)
+	local cframe, size = roomInstance:GetBoundingBox()
+	local centerX, centerZ = cframe.Position.X, cframe.Position.Z
+
+	-- If RoomEntrance and RoomExit exist, use their average XZ for an exact walkthrough center
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
-
-	-- 1. Primary Method: Use PathfindingService to find the exact walkthrough path
 	if roomEntrance and roomExit then
-		local startPos = getPosition(roomEntrance)
-		local endPos = getPosition(roomExit)
+		local entPos = roomEntrance:IsA("BasePart") and roomEntrance.Position or (roomEntrance:IsA("Model") and roomEntrance:GetPivot().Position)
+		local extPos = roomExit:IsA("BasePart") and roomExit.Position or (roomExit:IsA("Model") and roomExit:GetPivot().Position)
+		if entPos and extPos then
+			centerX = (entPos.X + extPos.X) / 2
+			centerZ = (entPos.Z + extPos.Z) / 2
+		end
+	end
 
-		if startPos and endPos then
-			local path = PathfindingService:CreatePath({
-				AgentRadius = 2,
-				AgentHeight = 5,
-				AgentCanJump = true,
-			})
-			
-			local success = pcall(function()
-				path:ComputeAsync(startPos, endPos)
-			end)
-
-			if success and path.Status == Enum.PathStatus.Success then
-				local waypoints = path:GetWaypoints()
-				if #waypoints > 0 then
-					-- Pick the middle waypoint for true center placement (+ shaped rooms)
-					local midWaypoint = waypoints[math.ceil(#waypoints / 2)]
-					return midWaypoint.Position + Vector3.new(0, 3, 0)
+	-- 2. Determine the true ground floor Y level by scanning floor parts
+	local floorY = nil
+	local floorParts = {}
+	
+	local function scan(parent)
+		for _, child in ipairs(parent:GetChildren()) do
+			if child:IsA("BasePart") then
+				local name = child.Name:lower()
+				if name == "floor" or name:find("floor") then
+					table.insert(floorParts, child)
 				end
 			end
+			scan(child)
 		end
 	end
-
-	-- 2. Fallback Method: Ground-floor centroid calculation
-	local floorParts = {}
-	local function scanForFloors(parent)
-		for _, child in ipairs(parent:GetChildren()) do
-			if child:IsA("BasePart") and (child.Name == "Floor" or child.Name:lower():find("floor")) then
-				table.insert(floorParts, child)
-			end
-			scanForFloors(child)
-		end
-	end
-	scanForFloors(roomInstance)
+	scan(roomInstance)
 
 	if #floorParts > 0 then
+		-- Find the lowest top surface of the floor parts to ensure we are on the ground level (avoids roofs/ceilings)
 		local minY = math.huge
 		for _, part in ipairs(floorParts) do
 			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < minY then minY = topY end
-		end
-
-		local groundParts = {}
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if math.abs(topY - minY) <= 4 then
-				table.insert(groundParts, part)
+			if topY < minY then
+				minY = topY
 			end
 		end
-
-		local sumPos = Vector3.new(0, 0, 0)
-		for _, part in ipairs(groundParts) do
-			sumPos = sumPos + part.Position
-		end
-		local avg = sumPos / #groundParts
-		return Vector3.new(avg.X, avg.Y + (groundParts[1].Size.Y / 2) + 3, avg.Z)
+		floorY = minY
+	else
+		-- Fallback to the exact bottom of the room bounding box if no floor parts found
+		floorY = cframe.Position.Y - (size.Y / 2)
 	end
 
-	-- 3. Last Resort Fallback
-	local cframe, size = roomInstance:GetBoundingBox()
-	return Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2) + 3, cframe.Position.Z)
+	-- Base spawn position locked precisely to floor height and room center
+	local baseSpawnPos = Vector3.new(centerX, floorY + 3, centerZ)
+
+	-- 3. Local Clearance Check (Ensures a pillar isn't blocking the exact center)
+	local checkSize = Vector3.new(3, 5, 3)
+	local function isPositionSafe(pos: Vector3): boolean
+		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), checkSize)
+		for _, p in ipairs(partsInBox) do
+			if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
+				return false
+			end
+		end
+		return true
+	end
+
+	if isPositionSafe(baseSpawnPos) then
+		return baseSpawnPos
+	end
+
+	-- If the center is blocked by a pillar, spiral outward strictly at floor level (stays inside the room)
+	for _, radius in ipairs({ 2, 4, 6, 8, 12 }) do
+		for _, angle in ipairs({ 0, 60, 120, 180, 240, 300 }) do
+			local rad = math.rad(angle)
+			local testPos = Vector3.new(centerX + math.cos(rad) * radius, floorY + 3, centerZ + math.sin(rad) * radius)
+			if isPositionSafe(testPos) then
+				return testPos
+			end
+		end
+	end
+
+	return baseSpawnPos
 end
+
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
