@@ -24,6 +24,7 @@ local GLOBAL_IGNORE_MAX_ROOMS = false
 
 if ReplicatedStorage.GameData.Floor.Value == "Archives" then
     GLOBAL_IGNORE_MAX_ROOMS = true
+    print("Its Archives Floor")
 end
 
 -- Set to true to bypass room hiding spot checks globally
@@ -35,6 +36,7 @@ local function getGameSeed()
     if gameData then
         local seedObj = gameData:FindFirstChild("GameSeedInitial")
         if seedObj and seedObj.Value then
+            print(seedObj.Value)
             return tonumber(seedObj.Value)
         end
     end
@@ -64,14 +66,16 @@ _G.SurviveDepth = false
 local activeEntities = {
     ["A-120"] = false,
     ["Depth"] = false,
-    ["Rebound"] = false
+    ["Rebound"] = false,
+    ["Blink"] = false,
 }
 
 -- Track room numbers when entities complete despawning to enforce cooldowns
 local entityLastDespawnRoom = {
     ["A-120"] = -999,
     ["Depth"] = -999,
-    ["Rebound"] = -999
+    ["Rebound"] = -999,
+    ["Blink"] = -999,
 }
 
 -- Counter to keep track of Rebound's despawns
@@ -92,7 +96,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound"} -- A-120 cannot spawn if Rebound is active
+        BlacklistedEntities = {"Rebound", "Blink"} -- A-120 cannot spawn if Rebound is active
     },
     {
         Name = "Depth",    
@@ -114,7 +118,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"A-120"} -- Rebound cannot spawn if A-120 are active
+        BlacklistedEntities = {"A-120", "Blink"} -- Rebound cannot spawn if A-120 are active
     },
     {
         Name = "Blink",  
@@ -125,7 +129,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "A-120", "Depth"} -- Rebound cannot spawn if A-120 or Depth are active
+        BlacklistedEntities = {"Rebound", "A-120"} -- Rebound cannot spawn if A-120 or Depth are active
     }
 }
 
