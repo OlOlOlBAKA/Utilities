@@ -1,3 +1,4 @@
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
@@ -17,10 +18,76 @@ local LatestRoom = GameData:WaitForChild("LatestRoom")
 
 local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 
+local function isInSightAndMoving(origin: Vector3, maxDistance: number, ignoreList: {Instance}?): boolean
+	maxDistance = maxDistance or 80
+	ignoreList = ignoreList or {}
+
+	local character = localPlayer.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return false end
+
+	if humanoid.MoveDirection.Magnitude <= 0 then return false end
+
+	local hrp = character.HumanoidRootPart
+	if (hrp.Position - origin).Magnitude > maxDistance + 10 then
+		return false
+	end
+
+	for _, partName in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "LeftUpperArm", "RightUpperArm", "LeftLowerLeg", "RightLowerLeg"}) do
+		local part = character:FindFirstChild(partName)
+		if part and part:IsA("BasePart") then
+			local direction = part.Position - origin
+			local distance = direction.Magnitude
+
+			if distance <= maxDistance then
+				local raycastParams = RaycastParams.new()
+				raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+				local filter = {character}
+				for _, ignored in ipairs(ignoreList) do
+					table.insert(filter, ignored)
+				end
+				raycastParams.FilterDescendantsInstances = filter
+
+				local rayResult = Workspace:Raycast(origin, direction.Unit * distance, raycastParams)
+				if not rayResult or rayResult.Instance:IsDescendantOf(character) then
+					return true
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+local function setState(model: Model, openEye: boolean)
+	local part = model:FindFirstChild("Main")
+	if not part then return end
+	if openEye == true then
+		part.Blink:Play()
+		task.wait(0.2)
+		part.Attachment.Open.Enabled = true
+		task.wait(0.1)
+		part.Attachment.Closed.Enabled = false
+		canKill = true
+	else
+		part.Blink:Play()
+		task.wait(0.2)
+		part.Attachment.Closed.Enabled = true
+		task.wait(0.1)
+		part.Attachment.Open.Enabled = false
+		canKill = false
+	end
+end
+
+local r = Random.new()
+
 local entityConfig = {
-	spawnOffset = Vector3.new(0, 4, 0),
-	crucifixRange = 16,
-	canBeCrucified = true,
+	spawnOffset = Vector3.new(0, 6, 0),
+	crucifixRange = 85,
+	canBeCrucified = false,
 	shakerInstance = Main_Game.camShaker,
 
 	callbacks = {
@@ -37,10 +104,21 @@ local entityConfig = {
 			task.wait(1)
 			model.Main.Spawn:Play()
 			model.Main.Attachment.Closed.Enabled = true
-			handle.SetCanBeCrucified(false)
-			task.delay(3, function()
-				if handle.GetEntity() and handle.GetEntity().Parent then
-					handle.SetCanBeCrucified(true)
+			task.spawn(function()
+				while model and model.Parent do
+					task.wait(
+				end
+			end)
+			task.spawn(function()
+				while model and model.Parent do
+					task.wait(0.5)
+					local char = localPlayer.Character
+					local humanoid = char:FindFirstChild("Humanoid")
+					if humanoid.Health > 0 and canKill then
+					    if isInSightAndMoving(model:GetPivot().Position, 80, {model}) the
+							humanoid.Health = 0
+					    end
+					end
 				end
 			end)
 			LatestRoom.Changed:Wait()
