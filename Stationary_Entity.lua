@@ -46,23 +46,38 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if not inst then return nil end
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	local entPos = roomEntrance and (roomEntrance:IsA("BasePart") and roomEntrance.Position or roomEntrance:GetPivot().Position) or nil
-	local extPos = roomExit and (roomExit:IsA("BasePart") and roomExit.Position or roomExit:GetPivot().Position) or nil
+	local entPos = getPosition(roomEntrance)
+	local extPos = getPosition(roomExit)
+	
+	local roomCF, roomSize = roomInstance:GetBoundingBox()
+	local roomCenterXZ = Vector3.new(roomCF.Position.X, 0, roomCF.Position.Z)
 
-	-- 1. Gather ONLY main floor parts (Explicitly skipping subrooms, closets, and secret areas)
+	-- 1. Gather ONLY main floor parts (Strictly skipping subrooms, closets, stairwells, and side areas)
 	local floorParts = {}
 	local partsFolder = roomInstance:FindFirstChild("Parts")
 
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			local nameLower = child.Name:lower()
-			-- Ignore subrooms, closets, or side storage areas
-			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") then
+			-- Skip subrooms, closets, secrets, side areas, and stairwells
+			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("stair") or nameLower:find("door") then
 				continue
 			end
 
@@ -71,7 +86,10 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 					table.insert(floorParts, child)
 				end
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectFloors(child)
+				-- Check model/folder name as well before recursing
+				if not (nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("stair")) then
+					collectFloors(child)
+				end
 			end
 		end
 	end
@@ -81,8 +99,6 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	else
 		collectFloors(roomInstance)
 	end
-
-	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
 	if #floorParts > 0 then
 		-- Isolate true ground floor Y level
@@ -100,14 +116,21 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 			end
 		end
 
-		-- Sort ground parts by path midpoint balance if entrance/exit exist
-		if entPos and extPos and #groundParts > 0 then
+		-- Sort ground parts: Balance path midpoint AND penalize parts too close to outer walls/corners (Center Bias)
+		if #groundParts > 0 then
 			table.sort(groundParts, function(a, b)
 				local aPos = a.Position
 				local bPos = b.Position
-				local scoreA = math.abs((aPos - entPos).Magnitude - (aPos - extPos).Magnitude)
-				local scoreB = math.abs((bPos - entPos).Magnitude - (bPos - extPos).Magnitude)
-				return scoreA < scoreB
+				
+				-- Path balance score
+				local pathScoreA = entPos and extPos and math.abs((aPos - entPos).Magnitude - (aPos - extPos).Magnitude) or 0
+				local pathScoreB = entPos and extPos and math.abs((bPos - entPos).Magnitude - (bPos - extPos).Magnitude) or 0
+				
+				-- Center distance penalty (favour tiles closer to the true center of the room)
+				local centerDistA = Vector3.new(aPos.X, 0, aPos.Z).Magnitude
+				local centerDistB = Vector3.new(bPos.X, 0, bPos.Z).Magnitude
+				
+				return (pathScoreA + centerDistA * 0.5) < (pathScoreB + centerDistB * 0.5)
 			end)
 		end
 
@@ -115,30 +138,27 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		rayParams.FilterType = Enum.RaycastFilterType.Include
 		rayParams.FilterDescendantsInstances = { roomInstance }
 
-		-- Function to guarantee the spot has open space and isn't trapped between walls or ceilings
-		local function hasOpenSpace(pos: Vector3): boolean
-			-- Check vertical ceiling clearance
-			if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
+		-- Strict 360-degree open space check (Prevents pillars, mirrors, and corner clamping)
+		local function hasStrictOpenSpace(pos: Vector3): boolean
+			-- Check vertical ceiling clearance (at least 10 studs)
+			if Workspace:Raycast(pos, Vector3.new(0, 10, 0), rayParams) then
 				return false
 			end
 
-			-- Check horizontal clearance in 4 directions (prevents spawning in narrow wall gaps / between walls)
-			local directions = {
-				Vector3.new(4, 0, 0),
-				Vector3.new(-4, 0, 0),
-				Vector3.new(0, 0, 4),
-				Vector3.new(0, 0, -4)
-			}
-			for _, dir in ipairs(directions) do
+			-- 8-Directional horizontal raycast check (5 studs clearance required in every direction)
+			local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
+			for _, angle in ipairs(angles) do
+				local rad = math.rad(angle)
+				local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
 				if Workspace:Raycast(pos, dir, rayParams) then
-					return false -- Too close to a wall horizontally!
+					return false -- Too close to a pillar, mirror, or wall!
 				end
 			end
 
-			-- Box collision check
-			local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), Vector3.new(3, 5, 3))
+			-- Larger bounding box check for entity size (5x6x5)
+			local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2.5, 0)), Vector3.new(5, 6, 5))
 			for _, p in ipairs(partsInBox) do
-				if p.CanCollide and not p:IsDescendantOf(roomInstance) then
+				if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
 					return false
 				end
 			end
@@ -146,17 +166,17 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 			return true
 		end
 
-		-- Test sorted ground parts for true open space
+		-- Test sorted ground parts for strict open space
 		for _, part in ipairs(groundParts) do
 			local pCF, pSize = part.CFrame, part.Size
-			local testPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 2.5, pCF.Position.Z)
+			local testPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2), pCF.Position.Z)
 
-			if hasOpenSpace(testPos) then
-				return testPos
+			if hasStrictOpenSpace(testPos) then
+				return testPos + Vector3.new(0, 2.5, 0)
 			end
 		end
 
-		-- Fallback to the top-scored ground part if strict horizontal check was too tight
+		-- Fallback to the top-scored ground part if strict check was too restrictive
 		if #groundParts > 0 then
 			local best = groundParts[1]
 			return Vector3.new(best.Position.X, best.Position.Y + (best.Size.Y / 2) + 3, best.Position.Z)
@@ -166,7 +186,6 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	-- Ultimate fallback to room bounding center
 	return Vector3.new(roomCF.Position.X, roomCF.Position.Y - (size.Y / 2) + 3, roomCF.Position.Z)
 end
-
 
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
