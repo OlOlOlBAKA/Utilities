@@ -151,7 +151,9 @@ local entityConfig = {
 							end
 						end
 					else
-						model.Main.Whisper.PlaybackSpeed = 0.8
+						if model and model.Parent then
+						    model.Main.Whisper.PlaybackSpeed = 0.8
+						end
 					end
 				end
 			end)
