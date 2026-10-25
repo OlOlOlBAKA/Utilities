@@ -59,58 +59,123 @@ end
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
+	local designatedCenter = roomInstance:FindFirstChild("Center") or roomInstance:FindFirstChild("RoomCenter") or roomInstance:FindFirstChild("Node")
+	if designatedCenter and designatedCenter:IsA("BasePart") then
+		return designatedCenter.Position
+	end
+
+	local floorParts = {}
+	local partsFolder = roomInstance:FindFirstChild("Parts")
+	if partsFolder then
+		local floorInst = partsFolder:FindFirstChild("Floor")
+		if floorInst then
+			if floorInst:IsA("BasePart") then
+				table.insert(floorParts, floorInst)
+			elseif floorInst:IsA("Model") or floorInst:IsA("Folder") then
+				for _, desc in ipairs(floorInst:GetDescendants()) do
+					if desc:IsA("BasePart") then
+						table.insert(floorParts, desc)
+					end
+				end
+			end
+		end
+		for _, desc in ipairs(partsFolder:GetDescendants()) do
+			if desc.Name == "Floor" and desc:IsA("BasePart") and not table.find(floorParts, desc) then
+				table.insert(floorParts, desc)
+			end
+		end
+	end
+
+	if #floorParts == 0 then
+		for _, desc in ipairs(roomInstance:GetDescendants()) do
+			if desc.Name == "Floor" and desc:IsA("BasePart") then
+				table.insert(floorParts, desc)
+			end
+		end
+	end
+
+	local basePos = nil
+	local highestY = 0
+
+	if #floorParts > 0 then
+		local totalPos = Vector3.zero
+		highestY = -math.huge
+		for _, part in ipairs(floorParts) do
+			totalPos += part.Position
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if topY > highestY then
+				highestY = topY
+			end
+		end
+		local avgPos = totalPos / #floorParts
+		basePos = Vector3.new(avgPos.X, highestY, avgPos.Z)
+	end
+
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	
-	local basePos = nil
 	if roomEntrance and roomExit then
-		local entrancePos = getPosition(roomEntrance)
-		local exitPos = getPosition(roomExit)
-		
-		if entrancePos and exitPos then
-			basePos = (entrancePos + exitPos) / 2
+		local ePos = getPosition(roomEntrance)
+		local xPos = getPosition(roomExit)
+		if ePos and xPos then
+			local midX = (ePos.X + xPos.X) / 2
+			local midZ = (ePos.Z + xPos.Z) / 2
+			if basePos then
+				basePos = Vector3.new(midX, basePos.Y, midZ)
+			else
+				basePos = Vector3.new(midX, ePos.Y, midZ)
+			end
 		end
 	end
 
 	if not basePos then
 		local cframe, size = roomInstance:GetBoundingBox()
-		basePos = cframe.Position
-	end
-
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { roomInstance }
-	
-	local rayResult = Workspace:Raycast(basePos + Vector3.new(0, 10, 0), Vector3.new(0, -100, 0), raycastParams)
-	local floorPos = basePos
-	if rayResult then
-		floorPos = rayResult.Position
+		basePos = Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2), cframe.Position.Z)
 	end
 
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Include
 	overlapParams.FilterDescendantsInstances = { roomInstance }
 
-	local checkSize = Vector3.new(4, 5, 4)
-	local parts = Workspace:GetPartBoundsInBox(CFrame.new(floorPos + Vector3.new(0, 2.5, 0)), checkSize, overlapParams)
-	if #parts > 0 then
-		local directions = {
-			Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
-			Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
-			Vector3.new(6, 0, 6), Vector3.new(-6, 0, -6),
-			Vector3.new(6, 0, -6), Vector3.new(-6, 0, 6)
-		}
-		for _, dir in ipairs(directions) do
-			local testPos = floorPos + dir
-			local testParts = Workspace:GetPartBoundsInBox(CFrame.new(testPos + Vector3.new(0, 2.5, 0)), checkSize, overlapParams)
-			if #testParts == 0 then
-				floorPos = testPos
-				break
+	local checkSize = Vector3.new(3, 4, 3)
+	local currentPos = basePos
+
+	local function isPositionClear(pos: Vector3): boolean
+		local parts = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2, 0)), checkSize, overlapParams)
+		for _, p in ipairs(parts) do
+			local isFloor = false
+			for _, fp in ipairs(floorParts) do
+				if p == fp or p:IsDescendantOf(fp) then
+					isFloor = true
+					break
+				end
 			end
+			if not isFloor then
+				return false
+			end
+		end
+		return true
+	end
+
+	if not isPositionClear(currentPos) then
+		local foundClear = false
+		local searchRadii = { 2, 4, 6, 8, 10, 12, 15 }
+		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
+		for _, radius in ipairs(searchRadii) do
+			for _, angle in ipairs(angles) do
+				local rad = math.rad(angle)
+				local offset = Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
+				local testPos = basePos + offset
+				if isPositionClear(testPos) then
+					currentPos = testPos
+					foundClear = true
+					break
+				end
+			end
+			if foundClear then break end
 		end
 	end
 
-	return floorPos
+	return currentPos
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
@@ -308,6 +373,7 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 
 	local isHandled = false
 
+	-- Action handle methods and controls
 	local actionsHandle = {}
 	
 	-- Instantly destroys the entity and stops its heartbeat loop
@@ -349,6 +415,7 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 			return
 		end
 
+		-- Action handle execution loop monitoring
 		local character = LocalPlayer.Character
 		if not character or not character:FindFirstChild("HumanoidRootPart") then return end
 
