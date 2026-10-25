@@ -25,7 +25,6 @@ local LocalPlayer = Players.LocalPlayer
 local StationaryEntity = {}
 StationaryEntity.__index = StationaryEntity
 
--- --- CRUCIFIX ASSETS & STORAGE ---
 local CrucifixAssets = {
 	Repentance = nil
 }
@@ -46,30 +45,15 @@ local CrucifixStorage = {
 	}
 }
 
--- --- HELPER FUNCTIONS ---
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
-
-	local designatedCenter = roomInstance:FindFirstChild("Center") or roomInstance:FindFirstChild("RoomCenter") or roomInstance:FindFirstChild("Node")
-	if designatedCenter and designatedCenter:IsA("BasePart") then
-		return designatedCenter.Position
-	end
-
-	if roomInstance.PrimaryPart then
-		return roomInstance.PrimaryPart.Position
-	end
-	
-	local floor = roomInstance:FindFirstChild("Floor")
-	if floor and floor:IsA("BasePart") then
-		return floor.Position
-	end
 
 	local cframe, size = roomInstance:GetModelBoundingBox()
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { roomInstance }
 
-	local startPos = cframe.Position + Vector3.new(0, size.Y / 2, 0)
+	local startPos = Vector3.new(cframe.Position.X, cframe.Position.Y + (size.Y / 2), cframe.Position.Z)
 	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -size.Y - 20, 0), raycastParams)
 
 	if rayResult then
@@ -251,7 +235,6 @@ local function performCrucifixion(entityModel: Instance, character: Model, shake
 	return true
 end
 
---- --- MAIN MODULE FUNCTION ---
 function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, config: table?)
 	config = config or {}
 	local callbacks = config.callbacks or {}
@@ -276,6 +259,7 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 	local isHandled = false
 
 	local actionsHandle = {}
+	
 	function actionsHandle.Destroy()
 		if entity and entity.Parent then
 			entity:Destroy()
@@ -299,12 +283,10 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 		return canBeCrucified
 	end
 
-	-- Trigger OnSpawned callback
 	if type(callbacks.OnSpawned) == "function" then
 		task.spawn(callbacks.OnSpawned, entity, roomInstance, actionsHandle)
 	end
 
-	-- Proximity & Crucifix Heartbeat Loop
 	local connection
 	connection = RunService.Heartbeat:Connect(function(dt)
 		if isHandled or not entity or not entity.Parent then
@@ -325,7 +307,6 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 				isHandled = true
 				if connection then connection:Disconnect() end
 
-				-- Handle tool removal
 				task.spawn(function()
 					if tool:FindFirstChildWhichIsA("RemoteEvent") then
 						if ReplicatedStorage:FindFirstChild("RemotesFolder") and ReplicatedStorage.RemotesFolder:FindFirstChild("DropItem") then
@@ -341,11 +322,9 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 					end
 				end)
 
-				-- Run built-in crucifixion cutscene automatically
 				task.spawn(function()
 					performCrucifixion(entity, character, shakerInstance)
 					
-					-- Also fire optional OnCrucifixion callback if specified
 					if type(callbacks.OnCrucifixion) == "function" then
 						task.spawn(callbacks.OnCrucifixion, entity, character, actionsHandle)
 					end
