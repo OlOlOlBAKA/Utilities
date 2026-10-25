@@ -151,13 +151,24 @@ local function countHidingSpots(roomModel)
 end
 
 local function isRoomBlacklisted(roomNumber)
+    -- 1. Check dynamic 49-55, 99-105, 149-155, 199-205... ranges
+    local mod = roomNumber % 50
+    if mod >= 49 or mod <= 5 then
+        print("Room: ".. roomNumber.. "is blacklisted room bro")
+        return true
+    end
+
+    -- 2. Optional: Keep explicit static single-room blacklists if needed
     for _, blacklistedRoom in ipairs(GLOBAL_BLACKLIST_ROOMS) do
         if roomNumber == blacklistedRoom then
+            print("its selected blacklist room bro")
             return true
         end
     end
+
     return false
 end
+
 
 local function selectWeightedEntity(availableEntities, rng)
     local totalWeight = 0
