@@ -46,30 +46,29 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if not inst then return nil end
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	-- 1. Get the room's spatial bounding center (X and Z)
-	local cframe, size = roomInstance:GetBoundingBox()
-	local centerX, centerZ = cframe.Position.X, cframe.Position.Z
-
-	-- If RoomEntrance and RoomExit exist, use their average XZ for an exact walkthrough center
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	if roomEntrance and roomExit then
-		local entPos = roomEntrance:IsA("BasePart") and roomEntrance.Position or (roomEntrance:IsA("Model") and roomEntrance:GetPivot().Position)
-		local extPos = roomExit:IsA("BasePart") and roomExit.Position or (roomExit:IsA("Model") and roomExit:GetPivot().Position)
-		if entPos and extPos then
-			centerX = (entPos.X + extPos.X) / 2
-			centerZ = (entPos.Z + extPos.Z) / 2
-		end
-	end
+	local entPos = getPosition(roomEntrance)
+	local extPos = getPosition(roomExit)
 
-	-- 2. Determine the true ground floor Y level by scanning floor parts
-	local floorY = nil
+	-- 1. Gather all floor parts in the room
 	local floorParts = {}
-	
-	local function scan(parent)
+	local function scanForFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			if child:IsA("BasePart") then
 				local name = child.Name:lower()
@@ -77,57 +76,77 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 					table.insert(floorParts, child)
 				end
 			end
-			scan(child)
+			scanForFloors(child)
 		end
 	end
-	scan(roomInstance)
+	scanForFloors(roomInstance)
+
+	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
 	if #floorParts > 0 then
-		-- Find the lowest top surface of the floor parts to ensure we are on the ground level (avoids roofs/ceilings)
+		-- Find lowest Y to isolate true ground floor (avoids roofs, ceilings, and balconies)
 		local minY = math.huge
 		for _, part in ipairs(floorParts) do
 			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < minY then
-				minY = topY
+			if topY < minY then minY = topY end
+		end
+
+		local groundParts = {}
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if math.abs(topY - minY) <= 4 then
+				table.insert(groundParts, part)
 			end
 		end
-		floorY = minY
-	else
-		-- Fallback to the exact bottom of the room bounding box if no floor parts found
-		floorY = cframe.Position.Y - (size.Y / 2)
-	end
 
-	-- Base spawn position locked precisely to floor height and room center
-	local baseSpawnPos = Vector3.new(centerX, floorY + 3, centerZ)
+		-- If entrance and exit exist, sort floor tiles by how close they are to the exact middle of the path
+		if entPos and extPos and #groundParts > 0 then
+			table.sort(groundParts, function(a, b)
+				local aPos = a.Position
+				local bPos = b.Position
+				local scoreA = math.abs((aPos - entPos).Magnitude - (aPos - extPos).Magnitude)
+				local scoreB = math.abs((bPos - entPos).Magnitude - (bPos - extPos).Magnitude)
+				return scoreA < scoreB
+			end)
+		end
 
-	-- 3. Local Clearance Check (Ensures a pillar isn't blocking the exact center)
-	local checkSize = Vector3.new(3, 5, 3)
-	local function isPositionSafe(pos: Vector3): boolean
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), checkSize)
-		for _, p in ipairs(partsInBox) do
-			if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
-				return false
+		-- Verify clearance on the best candidate floor tiles
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Include
+		rayParams.FilterDescendantsInstances = { roomInstance }
+
+		local checkSize = Vector3.new(3, 5, 3)
+		for _, part in ipairs(groundParts) do
+			local pCF, pSize = part.CFrame, part.Size
+			local testPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 2.5, pCF.Position.Z)
+
+			-- Check vertical clearance (no ceiling directly above)
+			local ceilingHit = Workspace:Raycast(testPos, Vector3.new(0, 8, 0), rayParams)
+			if not ceilingHit then
+				-- Check box collision (no solid wall overlapping)
+				local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(testPos), checkSize)
+				local blocked = false
+				for _, p in ipairs(partsInBox) do
+					if p.CanCollide and not p:IsDescendantOf(roomInstance) then
+						blocked = true
+						break
+					end
+				end
+				if not blocked then
+					return testPos
+				end
 			end
 		end
-		return true
-	end
 
-	if isPositionSafe(baseSpawnPos) then
-		return baseSpawnPos
-	end
-
-	-- If the center is blocked by a pillar, spiral outward strictly at floor level (stays inside the room)
-	for _, radius in ipairs({ 2, 4, 6, 8, 12 }) do
-		for _, angle in ipairs({ 0, 60, 120, 180, 240, 300 }) do
-			local rad = math.rad(angle)
-			local testPos = Vector3.new(centerX + math.cos(rad) * radius, floorY + 3, centerZ + math.sin(rad) * radius)
-			if isPositionSafe(testPos) then
-				return testPos
-			end
+		-- Fallback to the top-scored ground part if strict clearance check fails
+		if #groundParts > 0 then
+			local best = groundParts[1]
+			return Vector3.new(best.Position.X, best.Position.Y + (best.Size.Y / 2) + 3, best.Position.Z)
 		end
 	end
 
-	return baseSpawnPos
+	-- Ultimate fallback to room bounding center
+	return Vector3.new(roomCF.Position.X, roomCF.Position.Y - (size.Y / 2) + 3, roomCF.Position.Z)
 end
 
 
