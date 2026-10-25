@@ -67,17 +67,16 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	local extPos = getPosition(roomExit)
 	
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
-	local roomCenterXZ = Vector3.new(roomCF.Position.X, 0, roomCF.Position.Z)
 
-	-- 1. Gather ONLY main floor parts (Strictly skipping subrooms, closets, stairwells, and side areas)
+	-- 1. Gather main floor parts while strictly skipping subrooms, closets, stairwells, and offices
 	local floorParts = {}
 	local partsFolder = roomInstance:FindFirstChild("Parts")
 
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			local nameLower = child.Name:lower()
-			-- Skip subrooms, closets, secrets, side areas, and stairwells
-			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("stair") or nameLower:find("door") then
+			-- Skip subrooms, closets, secrets, side areas, stairwells, and office cubicle partitions
+			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("stair") or nameLower:find("door") or nameLower:find("cubicle") or nameLower:find("office") then
 				continue
 			end
 
@@ -86,8 +85,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 					table.insert(floorParts, child)
 				end
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				-- Check model/folder name as well before recursing
-				if not (nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("stair")) then
+				if not (nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("stair") or nameLower:find("office")) then
 					collectFloors(child)
 				end
 			end
@@ -112,79 +110,65 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		for _, part in ipairs(floorParts) do
 			local topY = part.Position.Y + (part.Size.Y / 2)
 			if math.abs(topY - minY) <= 4 then
-				table.insert(groundParts, part)
+				-- Exclude parts that are too close to the outer boundaries (prevents corner/wall spawning)
+				local sizeMag = math.max(part.Size.X, part.Size.Z)
+				if sizeMag < 60 then -- Ignore massive bounding plates that stretch across entire rooms/subrooms
+					table.insert(groundParts, part)
+				end
 			end
 		end
 
-		-- Sort ground parts: Balance path midpoint AND penalize parts too close to outer walls/corners (Center Bias)
-		if #groundParts > 0 then
+		-- Sort ground parts to favor the middle path between entrance and exit
+		if entPos and extPos and #groundParts > 0 then
 			table.sort(groundParts, function(a, b)
 				local aPos = a.Position
 				local bPos = b.Position
-				
-				-- Path balance score
-				local pathScoreA = entPos and extPos and math.abs((aPos - entPos).Magnitude - (aPos - extPos).Magnitude) or 0
-				local pathScoreB = entPos and extPos and math.abs((bPos - entPos).Magnitude - (bPos - extPos).Magnitude) or 0
-				
-				-- Center distance penalty (favour tiles closer to the true center of the room)
-				local centerDistA = Vector3.new(aPos.X, 0, aPos.Z).Magnitude
-				local centerDistB = Vector3.new(bPos.X, 0, bPos.Z).Magnitude
-				
-				return (pathScoreA + centerDistA * 0.5) < (pathScoreB + centerDistB * 0.5)
+				local scoreA = math.abs((aPos - entPos).Magnitude - (aPos - extPos).Magnitude)
+				local scoreB = math.abs((bPos - entPos).Magnitude - (bPos - extPos).Magnitude)
+				return scoreA < scoreB
 			end)
 		end
 
 		local rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Include
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		-- Exclude the room model itself so we check against internal walls, pillars, glass, and mirrors accurately
 		rayParams.FilterDescendantsInstances = { roomInstance }
 
-		-- Strict 360-degree open space check (Prevents pillars, mirrors, and corner clamping)
-		local function hasStrictOpenSpace(pos: Vector3): boolean
-			-- Check vertical ceiling clearance (at least 10 studs)
-			if Workspace:Raycast(pos, Vector3.new(0, 10, 0), rayParams) then
+		-- Bulletproof open space validation
+		local function isValidOpenSpace(pos: Vector3): boolean
+			-- Check vertical clearance (ceiling)
+			if Workspace:Raycast(pos, Vector3.new(0, 12, 0), rayParams) then
 				return false
 			end
 
-			-- 8-Directional horizontal raycast check (5 studs clearance required in every direction)
+			-- Check 8 directions horizontally (requires 6 full studs of clear open space from pillars, walls, and glass)
 			local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
 			for _, angle in ipairs(angles) do
 				local rad = math.rad(angle)
-				local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
-				if Workspace:Raycast(pos, dir, rayParams) then
-					return false -- Too close to a pillar, mirror, or wall!
-				end
-			end
-
-			-- Larger bounding box check for entity size (5x6x5)
-			local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2.5, 0)), Vector3.new(5, 6, 5))
-			for _, p in ipairs(partsInBox) do
-				if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
-					return false
+				local dir = Vector3.new(math.cos(rad) * 6, 0, math.sin(rad) * 6)
+				local hit = Workspace:Raycast(pos, dir, rayParams)
+				if hit then
+					return false -- Hit a pillar, mirror, wall, or glass partition!
 				end
 			end
 
 			return true
 		end
 
-		-- Test sorted ground parts for strict open space
+		-- Test sorted ground parts
 		for _, part in ipairs(groundParts) do
 			local pCF, pSize = part.CFrame, part.Size
-			local testPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2), pCF.Position.Z)
+			-- Position safely above the floor plate (+3.5 studs prevents floor clipping shown in image 5)
+			local testPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 3.5, pCF.Position.Z)
 
-			if hasStrictOpenSpace(testPos) then
-				return testPos + Vector3.new(0, 2.5, 0)
+			if isValidOpenSpace(testPos) then
+				return testPos
 			end
-		end
-
-		-- Fallback to the top-scored ground part if strict check was too restrictive
-		if #groundParts > 0 then
-			local best = groundParts[1]
-			return Vector3.new(best.Position.X, best.Position.Y + (best.Size.Y / 2) + 3, best.Position.Z)
 		end
 	end
 
-	-- Ultimate fallback to room bounding center
-	return Vector3.new(roomCF.Position.X, roomCF.Position.Y - (size.Y / 2) + 3, roomCF.Position.Z)
+	-- Safe fallback centered in the room
+	return Vector3.new(roomCF.Position.X, roomCF.Position.Y, roomCF.Position.Z)
 end
 
 
