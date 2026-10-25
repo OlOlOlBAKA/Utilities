@@ -100,6 +100,7 @@ local entityConfig = {
 			model.Main.Attachment.Open.Rate = 80
 			model.Main.Attachment.Sparkles.Enabled = true
 			task.wait(1)
+			model.Main.Spawn.Volume = 4
 			model.Main.Spawn:Play()
 			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
@@ -123,6 +124,10 @@ local entityConfig = {
 					local humanoid = char and char:FindFirstChild("Humanoid")
 					if canKill then
 						handle.SetCanBeCrucified(true)
+						if model:GetAttribute("Crucified") == true then
+							model.Main.Whisper.PlaybackSpeed = 0.45
+						    break
+					    end
 						model.Main.Whisper.PlaybackSpeed = r:NextNumber(0.1, 1.1)
 						if humanoid and humanoid.Health > 0 then
 							if isInSightAndMoving(model:GetPivot().Position, 80, {model}) then
