@@ -48,7 +48,7 @@ local CrucifixStorage = {
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local cframe, size = roomInstance:GetModelBoundingBox()
+	local cframe, size = roomInstance:GetBoundingBox()
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { roomInstance }
