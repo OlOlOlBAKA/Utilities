@@ -37,6 +37,8 @@ local entityConfig = {
 					handle.SetCanBeCrucified(true)
 				end
 			end)
+			LatestRoom.Changed:Wait()
+			handle.Destroy()
 		end,
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
