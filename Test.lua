@@ -103,7 +103,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {}
+        BlacklistedEntities = {"Blink"}
     },
     {
         Name = "Rebound",  
@@ -125,7 +125,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = true,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "A-120"}
+        BlacklistedEntities = {"Rebound", "A-120", "Depth"}
     }
 }
 
