@@ -103,7 +103,7 @@ local entityConfig = {
 			model.Main.Attachment.Open.Rate = 80
 			model.Main.Attachment.Sparkles.Enabled = true
 			task.wait(1)
-			model.Main.Spawn.Volume = 4
+			model.Main.Spawn.Volume = 2
 			model.Main.Spawn:Play()
 			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
