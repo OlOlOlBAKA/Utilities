@@ -89,7 +89,7 @@ local ENTITY_TABLE = {
         MinRoom = 12, 
         MaxRoom = 95, 
         CanSpawnInDark = true,
-        CooldownRooms = 1,
+        CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         BlacklistedEntities = {"Rebound", "Blink"}
@@ -100,7 +100,7 @@ local ENTITY_TABLE = {
         MinRoom = 5,  
         MaxRoom = 89, 
         CanSpawnInDark = false,
-        CooldownRooms = 1,
+        CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         BlacklistedEntities = {"Blink"}
@@ -111,7 +111,7 @@ local ENTITY_TABLE = {
         MinRoom = 10, 
         MaxRoom = 94, 
         CanSpawnInDark = true,
-        CooldownRooms = 1,
+        CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         BlacklistedEntities = {"A-120", "Blink"}
@@ -122,7 +122,7 @@ local ENTITY_TABLE = {
         MinRoom = 7, 
         MaxRoom = 89, 
         CanSpawnInDark = true,
-        CooldownRooms = 1,
+        CooldownRooms = 2,
         IgnoreHidingSpots = true,
         IgnoreMaxRoom = false,
         BlacklistedEntities = {"Rebound", "A-120", "Depth"}
@@ -401,7 +401,7 @@ local gameData = ReplicatedStorage:WaitForChild("GameData", 10)
 if gameData and gameData:FindFirstChild("LatestRoom") then
     local latestRoom = gameData.LatestRoom
     
-    Main_Game.caption("The Hardcore Mode script is now running, Have fun!", true, 3)
+    Main_Game.caption("The Hardcore Mode script is now running, Have fun LOL STILL IN BETA TESTING", true, 3)
     
     latestRoom.Changed:Connect(function(newRoomNumber)
         task.wait(0.15)
