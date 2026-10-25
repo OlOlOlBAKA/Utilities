@@ -45,22 +45,72 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local cframe, size = roomInstance:GetBoundingBox()
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+	
+	local basePos = nil
+	if roomEntrance and roomExit then
+		local entrancePos = getPosition(roomEntrance)
+		local exitPos = getPosition(roomExit)
+		
+		if entrancePos and exitPos then
+			basePos = (entrancePos + exitPos) / 2
+		end
+	end
+
+	if not basePos then
+		local cframe, size = roomInstance:GetBoundingBox()
+		basePos = cframe.Position
+	end
+
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { roomInstance }
-
-	local startPos = Vector3.new(cframe.Position.X, cframe.Position.Y + (size.Y / 2), cframe.Position.Z)
-	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -size.Y - 20, 0), raycastParams)
-
+	
+	local rayResult = Workspace:Raycast(basePos + Vector3.new(0, 10, 0), Vector3.new(0, -100, 0), raycastParams)
+	local floorPos = basePos
 	if rayResult then
-		return rayResult.Position
+		floorPos = rayResult.Position
 	end
 
-	return cframe.Position
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Include
+	overlapParams.FilterDescendantsInstances = { roomInstance }
+
+	local checkSize = Vector3.new(4, 5, 4)
+	local parts = Workspace:GetPartBoundsInBox(CFrame.new(floorPos + Vector3.new(0, 2.5, 0)), checkSize, overlapParams)
+	if #parts > 0 then
+		local directions = {
+			Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
+			Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
+			Vector3.new(6, 0, 6), Vector3.new(-6, 0, -6),
+			Vector3.new(6, 0, -6), Vector3.new(-6, 0, 6)
+		}
+		for _, dir in ipairs(directions) do
+			local testPos = floorPos + dir
+			local testParts = Workspace:GetPartBoundsInBox(CFrame.new(testPos + Vector3.new(0, 2.5, 0)), checkSize, overlapParams)
+			if #testParts == 0 then
+				floorPos = testPos
+				break
+			end
+		end
+	end
+
+	return floorPos
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
@@ -260,6 +310,7 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 
 	local actionsHandle = {}
 	
+	-- Instantly destroys the entity and stops its heartbeat loop
 	function actionsHandle.Destroy()
 		if entity and entity.Parent then
 			entity:Destroy()
@@ -267,18 +318,22 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 		isHandled = true
 	end
 	
+	-- Returns the cloned entity model instance
 	function actionsHandle.GetEntity()
 		return entity
 	end
 	
+	-- Returns the room model instance where the entity was spawned
 	function actionsHandle.GetRoom()
 		return roomInstance
 	end
 
+	-- Dynamically sets whether the entity can be crucified
 	function actionsHandle.SetCanBeCrucified(value: boolean)
 		canBeCrucified = value
 	end
 
+	-- Returns a boolean indicating if the entity is currently vulnerable to a crucifix
 	function actionsHandle.GetCanBeCrucified(): boolean
 		return canBeCrucified
 	end
