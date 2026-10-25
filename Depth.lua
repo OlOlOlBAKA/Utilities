@@ -122,9 +122,9 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 			        local slam = model:FindFirstChild("Slam")
                     if slam then
 				        slam.Parent = model.DepthNew
-				        slam.Volume = 4
+				        slam.Volume = 5
 				        slam.RollOffMaxDistance = 400
-				        slam.RollOffMinDistance = 10
+				        slam.RollOffMinDistance = 40
 				        slam.SoundId = "rbxassetid://9114149321"
 				        Instance.new("DistortionSoundEffect", slam).Level = 0.95
 				        local echo = slam:FindFirstChild("EchoSoundEffect")
