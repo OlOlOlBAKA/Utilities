@@ -75,6 +75,7 @@ local entityConfig = {
 		OnSpawned = function(entity: Model, room: Model, handle: table)
 			local model = handle.GetEntity()
 			local canKill = false
+			local gotCrucified = false
 
 			local function setState(openEye: boolean)
 				local part = model:FindFirstChild("Main")
@@ -111,8 +112,10 @@ local entityConfig = {
 			task.spawn(function()
 				while model and model.Parent do
 					task.wait(r:NextNumber(2, 8))
+					if gotCrucified then break end
 					setState(true)
 					task.wait(r:NextNumber(2, 10))
+					if gotCrucified then break end
 					setState(false)
 				end
 			end)
@@ -134,20 +137,20 @@ local entityConfig = {
 
 										if isCrucifix then
 											handle.SetCanBeCrucified(true)
+											gotCrucified = true
+											model.Main.Whisper.PlaybackSpeed = 0.8
 											break
 										end
 									end
+									humanoid.Health = 0
 									pcall(function()
 										require(killing)({})
-									end)
-									task.delay(0, function()
-									    humanoid.Health = 0
 									end)
 								end
 							end
 						end
 					else
-						model.Main.Whisper.PlaybackSpeed = 0.45
+						model.Main.Whisper.PlaybackSpeed = 0.8
 					end
 				end
 			end)
