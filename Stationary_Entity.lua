@@ -20,6 +20,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local CollectionService = game:GetService("CollectionService")
+local PathfindingService = game:GetService("PathfindingService")
 local LocalPlayer = Players.LocalPlayer
 
 local StationaryEntity = {}
@@ -45,109 +46,88 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	-- 1. Gather all floor parts to calculate the true geometric center of the room's walkable area
-	local floorParts = {}
-	local partsFolder = roomInstance:FindFirstChild("Parts")
-	if partsFolder then
-		local floorInst = partsFolder:FindFirstChild("Floor")
-		if floorInst then
-			if floorInst:IsA("BasePart") then
-				table.insert(floorParts, floorInst)
-			elseif floorInst:IsA("Model") or floorInst:IsA("Folder") then
-				for _, desc in ipairs(floorInst:GetDescendants()) do
-					if desc:IsA("BasePart") then table.insert(floorParts, desc) end
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+
+	-- 1. Primary Method: Use PathfindingService to generate the exact walkable path through the room
+	if roomEntrance and roomExit then
+		local startPos = getPosition(roomEntrance)
+		local endPos = getPosition(roomExit)
+
+		if startPos and endPos then
+			local path = PathfindingService:CreatePath({
+				AgentRadius = 2,
+				AgentHeight = 5,
+				AgentCanJump = true,
+			})
+			
+			local success = pcall(function()
+				path:ComputeAsync(startPos, endPos)
+			end)
+
+			if success and path.Status == Enum.PathStatus.Complete then
+				local waypoints = path:GetWaypoints()
+				if #waypoints > 0 then
+					-- Pick the middle waypoint of the path (guarantees placement right in the room center / intersection)
+					local midWaypoint = waypoints[math.ceil(#waypoints / 2)]
+					return midWaypoint.Position + Vector3.new(0, 3, 0)
 				end
 			end
 		end
-		for _, desc in ipairs(partsFolder:GetDescendants()) do
-			if desc.Name == "Floor" and desc:IsA("BasePart") and not table.find(floorParts, desc) then
-				table.insert(floorParts, desc)
-			end
-		end
 	end
 
-	if #floorParts == 0 then
-		for _, desc in ipairs(roomInstance:GetDescendants()) do
-			if desc.Name == "Floor" and desc:IsA("BasePart") then
-				table.insert(floorParts, desc)
+	-- 2. Fallback Method: Average the ground-floor parts centroid if pathfinding fails
+	local floorParts = {}
+	local function scanForFloors(parent)
+		for _, child in ipairs(parent:GetChildren()) do
+			if child:IsA("BasePart") and (child.Name == "Floor" or child.Name:lower():find("floor")) then
+				table.insert(floorParts, child)
 			end
+			scanForFloors(child)
 		end
 	end
+	scanForFloors(roomInstance)
 
-	-- Calculate the true center by averaging all floor positions (Handles '+' shaped rooms perfectly)
-	local targetPos = nil
 	if #floorParts > 0 then
-		local sumPos = Vector3.new(0, 0, 0)
+		local minY = math.huge
 		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if topY < minY then minY = topY end
+		end
+
+		local groundParts = {}
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if math.abs(topY - minY) <= 4 then
+				table.insert(groundParts, part)
+			end
+		end
+
+		local sumPos = Vector3.new(0, 0, 0)
+		for _, part in ipairs(groundParts) do
 			sumPos = sumPos + part.Position
 		end
-		local avgPos = sumPos / #floorParts
-		targetPos = Vector3.new(avgPos.X, avgPos.Y, avgPos.Z)
-	else
-		local cframe, _ = roomInstance:GetBoundingBox()
-		targetPos = cframe.Position
+		local avg = sumPos / #groundParts
+		return Vector3.new(avg.X, avg.Y + (groundParts[1].Size.Y / 2) + 3, avg.Z)
 	end
 
-	local roomCF, roomSize = roomInstance:GetBoundingBox()
-
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Include
-	rayParams.FilterDescendantsInstances = { roomInstance }
-
-	local function isValidSpawnSpot(pos: Vector3): (boolean, Vector3)
-		-- Cast down from above to find the floor surface
-		local rayUp = Vector3.new(pos.X, roomCF.Position.Y + (roomSize.Y / 2) + 10, pos.Z)
-		local rayResult = Workspace:Raycast(rayUp, Vector3.new(0, -roomSize.Y - 25, 0), rayParams)
-		
-		if not rayResult then return false, pos end
-		
-		local floorPos = rayResult.Position
-		
-		-- Check 1: Must hit a flat horizontal floor surface
-		if rayResult.Normal.Y < 0.7 then 
-			return false, pos 
-		end
-
-		-- Check 2: Vertical clearance check (Ensure no ceiling/roof is within 8 studs above)
-		local ceilingCheck = Workspace:Raycast(floorPos + Vector3.new(0, 1, 0), Vector3.new(0, 8, 0), rayParams)
-		if ceilingCheck then
-			return false, pos 
-		end
-
-		-- Check 3: Box collision check for walls or pillars
-		local checkSize = Vector3.new(3, 5, 3)
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(floorPos + Vector3.new(0, 2.5, 0)), checkSize)
-		for _, p in ipairs(partsInBox) do
-			if p.CanCollide and not p:IsDescendantOf(roomInstance) then
-				return false, pos
-			end
-		end
-
-		return true, floorPos + Vector3.new(0, 2, 0)
-	end
-
-	-- Test the true center intersection first
-	local valid, finalPos = isValidSpawnSpot(targetPos)
-	if valid then
-		return finalPos
-	end
-
-	-- If the exact center point is blocked by a pillar, spiral outward from the true center
-	for _, radius in ipairs({ 3, 6, 9, 12, 15 }) do
-		for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
-			local rad = math.rad(angle)
-			local testPos = targetPos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
-			local v, fPos = isValidSpawnSpot(testPos)
-			if v then
-				return fPos
-			end
-		end
-	end
-
-	return targetPos
+	-- 3. Absolute Last Resort Fallback
+	local cframe, size = roomInstance:GetBoundingBox()
+	return Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2) + 3, cframe.Position.Z)
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
