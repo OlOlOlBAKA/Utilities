@@ -45,129 +45,61 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local designatedCenter = roomInstance:FindFirstChild("Center") or roomInstance:FindFirstChild("RoomCenter") or roomInstance:FindFirstChild("Node")
-	if designatedCenter and designatedCenter:IsA("BasePart") then
-		return designatedCenter.Position
-	end
-
-	local floorParts = {}
-	local partsFolder = roomInstance:FindFirstChild("Parts")
-	if partsFolder then
-		local floorInst = partsFolder:FindFirstChild("Floor")
-		if floorInst then
-			if floorInst:IsA("BasePart") then
-				table.insert(floorParts, floorInst)
-			elseif floorInst:IsA("Model") or floorInst:IsA("Folder") then
-				for _, desc in ipairs(floorInst:GetDescendants()) do
-					if desc:IsA("BasePart") then table.insert(floorParts, desc) end
-				end
-			end
-		end
-		for _, desc in ipairs(partsFolder:GetDescendants()) do
-			if desc.Name == "Floor" and desc:IsA("BasePart") and not table.find(floorParts, desc) then
-				table.insert(floorParts, desc)
-			end
+	-- 2. Use RoomEntrance and RoomExit midpoint (Guaranteed open walkthrough path in DOORS)
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+	
+	local targetPos = nil
+	if roomEntrance and roomExit then
+		local entrancePos = getPosition(roomEntrance)
+		local exitPos = getPosition(roomExit)
+		
+		if entrancePos and exitPos then
+			targetPos = (entrancePos + exitPos) / 2
 		end
 	end
 
-	if #floorParts == 0 then
-		for _, desc in ipairs(roomInstance:GetDescendants()) do
-			if desc.Name == "Floor" and desc:IsA("BasePart") then
-				table.insert(floorParts, desc)
-			end
-		end
+	-- 3. Fallback to model bounding box center if entrance/exit are missing
+	if not targetPos then
+		local cframe, size = roomInstance:GetBoundingBox()
+		targetPos = cframe.Position
 	end
 
-	local cframe, size = roomInstance:GetBoundingBox()
-	local bestPos = Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2), cframe.Position.Z)
+	-- 4. Raycast straight down onto the floor from above the target position
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Include
+	rayParams.FilterDescendantsInstances = { roomInstance }
 
-	if #floorParts > 0 then
-		local minY = math.huge
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < minY then
-				minY = topY
-			end
-		end
-
-		local groundFloors = {}
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if math.abs(topY - minY) <= 3 then
-				table.insert(groundFloors, part)
-			end
-		end
-
-		local closestFloor = groundFloors[1]
-		local minDst = math.huge
-		local centerXZ = Vector3.new(cframe.Position.X, 0, cframe.Position.Z)
-
-		for _, part in ipairs(groundFloors) do
-			local pXZ = Vector3.new(part.Position.X, 0, part.Position.Z)
-			local dst = (pXZ - centerXZ).Magnitude
-			if dst < minDst then
-				minDst = dst
-				closestFloor = part
-			end
-		end
-
-		if closestFloor then
-			local pCF, pSize = closestFloor.CFrame, closestFloor.Size
-			bestPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2), pCF.Position.Z)
-		end
-	else
-		local raycastParams = RaycastParams.new()
-		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-		raycastParams.FilterDescendantsInstances = { roomInstance }
-		local rayResult = Workspace:Raycast(Vector3.new(cframe.Position.X, cframe.Position.Y + (size.Y / 2), cframe.Position.Z), Vector3.new(0, -size.Y * 2, 0), raycastParams)
-		if rayResult then
-			bestPos = rayResult.Position
-		end
+	local rayResult = Workspace:Raycast(targetPos + Vector3.new(0, 15, 0), Vector3.new(0, -50, 0), rayParams)
+	if rayResult then
+		return rayResult.Position
 	end
 
-	local overlapParams = OverlapParams.new()
-	overlapParams.FilterType = Enum.RaycastFilterType.Include
-	overlapParams.FilterDescendantsInstances = { roomInstance }
-
-	local checkSize = Vector3.new(3, 4, 3)
-	local finalPos = bestPos
-
-	local function isClear(pos: Vector3): boolean
-		local parts = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2, 0)), checkSize, overlapParams)
-		for _, p in ipairs(parts) do
-			local isFloor = false
-			for _, fp in ipairs(floorParts) do
-				if p == fp or p:IsDescendantOf(fp) then
-					isFloor = true
-					break
-				end
-			end
-			if not isFloor then return false end
-		end
-		return true
+	-- Secondary fallback if internal room raycast fails
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = {}
+	local rayResult2 = Workspace:Raycast(targetPos + Vector3.new(0, 15, 0), Vector3.new(0, -50, 0), rayParams)
+	if rayResult2 then
+		return rayResult2.Position
 	end
 
-	if not isClear(finalPos) then
-		local found = false
-		for _, radius in ipairs({ 3, 6, 9, 12 }) do
-			for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
-				local rad = math.rad(angle)
-				local testPos = bestPos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
-				if isClear(testPos) then
-					finalPos = testPos
-					found = true
-					break
-				end
-			end
-			if found then break end
-		end
-	end
-
-	return finalPos
+	return targetPos
 end
+
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
