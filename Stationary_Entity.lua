@@ -45,17 +45,6 @@ local CrucifixStorage = {
 	}
 }
 
-local function getPosition(inst: Instance): Vector3?
-	if inst:IsA("BasePart") then
-		return inst.Position
-	elseif inst:IsA("Model") then
-		return inst:GetPivot().Position
-	elseif inst:IsA("Attachment") then
-		return inst.WorldPosition
-	end
-	return nil
-end
-
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
@@ -73,9 +62,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 				table.insert(floorParts, floorInst)
 			elseif floorInst:IsA("Model") or floorInst:IsA("Folder") then
 				for _, desc in ipairs(floorInst:GetDescendants()) do
-					if desc:IsA("BasePart") then
-						table.insert(floorParts, desc)
-					end
+					if desc:IsA("BasePart") then table.insert(floorParts, desc) end
 				end
 			end
 		end
@@ -94,42 +81,51 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		end
 	end
 
-	local basePos = nil
-	local highestY = 0
+	local cframe, size = roomInstance:GetBoundingBox()
+	local bestPos = Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2), cframe.Position.Z)
 
 	if #floorParts > 0 then
-		local totalPos = Vector3.zero
-		highestY = -math.huge
+		local minY = math.huge
 		for _, part in ipairs(floorParts) do
-			totalPos += part.Position
 			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY > highestY then
-				highestY = topY
+			if topY < minY then
+				minY = topY
 			end
 		end
-		local avgPos = totalPos / #floorParts
-		basePos = Vector3.new(avgPos.X, highestY, avgPos.Z)
-	end
 
-	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
-	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	if roomEntrance and roomExit then
-		local ePos = getPosition(roomEntrance)
-		local xPos = getPosition(roomExit)
-		if ePos and xPos then
-			local midX = (ePos.X + xPos.X) / 2
-			local midZ = (ePos.Z + xPos.Z) / 2
-			if basePos then
-				basePos = Vector3.new(midX, basePos.Y, midZ)
-			else
-				basePos = Vector3.new(midX, ePos.Y, midZ)
+		local groundFloors = {}
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if math.abs(topY - minY) <= 3 then
+				table.insert(groundFloors, part)
 			end
 		end
-	end
 
-	if not basePos then
-		local cframe, size = roomInstance:GetBoundingBox()
-		basePos = Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2), cframe.Position.Z)
+		local closestFloor = groundFloors[1]
+		local minDst = math.huge
+		local centerXZ = Vector3.new(cframe.Position.X, 0, cframe.Position.Z)
+
+		for _, part in ipairs(groundFloors) do
+			local pXZ = Vector3.new(part.Position.X, 0, part.Position.Z)
+			local dst = (pXZ - centerXZ).Magnitude
+			if dst < minDst then
+				minDst = dst
+				closestFloor = part
+			end
+		end
+
+		if closestFloor then
+			local pCF, pSize = closestFloor.CFrame, closestFloor.Size
+			bestPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2), pCF.Position.Z)
+		end
+	else
+		local raycastParams = RaycastParams.new()
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		raycastParams.FilterDescendantsInstances = { roomInstance }
+		local rayResult = Workspace:Raycast(Vector3.new(cframe.Position.X, cframe.Position.Y + (size.Y / 2), cframe.Position.Z), Vector3.new(0, -size.Y * 2, 0), raycastParams)
+		if rayResult then
+			bestPos = rayResult.Position
+		end
 	end
 
 	local overlapParams = OverlapParams.new()
@@ -137,9 +133,9 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	overlapParams.FilterDescendantsInstances = { roomInstance }
 
 	local checkSize = Vector3.new(3, 4, 3)
-	local currentPos = basePos
+	local finalPos = bestPos
 
-	local function isPositionClear(pos: Vector3): boolean
+	local function isClear(pos: Vector3): boolean
 		local parts = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2, 0)), checkSize, overlapParams)
 		for _, p in ipairs(parts) do
 			local isFloor = false
@@ -149,33 +145,28 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 					break
 				end
 			end
-			if not isFloor then
-				return false
-			end
+			if not isFloor then return false end
 		end
 		return true
 	end
 
-	if not isPositionClear(currentPos) then
-		local foundClear = false
-		local searchRadii = { 2, 4, 6, 8, 10, 12, 15 }
-		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-		for _, radius in ipairs(searchRadii) do
-			for _, angle in ipairs(angles) do
+	if not isClear(finalPos) then
+		local found = false
+		for _, radius in ipairs({ 3, 6, 9, 12 }) do
+			for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
 				local rad = math.rad(angle)
-				local offset = Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
-				local testPos = basePos + offset
-				if isPositionClear(testPos) then
-					currentPos = testPos
-					foundClear = true
+				local testPos = bestPos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
+				if isClear(testPos) then
+					finalPos = testPos
+					found = true
 					break
 				end
 			end
-			if foundClear then break end
+			if found then break end
 		end
 	end
 
-	return currentPos
+	return finalPos
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
@@ -373,10 +364,8 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 
 	local isHandled = false
 
-	-- Action handle methods and controls
 	local actionsHandle = {}
 	
-	-- Instantly destroys the entity and stops its heartbeat loop
 	function actionsHandle.Destroy()
 		if entity and entity.Parent then
 			entity:Destroy()
@@ -384,22 +373,18 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 		isHandled = true
 	end
 	
-	-- Returns the cloned entity model instance
 	function actionsHandle.GetEntity()
 		return entity
 	end
 	
-	-- Returns the room model instance where the entity was spawned
 	function actionsHandle.GetRoom()
 		return roomInstance
 	end
 
-	-- Dynamically sets whether the entity can be crucified
 	function actionsHandle.SetCanBeCrucified(value: boolean)
 		canBeCrucified = value
 	end
 
-	-- Returns a boolean indicating if the entity is currently vulnerable to a crucifix
 	function actionsHandle.GetCanBeCrucified(): boolean
 		return canBeCrucified
 	end
@@ -415,7 +400,6 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 			return
 		end
 
-		-- Action handle execution loop monitoring
 		local character = LocalPlayer.Character
 		if not character or not character:FindFirstChild("HumanoidRootPart") then return end
 
