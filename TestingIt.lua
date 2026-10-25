@@ -126,6 +126,7 @@ local entityConfig = {
 					local char = localPlayer.Character
 					local humanoid = char and char:FindFirstChild("Humanoid")
 					if canKill then
+						Main_Game.camShaker:ShakeOnce(4, 8, 0.1, 0.5)
 						model.Main.Whisper.PlaybackSpeed = r:NextNumber(0.1, 1.1)
 						if humanoid and humanoid.Health > 0 then
 							if isInSightAndMoving(model:GetPivot().Position, 80, {model}) then
