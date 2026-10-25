@@ -84,16 +84,16 @@ local entityConfig = {
 					task.wait(0.2)
 					part.Blink:Play()
 					part.Attachment.Open.Enabled = true
-					task.wait(0.1)
 					part.Attachment.Closed.Enabled = false
+					task.wait(0.5)
 					canKill = true
 				else
 					part.BlinkForeshadow:Play()
 					task.wait(0.2)
 					part.Blink:Play()
 					part.Attachment.Closed.Enabled = true
-					task.wait(0.1)
 					part.Attachment.Open.Enabled = false
+					task.wait(0.2)
 					canKill = false
 				end
 			end
@@ -110,11 +110,9 @@ local entityConfig = {
 
 			task.spawn(function()
 				while model and model.Parent do
-					task.wait(r:NextNumber(2, 10))
-					if model:GetAttribute("Crucified") == true then canKill = false break end
+					task.wait(r:NextNumber(2, 8))
 					setState(true)
 					task.wait(r:NextNumber(2, 10))
-					if model:GetAttribute("Crucified") == true then canKill = false break end
 					setState(false)
 				end
 			end)
@@ -125,17 +123,24 @@ local entityConfig = {
 					local char = localPlayer.Character
 					local humanoid = char and char:FindFirstChild("Humanoid")
 					if canKill then
-						handle.SetCanBeCrucified(true)
-						if model:GetAttribute("Crucified") == true then
-							model.Main.Whisper.PlaybackSpeed = 0.45
-						    break
-					    end
 						model.Main.Whisper.PlaybackSpeed = r:NextNumber(0.1, 1.1)
 						if humanoid and humanoid.Health > 0 then
 							if isInSightAndMoving(model:GetPivot().Position, 80, {model}) then
 								if canKill then
-									require(killing)()
-									task.delay(0.1, function()
+									local tool = char:FindFirstChildWhichIsA("Tool")
+									if tool then
+										local toolName = string.lower(tool.Name)
+			                            local isCrucifix = string.find(toolName, "crucifix") ~= nil
+
+										if isCrucifix then
+											handle.SetCanBeCrucified(true)
+											break
+										end
+									end
+									pcall(function()
+										require(killing)({})
+									end)
+									task.delay(0, function()
 									    humanoid.Health = 0
 									end)
 								end
