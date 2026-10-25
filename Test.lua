@@ -118,7 +118,7 @@ local ENTITY_TABLE = {
     },
     {
         Name = "Blink",  
-        Weight = 0.8,  
+        Weight = 0.25,  
         MinRoom = 7, 
         MaxRoom = 89, 
         CanSpawnInDark = true,
