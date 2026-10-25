@@ -313,8 +313,8 @@ local function handleHardcoreRoom(roomNumber)
     lastProcessedRoom = roomNumber
 
     -- Check if Seek is currently active in Workspace
-    if workspace:FindFirstChild("SeekMovingNewClone") then
-        print(string.format("[Hardcore Mode] Room %d skipped (SeekMovingNewClone present in workspace)", roomNumber))
+    if workspace:FindFirstChild("SeekMovingNewClone") or workspace.LiveEntities:FindFirstChild("HonchoRig") then
+        print(string.format("[Hardcore Mode] Room %d skipped (Seek chase or Honcho mail room in workspace)", roomNumber))
         safeRoomStreak = safeRoomStreak + 1
         return
     end
