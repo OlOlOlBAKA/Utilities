@@ -8,7 +8,9 @@ local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer.PlayerGui
 local mainUI = playerGui:WaitForChild("MainUI")
 local initiator = mainUI:WaitForChild("Initiator")
-local Main_Game = require(initiator:WaitForChild("Main_Game"))
+local mainGame = initiator:WaitForChild("Main_Game")
+local Main_Game = require(mainGame)
+local killing = mainGame.RemoteListener.Jumpscares.Death
 
 local currentRooms = workspace:WaitForChild("CurrentRooms")
 local GameData = ReplicatedStorage:WaitForChild("GameData")
@@ -132,7 +134,10 @@ local entityConfig = {
 						if humanoid and humanoid.Health > 0 then
 							if isInSightAndMoving(model:GetPivot().Position, 80, {model}) then
 								if canKill then
-									humanoid.Health = 0
+									require(killing)()
+									task.delay(0.1, function()
+									    humanoid.Health = 0
+									end)
 								end
 							end
 						end
