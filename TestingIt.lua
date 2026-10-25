@@ -33,7 +33,7 @@ local entityConfig = {
 			local model = handle.GetEntity()
 			model.Main.Attachment.Closed.Rate = 80
 			model.Main.Attachment.Open.Rate = 80
-			model.Main.Attachment.Sparkle.Enabled = true
+			model.Main.Attachment.Sparkles.Enabled = true
 			task.wait(1)
 			model.Main.Spawn:Play()
 			model.Main.Attachment.Closed.Enabled = true
