@@ -30,7 +30,13 @@ local entityConfig = {
 			-- handle.GetRoom()                      -> Returns the room model instance.
 			-- handle.SetCanBeCrucified(bool)        -> Dynamically toggle crucifix immunity.
 			-- handle.GetCanBeCrucified() -> boolean -> Check current crucifix vulnerability.
-
+			local model = handle.GetEntity()
+			model.Main.Attachment.Closed.Rate = 80
+			model.Main.Attachment.Open.Rate = 80
+			model.Main.Attachment.Sparkle.Enabled = true
+			task.wait(1)
+			model.Main.Spawn:Play()
+			model.Main.Attachment.Closed.Enabled = true
 			handle.SetCanBeCrucified(false)
 			task.delay(3, function()
 				if handle.GetEntity() and handle.GetEntity().Parent then
