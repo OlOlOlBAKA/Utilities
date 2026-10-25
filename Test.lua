@@ -197,7 +197,9 @@ local function spawnEntity(entityName, roomNumber)
 
     activeEntities[entityName] = true
 
-    task.wait(1)
+    if entityName ~= "Blink" then
+        task.wait(1)
+    end
 
     -- 1. Run entity script via loadstring
     task.spawn(function()
