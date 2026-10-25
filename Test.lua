@@ -19,15 +19,16 @@ _G.HardcoreModeRunning = true
 --------------------------------------------------------------------------------
 -- CONFIGURATION & GLOBAL SETTINGS
 --------------------------------------------------------------------------------
--- Set to true if players are in a different floor or endless mode to bypass MaxRoom caps globally
 local GLOBAL_IGNORE_MAX_ROOMS = false
 
-if ReplicatedStorage.GameData.Floor.Value == "Archives" then
+local success, floorVal = pcall(function()
+    return ReplicatedStorage.GameData.Floor.Value
+end)
+if success and floorVal == "Archives" then
     GLOBAL_IGNORE_MAX_ROOMS = true
     print("Its Archives Floor")
 end
 
--- Fetch DOORS actual game seed (edit/adjust path here as needed)
 local function getGameSeed()
     local gameData = ReplicatedStorage:FindFirstChild("GameData")
     if gameData then
@@ -38,7 +39,6 @@ local function getGameSeed()
         end
     end
 
-    -- Fallback to JobId seeding
     local jobId = game.JobId
     if not jobId or jobId == "" then 
         jobId = "HARDCORE_TEST_SEED_123"
@@ -59,7 +59,6 @@ local safeRoomStreak = 0
 _G.CrucifyDepth = false
 _G.SurviveDepth = false
 
--- Track which specific entities are currently running to prevent duplicate spawns
 local activeEntities = {
     ["A-120"] = false,
     ["Depth"] = false,
@@ -67,7 +66,6 @@ local activeEntities = {
     ["Blink"] = false,
 }
 
--- Track room numbers when entities complete despawning to enforce cooldowns
 local entityLastDespawnRoom = {
     ["A-120"] = -999,
     ["Depth"] = -999,
@@ -75,10 +73,6 @@ local entityLastDespawnRoom = {
     ["Blink"] = -999,
 }
 
--- Counter to keep track of Rebound's despawns
-local reboundDespawnCount = 0
-
--- Prevents the same room number from running the spawn logic multiple times
 local lastProcessedRoom = -1
 
 local GLOBAL_BLACKLIST_ROOMS = {50, 100}
@@ -93,7 +87,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "Blink"} -- A-120 cannot spawn if Rebound/Blink is active
+        BlacklistedEntities = {"Rebound", "Blink"}
     },
     {
         Name = "Depth",    
@@ -104,7 +98,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {} -- No entity blacklisted
+        BlacklistedEntities = {}
     },
     {
         Name = "Rebound",  
@@ -115,7 +109,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"A-120", "Blink"} -- Rebound cannot spawn if A-120/Blink is active
+        BlacklistedEntities = {"A-120", "Blink"}
     },
     {
         Name = "Blink",  
@@ -124,9 +118,9 @@ local ENTITY_TABLE = {
         MaxRoom = 89, 
         CanSpawnInDark = true,
         CooldownRooms = 1,
-        IgnoreHidingSpots = true, -- Set to true so Blink can ignore hiding spot constraints
+        IgnoreHidingSpots = true,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "A-120"} -- Blink cannot spawn if Rebound/A-120 is active
+        BlacklistedEntities = {"Rebound", "A-120"}
     }
 }
 
@@ -134,7 +128,6 @@ local ENTITY_TABLE = {
 -- HELPER FUNCTIONS
 --------------------------------------------------------------------------------
 
--- Counts hiding spots inside Room.Assets
 local function countHidingSpots(roomModel)
     local count = 0
     local assets = roomModel:FindFirstChild("Assets")
@@ -151,24 +144,20 @@ local function countHidingSpots(roomModel)
 end
 
 local function isRoomBlacklisted(roomNumber)
-    -- 1. Check dynamic 49-55, 99-105, 149-155, 199-205... ranges
+    -- Dynamic 49-55, 99-105, 149-155... ranges
     local mod = roomNumber % 50
     if mod >= 49 or mod <= 5 then
-        print("Room: ".. roomNumber.. "is blacklisted room bro")
         return true
     end
 
-    -- 2. Optional: Keep explicit static single-room blacklists if needed
     for _, blacklistedRoom in ipairs(GLOBAL_BLACKLIST_ROOMS) do
         if roomNumber == blacklistedRoom then
-            print("its selected blacklist room bro")
             return true
         end
     end
 
     return false
 end
-
 
 local function selectWeightedEntity(availableEntities, rng)
     local totalWeight = 0
@@ -197,52 +186,52 @@ local function registerDespawn(entityName)
 end
 
 local function spawnEntity(entityName, roomNumber)
-    -- Prevent duplicate spawns if active or already in Workspace - LOCKED INSTANTLY
+    -- Prevent duplicate spawns if active or already in Workspace
     if activeEntities[entityName] or workspace:FindFirstChild(entityName) then 
         warn(entityName .. " is present right now cannot spawn")
         return 
     end
 
-    -- Lock active state immediately to prevent race conditions with blacklists
+    -- Lock active status IMMEDIATELY
     activeEntities[entityName] = true
 
     if entityName ~= "Blink" then
         task.wait(1)
     end
 
-    -- 1. Run entity script via loadstring
+    -- 1. Execute entity loadstring
     task.spawn(function()
         if entityName == "A-120" then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/A-120.lua"))()
         elseif entityName == "Depth" then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Depth.lua"))()
         elseif entityName == "Rebound" then
-            reboundDespawnCount = 0 -- Reset counter on new spawn
             loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Rebound.lua"))()
         elseif entityName == "Blink" then
             loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Blink.lua"))()
         end
     end)
 
-    -- 2. Handle Despawns & Crucifixion
+    -- 2. Handle Despawns & Lifecycle Tracking
     if entityName == "Rebound" then
         task.spawn(function()
+            local reboundPassCount = 0
+            local startTime = tick()
+            
+            -- Keep Rebound strictly locked in activeEntities until session fully completes (or times out)
             while activeEntities["Rebound"] do
-                task.wait()
-                local entityModel = workspace:WaitForChild("Rebound", 15)
+                -- Hard safety limit: If Rebound session lasts longer than 45 seconds, unlock safety lock
+                if tick() - startTime > 45 then
+                    print("[Hardcore Mode] Rebound session safety timeout reached. Unlocking Rebound.")
+                    registerDespawn("Rebound")
+                    break
+                end
+
+                local entityModel = workspace:WaitForChild("Rebound", 5)
                 
                 if entityModel then
                     local isCrucified = false
 
-                    -- Listen for normal despawns
-                    local childRemovedConn
-                    childRemovedConn = workspace.ChildRemoved:Connect(function(child)
-                        if child == entityModel then
-                            reboundDespawnCount = reboundDespawnCount + 1
-                        end
-                    end)
-
-                    -- Listen for Crucified attribute change
                     local attrConn
                     attrConn = entityModel:GetAttributeChangedSignal("Crucified"):Connect(function()
                         if entityModel:GetAttribute("Crucified") == true then
@@ -250,7 +239,7 @@ local function spawnEntity(entityName, roomNumber)
                         end
                     end)
 
-                    -- Poll until model is removed or attribute gets set to true
+                    -- Wait until this specific Rebound pass model leaves workspace
                     while entityModel and entityModel.Parent == workspace do
                         if entityModel:GetAttribute("Crucified") == true then
                             isCrucified = true
@@ -259,25 +248,32 @@ local function spawnEntity(entityName, roomNumber)
                         task.wait(0.1)
                     end
 
-                    -- Clean up signal listeners
-                    if childRemovedConn then childRemovedConn:Disconnect() end
                     if attrConn then attrConn:Disconnect() end
 
-                    -- Unlock activeEntities if Crucified OR completed 4 despawns
                     if isCrucified then
-                        print("[Hardcore Mode] Rebound was Crucified! Unlocking spawn.")
+                        print("[Hardcore Mode] Rebound was Crucified! Ending session.")
                         registerDespawn("Rebound")
                         break
-                    elseif reboundDespawnCount >= 4 then
-                        print("[Hardcore Mode] Rebound completely despawned (4/4).")
+                    else
+                        reboundPassCount = reboundPassCount + 1
+                        print(string.format("[Hardcore Mode] Rebound pass %d/4 completed.", reboundPassCount))
+                        
+                        -- Only unlock Rebound after ALL 4 passes are done
+                        if reboundPassCount >= 4 then
+                            print("[Hardcore Mode] Rebound finished all 4 passes. Unlocking spawn.")
+                            registerDespawn("Rebound")
+                            break
+                        end
+                    end
+                else
+                    -- If no Rebound model found after 5s during waiting loop, check if entire session ended
+                    if reboundPassCount >= 4 then
                         registerDespawn("Rebound")
                         break
                     end
-                else
-                    -- Safety unlock if entity failed to load or got removed early
-                    registerDespawn("Rebound")
-                    break
                 end
+                
+                task.wait(0.5)
             end
         end)
     else
@@ -308,7 +304,6 @@ local function spawnEntity(entityName, roomNumber)
                     end
                 end)
 
-                -- Fallback check in case attribute was already true on spawn/fetch
                 if entityModel:GetAttribute("Crucified") == true then
                     cleanupAndUnlock()
                 end
@@ -323,9 +318,9 @@ local function handleHardcoreRoom(roomNumber)
     if lastProcessedRoom == roomNumber then return end
     lastProcessedRoom = roomNumber
 
-    -- Check if Seek is currently active in Workspace
+    -- Skip if Seek chase or Honcho mail room active
     if workspace:FindFirstChild("SeekMovingNewClone") or workspace:FindFirstChild("HonchoRig") then
-        print(string.format("[Hardcore Mode] Room %d skipped (Seek chase or Honcho mail room in workspace)", roomNumber))
+        print(string.format("[Hardcore Mode] Room %d skipped (Seek chase or Honcho mail room present)", roomNumber))
         safeRoomStreak = safeRoomStreak + 1
         return
     end
@@ -336,6 +331,7 @@ local function handleHardcoreRoom(roomNumber)
     local rng = Random.new(roomSeed)
 
     if isRoomBlacklisted(roomNumber) then
+        print(string.format("[Hardcore Mode] Room %d is blacklisted", roomNumber))
         safeRoomStreak = safeRoomStreak + 1
         return
     end
@@ -351,7 +347,6 @@ local function handleHardcoreRoom(roomNumber)
                 isDarkRoom = true
             end
             
-            -- Count actual hiding spot models in Room.Assets
             totalHidingSpots = countHidingSpots(currentRoomModel)
         end
     end
@@ -366,14 +361,13 @@ local function handleHardcoreRoom(roomNumber)
         for _, entity in ipairs(ENTITY_TABLE) do
             local minRoomReq = roomNumber >= entity.MinRoom
             
-            -- MaxRoom Check (overridden if entity or global ignore setting is active)
             local bypassMaxRoom = GLOBAL_IGNORE_MAX_ROOMS or entity.IgnoreMaxRoom
             local maxRoomReq = bypassMaxRoom or (not entity.MaxRoom) or (roomNumber <= entity.MaxRoom)
             
             local darkReq = (not isDarkRoom) or entity.CanSpawnInDark
             local notAlreadyActive = not activeEntities[entity.Name]
             
-            -- Entity Blacklist Check (ensures no blacklisted entity is currently active or in workspace)
+            -- Entity Blacklist Check: Checks activeEntities table AND workspace
             local blacklistPassed = true
             if entity.BlacklistedEntities then
                 for _, blacklistedName in ipairs(entity.BlacklistedEntities) do
@@ -384,11 +378,11 @@ local function handleHardcoreRoom(roomNumber)
                 end
             end
 
-            -- Room Cooldown Check: Ensures roomNumber > despawnRoom + CooldownRooms
+            -- Room Cooldown Check
             local lastDespawn = entityLastDespawnRoom[entity.Name]
             local cooldownPassed = (roomNumber - lastDespawn) > entity.CooldownRooms
 
-            -- Individual hiding spot ignore override per entity (Evaluated independently per entity configuration)
+            -- Individual hiding spot check
             local hidingSpotCheckPassed = entity.IgnoreHidingSpots or (totalHidingSpots >= playerCount)
 
             if minRoomReq and maxRoomReq and darkReq and notAlreadyActive and blacklistPassed and cooldownPassed and hidingSpotCheckPassed then
