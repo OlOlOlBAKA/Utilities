@@ -63,7 +63,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
 
-	-- 1. Primary Method: Use PathfindingService to generate the exact walkable path through the room
+	-- 1. Primary Method: Use PathfindingService to find the exact walkthrough path
 	if roomEntrance and roomExit then
 		local startPos = getPosition(roomEntrance)
 		local endPos = getPosition(roomExit)
@@ -79,10 +79,10 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 				path:ComputeAsync(startPos, endPos)
 			end)
 
-			if success and path.Status == Enum.PathStatus.Complete then
+			if success and path.Status == Enum.PathStatus.Success then
 				local waypoints = path:GetWaypoints()
 				if #waypoints > 0 then
-					-- Pick the middle waypoint of the path (guarantees placement right in the room center / intersection)
+					-- Pick the middle waypoint for true center placement (+ shaped rooms)
 					local midWaypoint = waypoints[math.ceil(#waypoints / 2)]
 					return midWaypoint.Position + Vector3.new(0, 3, 0)
 				end
@@ -90,7 +90,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		end
 	end
 
-	-- 2. Fallback Method: Average the ground-floor parts centroid if pathfinding fails
+	-- 2. Fallback Method: Ground-floor centroid calculation
 	local floorParts = {}
 	local function scanForFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
@@ -125,7 +125,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return Vector3.new(avg.X, avg.Y + (groundParts[1].Size.Y / 2) + 3, avg.Z)
 	end
 
-	-- 3. Absolute Last Resort Fallback
+	-- 3. Last Resort Fallback
 	local cframe, size = roomInstance:GetBoundingBox()
 	return Vector3.new(cframe.Position.X, cframe.Position.Y - (size.Y / 2) + 3, cframe.Position.Z)
 end
