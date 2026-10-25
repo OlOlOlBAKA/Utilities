@@ -45,21 +45,10 @@ local CrucifixStorage = {
 	}
 }
 
-local function getPosition(inst: Instance): Vector3?
-	if inst:IsA("BasePart") then
-		return inst.Position
-	elseif inst:IsA("Model") then
-		return inst:GetPivot().Position
-	elseif inst:IsA("Attachment") then
-		return inst.WorldPosition
-	end
-	return nil
-end
-
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	-- 1. Gather all actual floor parts in the room
+	-- 1. Gather all floor parts to calculate the true geometric center of the room's walkable area
 	local floorParts = {}
 	local partsFolder = roomInstance:FindFirstChild("Parts")
 	if partsFolder then
@@ -88,71 +77,78 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		end
 	end
 
-	-- 2. Get reference target (Entrance/Exit midpoint or room bounding center)
-	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
-	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	local refPos = nil
-	
-	if roomEntrance and roomExit then
-		local entPos, extPos = getPosition(roomEntrance), getPosition(roomExit)
-		if entPos and extPos then refPos = (entPos + extPos) / 2 end
-	end
-	if not refPos then
+	-- Calculate the true center by averaging all floor positions (Handles '+' shaped rooms perfectly)
+	local targetPos = nil
+	if #floorParts > 0 then
+		local sumPos = Vector3.new(0, 0, 0)
+		for _, part in ipairs(floorParts) do
+			sumPos = sumPos + part.Position
+		end
+		local avgPos = sumPos / #floorParts
+		targetPos = Vector3.new(avgPos.X, avgPos.Y, avgPos.Z)
+	else
 		local cframe, _ = roomInstance:GetBoundingBox()
-		refPos = cframe.Position
+		targetPos = cframe.Position
 	end
 
-	-- 3. Find the best floor part closest to the reference walkthrough path
-	local bestFloorPart = floorParts[1]
-	local minDst = math.huge
-	for _, part in ipairs(floorParts) do
-		local dst = (part.Position - refPos).Magnitude
-		if dst < minDst then
-			minDst = dst
-			bestFloorPart = part
+	local roomCF, roomSize = roomInstance:GetBoundingBox()
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Include
+	rayParams.FilterDescendantsInstances = { roomInstance }
+
+	local function isValidSpawnSpot(pos: Vector3): (boolean, Vector3)
+		-- Cast down from above to find the floor surface
+		local rayUp = Vector3.new(pos.X, roomCF.Position.Y + (roomSize.Y / 2) + 10, pos.Z)
+		local rayResult = Workspace:Raycast(rayUp, Vector3.new(0, -roomSize.Y - 25, 0), rayParams)
+		
+		if not rayResult then return false, pos end
+		
+		local floorPos = rayResult.Position
+		
+		-- Check 1: Must hit a flat horizontal floor surface
+		if rayResult.Normal.Y < 0.7 then 
+			return false, pos 
 		end
-	end
 
-	local spawnPos = refPos
-	if bestFloorPart then
-		local pCF, pSize = bestFloorPart.CFrame, bestFloorPart.Size
-		-- Place right on top of the floor surface
-		spawnPos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2), pCF.Position.Z)
-	end
+		-- Check 2: Vertical clearance check (Ensure no ceiling/roof is within 8 studs above)
+		local ceilingCheck = Workspace:Raycast(floorPos + Vector3.new(0, 1, 0), Vector3.new(0, 8, 0), rayParams)
+		if ceilingCheck then
+			return false, pos 
+		end
 
-	-- 4. Obstacle & Wall Clearance Check (Ensures it's never inside a wall)
-	local checkSize = Vector3.new(4, 5, 4) -- Size of the entity bounding box
-	local function isPositionSafe(pos: Vector3): boolean
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos + Vector3.new(0, 2.5, 0)), checkSize)
+		-- Check 3: Box collision check for walls or pillars
+		local checkSize = Vector3.new(3, 5, 3)
+		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(floorPos + Vector3.new(0, 2.5, 0)), checkSize)
 		for _, p in ipairs(partsInBox) do
-			if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
-				return false -- Hit a wall or obstacle!
+			if p.CanCollide and not p:IsDescendantOf(roomInstance) then
+				return false, pos
 			end
 		end
-		return true
+
+		return true, floorPos + Vector3.new(0, 2, 0)
 	end
 
-	-- If the spot is inside a wall/pillar, spiral outward until a safe open space on the floor is found
-	if not isPositionSafe(spawnPos) then
-		local found = false
-		for _, radius in ipairs({ 3, 6, 9, 12, 16 }) do
-			for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
-				local rad = math.rad(angle)
-				local testPos = spawnPos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
-				if isPositionSafe(testPos) then
-					spawnPos = testPos
-					found = true
-					break
-				end
+	-- Test the true center intersection first
+	local valid, finalPos = isValidSpawnSpot(targetPos)
+	if valid then
+		return finalPos
+	end
+
+	-- If the exact center point is blocked by a pillar, spiral outward from the true center
+	for _, radius in ipairs({ 3, 6, 9, 12, 15 }) do
+		for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
+			local rad = math.rad(angle)
+			local testPos = targetPos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
+			local v, fPos = isValidSpawnSpot(testPos)
+			if v then
+				return fPos
 			end
-			if found then break end
 		end
 	end
 
-	return spawnPos
+	return targetPos
 end
-
-
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
