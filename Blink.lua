@@ -169,4 +169,9 @@ local entityConfig = {
 	}
 }
 
-StationaryEntity.spawn(LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/LatestBlink.rbxm"), spawnRoom, entityConfig)
+-- Pre-fetch the model once when the script loads
+local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or LoadCustomInstance
+local entityTemplate = fetchFunc("https://github.com/OlOlOlBAKA/Utilities/raw/main/LatestBlink.rbxm")
+
+-- Later when spawning, use the cached template instantly without network lag:
+StationaryEntity.spawn(entityTemplate, spawnRoom, entityConfig)
