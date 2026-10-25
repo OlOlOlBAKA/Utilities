@@ -10,8 +10,6 @@ local mainUI = playerGui:WaitForChild("MainUI")
 local initiator = mainUI:WaitForChild("Initiator")
 local Main_Game = require(initiator:WaitForChild("Main_Game"))
 
-local character = localPlayer.Character
-
 local currentRooms = workspace:WaitForChild("CurrentRooms")
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local LatestRoom = GameData:WaitForChild("LatestRoom")
@@ -63,28 +61,6 @@ local function isInSightAndMoving(origin: Vector3, maxDistance: number, ignoreLi
 	return false
 end
 
-local function setState(model: Model, openEye: boolean)
-	local part = model:FindFirstChild("Main")
-	if not part then return end
-	if openEye == true then
-		part.Blink:Play()
-		part.BlinkForeshadow:Play()
-		task.wait(0.2)
-		part.Attachment.Open.Enabled = true
-		task.wait(0.1)
-		part.Attachment.Closed.Enabled = false
-		canKill = true
-	else
-		part.Blink:Play()
-		part.BlinkForeshadow:Play()
-		task.wait(0.2)
-		part.Attachment.Closed.Enabled = true
-		task.wait(0.1)
-		part.Attachment.Open.Enabled = false
-		canKill = false
-	end
-end
-
 local r = Random.new(GameSeed.Value)
 
 local entityConfig = {
@@ -95,52 +71,79 @@ local entityConfig = {
 
 	callbacks = {
 		OnSpawned = function(entity: Model, room: Model, handle: table)
-			-- handle.Destroy()                      -> Instantly destroys the entity and stops its loop.
-			-- handle.GetEntity()                    -> Returns the spawned entity model instance.
-			-- handle.GetRoom()                      -> Returns the room model instance.
-			-- handle.SetCanBeCrucified(bool)        -> Dynamically toggle crucifix immunity.
-			-- handle.GetCanBeCrucified() -> boolean -> Check current crucifix vulnerability.
 			local model = handle.GetEntity()
+			local canKill = false
+
+			local function setState(openEye: boolean)
+				local part = model:FindFirstChild("Main")
+				if not part then return end
+				if openEye == true then
+					part.BlinkForeshadow:Play()
+					task.wait(0.2)
+					part.Blink:Play()
+					part.Attachment.Open.Enabled = true
+					task.wait(0.1)
+					part.Attachment.Closed.Enabled = false
+					canKill = true
+				else
+					part.BlinkForeshadow:Play()
+					task.wait(0.2)
+					part.Blink:Play()
+					part.Attachment.Closed.Enabled = true
+					task.wait(0.1)
+					part.Attachment.Open.Enabled = false
+					canKill = false
+				end
+			end
+
 			model.Main.Attachment.Closed.Rate = 80
 			model.Main.Attachment.Open.Rate = 80
 			model.Main.Attachment.Sparkles.Enabled = true
 			task.wait(1)
 			model.Main.Spawn:Play()
+			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
 			model.Main.Attachment.Closed.Enabled = true
+
 			task.spawn(function()
 				while model and model.Parent do
-					task.wait(r:NextNumber(2,10)
-					setState(model, true)
-					task.wait(r:NextNumber(2,10)
-					handle.SetCanBeCrucified(false)
-					setState(model, false)
+					task.wait(r:NextNumber(2, 10))
+					if model:GetAttribute("Crucified") == true then canKill = false break end
+					setState(true)
+					task.wait(r:NextNumber(2, 10))
+					if model:GetAttribute("Crucified") == true then canKill = false break end
+					setState(false)
 				end
 			end)
+
 			task.spawn(function()
 				while model and model.Parent do
 					task.wait(0.5)
 					local char = localPlayer.Character
-					local humanoid = char:FindFirstChild("Humanoid")
+					local humanoid = char and char:FindFirstChild("Humanoid")
 					if canKill then
-						model.Main.Whisper.PlaybackSpeed = r:NextNumber(0.1,1.1)
-						if humanoid.Health > 0 then
-					        if isInSightAndMoving(model:GetPivot().Position, 80, {model}) the
-							    humanoid.Health = 0
-					        end
+						handle.SetCanBeCrucified(true)
+						model.Main.Whisper.PlaybackSpeed = r:NextNumber(0.1, 1.1)
+						if humanoid and humanoid.Health > 0 then
+							if isInSightAndMoving(model:GetPivot().Position, 80, {model}) then
+								if canKill then
+									humanoid.Health = 0
+								end
+							end
 						end
 					else
-											model.Main.Whisper.PlaybackSpeed = 0.45
+						model.Main.Whisper.PlaybackSpeed = 0.45
 					end
 				end
 			end)
-			LatestRoom.Changed:Connect(function()
-			    handle.Destroy()
-				break
-			end)
+
+			LatestRoom.Changed:Wait()
+			handle.Destroy()
 		end,
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
+			canKill = false
+		    entity:SetAttribute("Crucified", true)
 		end
 	}
 }
