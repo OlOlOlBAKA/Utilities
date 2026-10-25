@@ -279,6 +279,9 @@ task.spawn(function()
                     end,
 
                     OnDespawn = function(model, actions)
+						if reboundsLeft == 0 then
+							model:SetAttribute("LastRebound", true)
+						end
                         isPresent = false
                     end
                 }
