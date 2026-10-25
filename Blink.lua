@@ -66,7 +66,7 @@ end
 local r = Random.new(GameSeed.Value)
 
 local entityConfig = {
-	spawnOffset = Vector3.new(0, 3, 0),
+	spawnOffset = Vector3.new(0, 2, 0),
 	crucifixRange = 85,
 	canBeCrucified = false,
 	shakerInstance = Main_Game.camShaker,
@@ -138,6 +138,7 @@ local entityConfig = {
 
 										if isCrucifix then
 											handle.SetCanBeCrucified(true)
+											model:SetAttribute("Crucified", true)
 											gotCrucified = true
 											model.Main.Whisper.PlaybackSpeed = 0.8
 											break
@@ -166,7 +167,6 @@ local entityConfig = {
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
 			canKill = false
-		    entity:SetAttribute("Crucified", true)
 		end
 	}
 }
