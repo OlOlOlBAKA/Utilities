@@ -27,9 +27,6 @@ if ReplicatedStorage.GameData.Floor.Value == "Archives" then
     print("Its Archives Floor")
 end
 
--- Set to true to bypass room hiding spot checks globally
-local GLOBAL_IGNORE_HIDING_SPOTS = false
-
 -- Fetch DOORS actual game seed (edit/adjust path here as needed)
 local function getGameSeed()
     local gameData = ReplicatedStorage:FindFirstChild("GameData")
@@ -96,7 +93,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "Blink"} -- A-120 cannot spawn if Rebound is active
+        BlacklistedEntities = {"Rebound", "Blink"} -- A-120 cannot spawn if Rebound/Blink is active
     },
     {
         Name = "Depth",    
@@ -118,7 +115,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 1,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"A-120", "Blink"} -- Rebound cannot spawn if A-120 are active
+        BlacklistedEntities = {"A-120", "Blink"} -- Rebound cannot spawn if A-120/Blink is active
     },
     {
         Name = "Blink",  
@@ -127,9 +124,9 @@ local ENTITY_TABLE = {
         MaxRoom = 89, 
         CanSpawnInDark = true,
         CooldownRooms = 1,
-        IgnoreHidingSpots = false,
+        IgnoreHidingSpots = true, -- Set to true so Blink can ignore hiding spot constraints
         IgnoreMaxRoom = false,
-        BlacklistedEntities = {"Rebound", "A-120"} -- Rebound cannot spawn if A-120 or Depth are active
+        BlacklistedEntities = {"Rebound", "A-120"} -- Blink cannot spawn if Rebound/A-120 is active
     }
 }
 
@@ -189,12 +186,13 @@ local function registerDespawn(entityName)
 end
 
 local function spawnEntity(entityName, roomNumber)
-    -- Prevent duplicate spawns if active or already in Workspace
+    -- Prevent duplicate spawns if active or already in Workspace - LOCKED INSTANTLY
     if activeEntities[entityName] or workspace:FindFirstChild(entityName) then 
         warn(entityName .. " is present right now cannot spawn")
         return 
     end
 
+    -- Lock active state immediately to prevent race conditions with blacklists
     activeEntities[entityName] = true
 
     if entityName ~= "Blink" then
@@ -272,7 +270,7 @@ local function spawnEntity(entityName, roomNumber)
             end
         end)
     else
-        -- Standard single-despawn entities (A-120, Depth)
+        -- Standard single-despawn entities (A-120, Depth, Blink)
         task.spawn(function()
             local entityModel = workspace:WaitForChild(entityName, 15)
             
@@ -315,7 +313,7 @@ local function handleHardcoreRoom(roomNumber)
     lastProcessedRoom = roomNumber
 
     -- Check if Seek is currently active in Workspace
-    if workspace:FindFirstChild("SeekMovingNewClone") or workspace.LiveEntities:FindFirstChild("HonchoRig") then
+    if workspace:FindFirstChild("SeekMovingNewClone") or workspace:FindFirstChild("HonchoRig") then
         print(string.format("[Hardcore Mode] Room %d skipped (Seek chase or Honcho mail room in workspace)", roomNumber))
         safeRoomStreak = safeRoomStreak + 1
         return
@@ -349,14 +347,7 @@ local function handleHardcoreRoom(roomNumber)
 
     local playerCount = #Players:GetPlayers()
 
-    -- Check hiding spots (unless bypassed globally)
-    if not GLOBAL_IGNORE_HIDING_SPOTS and totalHidingSpots < playerCount then
-        print(string.format("[Hardcore Mode] Room %d skipped (Hiding Spots: %d, Players: %d)", roomNumber, totalHidingSpots, playerCount))
-        safeRoomStreak = safeRoomStreak + 1
-        return
-    end
-
-    local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 60)
+    local baseSpawnChance = math.clamp(15 + (roomNumber * 0.8), 15, 20)
     local spawnRoll = rng:NextNumber(1, 100)
 
     if roomNumber > 2 and spawnRoll <= baseSpawnChance then
@@ -375,7 +366,7 @@ local function handleHardcoreRoom(roomNumber)
             local blacklistPassed = true
             if entity.BlacklistedEntities then
                 for _, blacklistedName in ipairs(entity.BlacklistedEntities) do
-                    if activeEntities[blacklistedName] or workspace:FindFirstChild(blacklistedName) then
+                    if activeEntities[blacklistedName] == true or workspace:FindFirstChild(blacklistedName) then
                         blacklistPassed = false
                         break
                     end
@@ -386,8 +377,8 @@ local function handleHardcoreRoom(roomNumber)
             local lastDespawn = entityLastDespawnRoom[entity.Name]
             local cooldownPassed = (roomNumber - lastDespawn) > entity.CooldownRooms
 
-            -- Individual hiding spot ignore override per entity
-            local hidingSpotCheckPassed = GLOBAL_IGNORE_HIDING_SPOTS or entity.IgnoreHidingSpots or (totalHidingSpots >= playerCount)
+            -- Individual hiding spot ignore override per entity (Evaluated independently per entity configuration)
+            local hidingSpotCheckPassed = entity.IgnoreHidingSpots or (totalHidingSpots >= playerCount)
 
             if minRoomReq and maxRoomReq and darkReq and notAlreadyActive and blacklistPassed and cooldownPassed and hidingSpotCheckPassed then
                 table.insert(eligibleEntities, entity)
