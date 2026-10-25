@@ -208,7 +208,7 @@ task.spawn(function()
                 Speed = 70,
                 HeightOffset = 5,
                 FloorYOffset = -2,
-                DelayTime = 1,
+                DelayTime = 2.5,
                 SpawnOffsetRooms = 5,
                 AttackType = "Front",
 
@@ -258,15 +258,16 @@ task.spawn(function()
                         model.Rebound_Cue:Play()
 						model.ReboundNew.Sound.RollOffMaxDistance = 500
                         model.ReboundNew.Sound.SoundId = customSound("ReboundMoving","https://github.com/OlOlOlBAKA/Utilities/blob/main/CC44AFBD-A304-4899-9B01-D9C8D80467A3.mp3?raw=true")
-                    end,
-
-                    OnStartMoving = function(model, actions)
-                        task.wait(0.5)
+                        task.wait(1.5)
 						for _, v in pairs(model.ReboundNew:GetChildren()) do
                             if v:IsA("Sound") then
                                 v:Play()
                             end
                         end
+					end,
+
+                    OnStartMoving = function(model, actions)
+                        
                     end,
 
                     OnStartRebounding = function(model, reboundCount, actions) end,
