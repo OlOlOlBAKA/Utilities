@@ -67,17 +67,21 @@ local function setState(model: Model, openEye: boolean)
 	if not part then return end
 	if openEye == true then
 		part.Blink:Play()
+		part.BlinkForeshadow:Play()
 		task.wait(0.2)
 		part.Attachment.Open.Enabled = true
-		task.wait(0.1)
+		task.wait(0.2)
 		part.Attachment.Closed.Enabled = false
+		task.wait(0.1)
 		canKill = true
 	else
 		part.Blink:Play()
+		part.BlinkForeshadow:Play()
 		task.wait(0.2)
 		part.Attachment.Closed.Enabled = true
-		task.wait(0.1)
+		task.wait(0.2)
 		part.Attachment.Open.Enabled = false
+		task.wait(0.1)
 		canKill = false
 	end
 end
