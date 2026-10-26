@@ -78,18 +78,28 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	-- 1. Gather ONLY main floor parts (strictly excluding Siderooms and Steps)
 	local floorParts = {}
-	local function collectFloors(parent)
+	local stairParts = {}
+	
+	local function collectRoomParts(parent)
 		for _, child in ipairs(parent:GetChildren()) do
-			if isExcludedFolder(child) then continue end
 			local nameLower = child.Name:lower()
+			if nameLower:find("steps") or nameLower:find("stair") then
+				if child:IsA("BasePart") then table.insert(stairParts, child)
+				elseif child:IsA("Model") or child:IsA("Folder") then
+					for _, p in ipairs(child:GetDescendants()) do if p:IsA("BasePart") then table.insert(stairParts, p) end end
+				end
+			end
+
+			if isExcludedFolder(child) then continue end
+
 			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
 				table.insert(floorParts, child)
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectFloors(child)
+				collectRoomParts(child)
 			end
 		end
 	end
-	collectFloors(roomInstance)
+	collectRoomParts(roomInstance)
 
 	-- Determine true floor Y level (safely handles CellarRooms and basements)
 	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
@@ -117,8 +127,15 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	rayParams.FilterDescendantsInstances = excludeList
 
-	-- Function to evaluate how clear a candidate position is from walls/pillars
+	-- Function to evaluate how clear a candidate position is from walls, pillars, and stairs
 	local function getClearanceScore(pos: Vector3): (boolean, number)
+		-- Check if too close to any stair part
+		for _, stairPart in ipairs(stairParts) do
+			if (pos - stairPart.Position).Magnitude < 6 then
+				return false, 0
+			end
+		end
+
 		-- Check vertical ceiling clearance
 		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
 			return false, 0
@@ -156,24 +173,21 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return true, minRayDist
 	end
 
-	-- 2. Generate multiple candidate positions (handles turns & L-shapes smoothly)
+	-- 2. Generate multiple candidate positions
 	local candidates = {}
 
 	if entPos and extPos then
-		-- Sample points along the entrance-to-exit path (bypasses corner walls on turns)
 		for i = 0.2, 0.8, 0.15 do
 			local p = entPos:Lerp(extPos, i)
 			table.insert(candidates, Vector3.new(p.X, safeMinY + 2.5, p.Z))
 		end
 	end
 
-	-- Add individual floor tile centers as candidates
 	for _, part in ipairs(floorParts) do
 		local pPos = part.Position
 		table.insert(candidates, Vector3.new(pPos.X, safeMinY + 2.5, pPos.Z))
 	end
 
-	-- Fallback room center
 	table.insert(candidates, Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z))
 
 	-- 3. Test all candidates and pick the one with the highest wall clearance score
@@ -192,7 +206,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return bestPos
 	end
 
-	-- Absolute fallback to safe Y level at room center
+	-- Absolute fallback
 	return Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
 end
 
