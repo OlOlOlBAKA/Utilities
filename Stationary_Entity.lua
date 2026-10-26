@@ -150,10 +150,12 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 
 	if bestPos then
+		print("Got best one")
 		return bestPos
 	end
 
 	-- Fallback to room center
+	print("Failed")
 	return Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z)
 end
 
