@@ -46,25 +46,15 @@ local CrucifixStorage = {
 	}
 }
 
-local function getPosition(inst: Instance): Vector3?
-	if not inst then return nil end
-	if inst:IsA("BasePart") then
-		return inst.Position
-	elseif inst:IsA("Model") then
-		return inst:GetPivot().Position
-	elseif inst:IsA("Attachment") then
-		return inst.WorldPosition
-	end
-	return nil
-end
-
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
+	local partsFolder = roomInstance:FindFirstChild("Parts")
+	local assetsFolder = roomInstance:FindFirstChild("Assets")
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
-	-- Helper function to strictly exclude subrooms, siderooms, stair steps, etc.
-	local function isExcludedFolder(inst: Instance): boolean
+	-- Helper to check if an instance belongs to a sideroom, subroom, or stair steps
+	local function isExcluded(inst: Instance): boolean
 		local curr = inst
 		while curr and curr ~= roomInstance do
 			local nameLower = curr.Name:lower()
@@ -76,129 +66,86 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return false
 	end
 
-	-- 1. Gather ONLY main floor parts (strictly excluding Siderooms and Steps)
-	local floorParts = {}
-	local stairParts = {}
-	
-	local function collectRoomParts(parent)
+	local floors = {}
+	local obstacles = {} -- Collects walls, pillars, AND furniture/assets
+
+	local function scanFolder(parent)
 		for _, child in ipairs(parent:GetChildren()) do
+			if isExcluded(child) then continue end
 			local nameLower = child.Name:lower()
-			if nameLower:find("steps") or nameLower:find("stair") then
-				if child:IsA("BasePart") then table.insert(stairParts, child)
-				elseif child:IsA("Model") or child:IsA("Folder") then
-					for _, p in ipairs(child:GetDescendants()) do if p:IsA("BasePart") then table.insert(stairParts, p) end end
+
+			if child:IsA("BasePart") then
+				if nameLower == "floor" or nameLower:find("floor") then
+					table.insert(floors, child)
+				elseif child.CanCollide then
+					table.insert(obstacles, child)
 				end
-			end
-
-			if isExcludedFolder(child) then continue end
-
-			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
-				table.insert(floorParts, child)
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectRoomParts(child)
+				scanFolder(child)
 			end
 		end
 	end
-	collectRoomParts(roomInstance)
 
-	-- Determine true floor Y level (safely handles CellarRooms and basements)
-	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
-	if #floorParts > 0 then
-		local lowestY = math.huge
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < lowestY then lowestY = topY end
+	-- Scan both Parts and Assets folders
+	if partsFolder then scanFolder(partsFolder) end
+	if assetsFolder then scanFolder(assetsFolder) end
+	scanFolder(roomInstance) -- Fallback scan of the main room
+
+	-- Determine true ground floor Y level
+	local groundY = roomCF.Position.Y - (roomSize.Y / 2) + 3
+	if #floors > 0 then
+		local minY = math.huge
+		for _, f in ipairs(floors) do
+			local topY = f.Position.Y + (f.Size.Y / 2)
+			if topY < minY then minY = topY end
 		end
-		if lowestY ~= math.huge then
-			safeMinY = lowestY
-		end
+		if minY ~= math.huge then groundY = minY end
 	end
 
-	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
-	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	local entPos = getPosition(roomEntrance)
-	local extPos = getPosition(roomExit)
-
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	local excludeList = {}
-	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-		if p.Character then table.insert(excludeList, p.Character) end
-	end
-	rayParams.FilterDescendantsInstances = excludeList
-
-	-- Function to evaluate how clear a candidate position is from walls, pillars, and stairs
-	local function getClearanceScore(pos: Vector3): (boolean, number)
-		-- Check if too close to any stair part
-		for _, stairPart in ipairs(stairParts) do
-			if (pos - stairPart.Position).Magnitude < 6 then
-				return false, 0
-			end
-		end
-
-		-- Check vertical ceiling clearance
-		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
-			return false, 0
-		end
-
-		local minRayDist = math.huge
-		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-		for _, angle in ipairs(angles) do
-			local rad = math.rad(angle)
-			local dir = Vector3.new(math.cos(rad) * 6, 0, math.sin(rad) * 6)
-			local hit = Workspace:Raycast(pos, dir, rayParams)
-			if hit then
-				local dist = (hit.Position - pos).Magnitude
-				if dist < 3.5 then -- Too close to a wall, corner, or pillar
-					return false, 0
-				end
-				if dist < minRayDist then minRayDist = dist end
-			else
-				minRayDist = math.min(minRayDist, 6)
-			end
-		end
-
-		-- Check bounding box collision
-		local boxSize = Vector3.new(3, 4, 3)
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), boxSize)
-		for _, p in ipairs(partsInBox) do
-			if p.CanCollide and not p.Parent:FindFirstChild("Humanoid") then
-				local pName = p.Name:lower()
-				if not (pName == "floor" or pName:find("floor")) then
-					return false, 0
-				end
-			end
-		end
-
-		return true, minRayDist
-	end
-
-	-- 2. Generate multiple candidate positions
-	local candidates = {}
-
-	if entPos and extPos then
-		for i = 0.2, 0.8, 0.15 do
-			local p = entPos:Lerp(extPos, i)
-			table.insert(candidates, Vector3.new(p.X, safeMinY + 2.5, p.Z))
-		end
-	end
-
-	for _, part in ipairs(floorParts) do
-		local pPos = part.Position
-		table.insert(candidates, Vector3.new(pPos.X, safeMinY + 2.5, pPos.Z))
-	end
-
-	table.insert(candidates, Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z))
-
-	-- 3. Test all candidates and pick the one with the highest wall clearance score
+	local spawnY = groundY + 2.5
 	local bestPos = nil
-	local bestScore = -1
+	local maxMinDist = -1
 
-	for _, cand in ipairs(candidates) do
-		local isOk, score = getClearanceScore(cand)
-		if isOk and score > bestScore then
-			bestScore = score
-			bestPos = cand
+	-- Grid scan across the room space to find the open center away from walls and furniture
+	local step = 3
+	for x = -roomSize.X / 2 + 4, roomSize.X / 2 - 4, step do
+		for z = -roomSize.Z / 2 + 4, roomSize.Z / 2 - 4, step do
+			local localPos = Vector3.new(x, 0, z)
+			local worldPos = roomCF:PointToWorldSpace(localPos)
+			local testPos = Vector3.new(worldPos.X, spawnY, worldPos.Z)
+
+			-- Check distance and collision against all collected walls, pillars, and assets
+			local isInsideObstacle = false
+			local minDist = math.huge
+
+			for _, obs in ipairs(obstacles) do
+				local rel = obs.CFrame:PointToObjectSpace(testPos)
+				local oSize = obs.Size
+				if math.abs(rel.X) <= (oSize.X / 2 + 2) and math.abs(rel.Y) <= (oSize.Y / 2 + 3) and math.abs(rel.Z) <= (oSize.Z / 2 + 2) then
+					isInsideObstacle = true
+					break
+				end
+
+				local dist = (testPos - obs.Position).Magnitude
+				if dist < minDist then minDist = dist end
+			end
+
+			if not isInsideObstacle then
+				-- Verify ceiling clearance via raycast
+				local rayParams = RaycastParams.new()
+				rayParams.FilterType = Enum.RaycastFilterType.Exclude
+				local excludeList = {}
+				for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+					if p.Character then table.insert(excludeList, p.Character) end
+				end
+				rayParams.FilterDescendantsInstances = excludeList
+
+				local ceilingHit = Workspace:Raycast(testPos, Vector3.new(0, 8, 0), rayParams)
+				if not ceilingHit and minDist > maxMinDist then
+					maxMinDist = minDist
+					bestPos = testPos
+				end
+			end
 		end
 	end
 
@@ -206,8 +153,8 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return bestPos
 	end
 
-	-- Absolute fallback
-	return Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
+	-- Fallback to room center
+	return Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z)
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
