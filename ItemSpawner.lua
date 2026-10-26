@@ -74,10 +74,6 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 	end
 
 	-- Fallback for standalone wall holder parts
-	if not matchedType and holderNameLower == "holder" then
-		matchedType = "onthewall"
-		matchedConfig = locationsConfig["onthewall"] or locationsConfig["wall"]
-	end
 
 	if not matchedConfig or type(matchedConfig) ~= "table" or matchedConfig.Enabled == false then
 		return false, nil, nil, nil
