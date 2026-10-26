@@ -58,7 +58,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				containerModel = current
 				break
 			end
-		elseif (nameLower:find("wall") or nameLower:find("holder")) and locationsConfig["wall"] then
+		elseif nameLower:find("wall") and locationsConfig["wall"] then
 			-- Walls explicitly use Holder
 			if holderNameLower == "holder" then
 				matchedType = "wall"
