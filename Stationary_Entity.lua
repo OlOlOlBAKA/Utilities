@@ -137,7 +137,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 			local nameLower = child.Name:lower()
 			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
 				local pPos = child.Position
-				table.insert(candidates, Vector3.new(pPos.X, p.Position.Y + (child.Size.Y / 2) + 2.5, pPos.Z))
+				table.insert(candidates, Vector3.new(pPos.X, pPos.Position.Y + (child.Size.Y / 2) + 2.5, pPos.Z))
 			elseif child:IsA("Model") or child:IsA("Folder") then
 				collectFloors(child)
 			end
