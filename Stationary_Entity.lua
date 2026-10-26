@@ -1,51 +1,3 @@
-local httpSuccess, rawCode = pcall(function()
-	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
-end)
-
-if httpSuccess and rawCode then
-	local loadedFunc, err = loadstring(rawCode)
-	if type(loadedFunc) == "function" then
-		pcall(loadedFunc)
-	else
-		warn("PathfindingMovement: Failed to compile HTTP code ->", err)
-	end
-else
-	warn("PathfindingMovement: Failed to fetch HTTP functions ->", rawCode)
-end
-
---!strict
-local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local CollectionService = game:GetService("CollectionService")
-local PathfindingService = game:GetService("PathfindingService")
-local LocalPlayer = Players.LocalPlayer
-
-local StationaryEntity = {}
-StationaryEntity.__index = StationaryEntity
-
-local CrucifixAssets = {
-	Repentance = nil
-}
-
-task.spawn(function()
-	local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or (typeof(LoadCustomInstance) == "function" and LoadCustomInstance)
-	if typeof(fetchFunc) == "function" then
-		pcall(function()
-			CrucifixAssets.Repentance = fetchFunc("https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main/Assets/Repentance.rbxm")
-		end)
-	end
-end)
-
-local CrucifixStorage = {
-	CrucifixTypes = {
-		["guiding"] = { Color = Color3.fromRGB(137, 207, 255) },
-		["curious"] = { Color = Color3.fromRGB(255, 227, 137) }
-	}
-}
-
 local function getPosition(inst: Instance): Vector3?
 	if not inst then return nil end
 	if inst:IsA("BasePart") then
@@ -63,7 +15,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
-	-- Helper function to strictly check if an instance or any of its parents is a sideroom, subroom, or stair steps
+	-- Helper function to strictly exclude subrooms, closets, stair steps, etc.
 	local function isExcludedFolder(inst: Instance): boolean
 		local curr = inst
 		while curr and curr ~= roomInstance do
@@ -76,14 +28,11 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return false
 	end
 
-	-- 1. Gather ONLY main floor parts (strictly excluding Siderooms and Steps)
+	-- Gather ground floor parts to find the exact floor Y level
 	local floorParts = {}
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
-			if isExcludedFolder(child) then
-				continue
-			end
-
+			if isExcludedFolder(child) then continue end
 			local nameLower = child.Name:lower()
 			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
 				table.insert(floorParts, child)
@@ -94,7 +43,6 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	collectFloors(roomInstance)
 
-	-- Determine safe ground floor Y height
 	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
 	if #floorParts > 0 then
 		local lowestY = math.huge
@@ -107,18 +55,18 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		end
 	end
 
-	-- 2. Calculate the exact midpoint between RoomEntrance and RoomExit for the main hallway
+	-- Calculate the midpoint between RoomEntrance and RoomExit
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
 	local entPos = getPosition(roomEntrance)
 	local extPos = getPosition(roomExit)
 
-	local targetPos
+	local basePos
 	if entPos and extPos then
 		local mid = (entPos + extPos) / 2
-		targetPos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
+		basePos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
 	else
-		targetPos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
+		basePos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
 	end
 
 	local rayParams = RaycastParams.new()
@@ -129,62 +77,64 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	rayParams.FilterDescendantsInstances = excludeList
 
-	-- Strict box clearance check (Ensures no walls, pillars, or obstacles overlap)
-	local function isBoxClear(pos: Vector3): boolean
+	-- Strict open-space validation function
+	local function isPositionCompletelyClear(pos: Vector3): boolean
 		-- Check vertical ceiling clearance
 		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
 			return false
 		end
-		-- Check 8 horizontal directions for walls/pillars
+
+		-- Check 8 horizontal directions (must have at least 5 studs of clear open space)
 		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
 		for _, angle in ipairs(angles) do
 			local rad = math.rad(angle)
 			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
-			if Workspace:Raycast(pos, dir, rayParams) then
-				return false
-			end
-		end
-		-- Check bounding box collision
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), Vector3.new(3, 4, 3))
-		for _, p in ipairs(partsInBox) do
-			if p.CanCollide and not p.Parent:FindFirstChild("Humanoid") then
-				if p:IsDescendantOf(roomInstance) then
-					local nameLower = p.Name:lower()
-					if not (nameLower == "floor" or nameLower:find("floor")) then
-						return false
-					end
-				else
+			local hit = Workspace:Raycast(pos, dir, rayParams)
+			if hit then
+				local hitPart = hit.Instance
+				local hitName = hitPart.Name:lower()
+				-- If it hits a non-floor part (wall, pillar, furniture), it's blocked!
+				if not (hitName == "floor" or hitName:find("floor")) then
 					return false
 				end
 			end
 		end
+
+		-- Check box collision overlap
+		local boxSize = Vector3.new(3.5, 4.5, 3.5)
+		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), boxSize)
+		for _, p in ipairs(partsInBox) do
+			if p.CanCollide and not p.Parent:FindFirstChild("Humanoid") then
+				local pName = p.Name:lower()
+				if not (pName == "floor" or pName:find("floor")) then
+					return false
+				end
+			end
+		end
+
 		return true
 	end
 
-	-- 3. Test the main entrance-to-exit midpoint first
-	if isBoxClear(targetPos) then
-		return targetPos
+	-- 1. Test the midpoint position first
+	if isPositionCompletelyClear(basePos) then
+		return basePos
 	end
 
-	-- 4. If blocked, search outward in clean offset steps around the midpoint
-	local offsets = {
-		Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
-		Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
-		Vector3.new(4, 0, 4), Vector3.new(-4, 0, 4),
-		Vector3.new(4, 0, -4), Vector3.new(-4, 0, -4),
-		Vector3.new(8, 0, 0), Vector3.new(-8, 0, 0),
-		Vector3.new(0, 0, 8), Vector3.new(0, 0, -8)
-	}
+	data = nil -- placeholder safety
 
-	for _, offset in ipairs(offsets) do
-		local testPos = targetPos + offset
-		if isBoxClear(testPos) then
-			return testPos
+	-- 2. If inside a wall or pillar, spiral outward in clean steps until fully clear open space is found
+	for radius = 3, 18, 3 do
+		for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
+			local rad = math.rad(angle)
+			local testPos = basePos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
+			if isPositionCompletelyClear(testPos) then
+				return testPos
+			end
 		end
 	end
 
 	-- Absolute fallback
-	return targetPos
+	return basePos
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
