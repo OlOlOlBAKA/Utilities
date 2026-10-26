@@ -19,7 +19,7 @@ local Workspace = game:GetService("Workspace")
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function with strict LootHolder vs Holder enforcement & scan gating
+-- Helper function with strict LootHolder vs Holder enforcement & zero false positives
 local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
 	if not locationsConfig then
 		return true, nil, nil, nil
@@ -29,38 +29,58 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 	local matchedType = nil
 	local matchedConfig = nil
 
-	-- Walk up ancestry from holder.Parent
-	local current = holder.Parent
+	-- Walk up ancestry from holder
+	local current = holder
 	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
 		local nameLower = current.Name:lower()
 
-		for locName, locConfig in pairs(locationsConfig) do
-			if type(locConfig) == "table" and locConfig.Enabled ~= false then
-				local locKeyLower = locName:lower()
-
-				if nameLower:find(locKeyLower) then
-					if locKeyLower:find("wall") then
-						if holderNameLower == "holder" then
-							matchedType = locKeyLower
-							matchedConfig = locConfig
-							break
-						end
-					else
-						if holderNameLower == "lootholder" then
-							matchedType = locKeyLower
-							matchedConfig = locConfig
-							break
-						end
-					end
-				end
+		-- Check Table ancestry
+		if nameLower:find("table") and locationsConfig["table"] and locationsConfig["table"].Enabled ~= false then
+			if holderNameLower == "lootholder" then
+				matchedType = "table"
+				matchedConfig = locationsConfig["table"]
+				break
+			else
+				-- If it's a table but uses "Holder" instead of "LootHolder", strictly reject it!
+				return false, nil, nil, nil
 			end
 		end
 
-		if matchedType then break end
+		-- Check Drawer ancestry
+		if nameLower:find("drawer") and locationsConfig["drawer"] and locationsConfig["drawer"].Enabled ~= false then
+			if holderNameLower == "lootholder" then
+				matchedType = "drawer"
+				matchedConfig = locationsConfig["drawer"]
+				break
+			else
+				return false, nil, nil, nil
+			end
+		end
+
+		-- Check Chest ancestry
+		if nameLower:find("chest") and locationsConfig["chest"] and locationsConfig["chest"].Enabled ~= false then
+			if holderNameLower == "lootholder" then
+				matchedType = "chest"
+				matchedConfig = locationsConfig["chest"]
+				break
+			else
+				return false, nil, nil, nil
+			end
+		end
+
+		-- Check Wall ancestry
+		if (nameLower:find("wall") or nameLower:find("holder")) and locationsConfig["wall"] and locationsConfig["wall"].Enabled ~= false then
+			if holderNameLower == "holder" then
+				matchedType = "wall"
+				matchedConfig = locationsConfig["wall"]
+				break
+			end
+		end
+
 		current = current.Parent
 	end
 
-	-- Fallback for standalone wall holder parts named "holder"
+	-- Standalone wall fallback (only if strictly named "holder" and not part of a furniture piece)
 	if not matchedType and holderNameLower == "holder" and locationsConfig["wall"] and locationsConfig["wall"].Enabled ~= false then
 		matchedType = "wall"
 		matchedConfig = locationsConfig["wall"]
@@ -70,8 +90,8 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 		return false, nil, nil, nil
 	end
 
-	-- Enforce scan separation:
-	-- Drawers & chests must ONLY be processed dynamically via DescendantAdded
+	-- Enforce scan separation rules:
+	-- Drawers & chests must ONLY be processed dynamically at runtime via DescendantAdded
 	if (matchedType == "drawer" or matchedType == "chest") and not isDynamic then
 		return false, nil, nil, nil
 	end
