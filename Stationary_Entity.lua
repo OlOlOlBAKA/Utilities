@@ -105,7 +105,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	-- AgentRadius set to 5 for wider wall clearance
 	local path = PathfindingService:CreatePath({
-		AgentRadius = 5,
+		AgentRadius = 4,
 		AgentHeight = 5,
 		AgentCanJump = false,
 		WaypointSpacing = 2
