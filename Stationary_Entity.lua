@@ -46,120 +46,118 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if not inst then return nil end
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
+	
+	-- Guaranteed fallback Y height to prevent nil errors
+	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
 
-	-- 1. Gather all floor parts, strictly filtering out subrooms, closets, stairwells, and offices
+	-- Try to find the true floor Y level safely
 	local floorParts = {}
-	local partsFolder = roomInstance:FindFirstChild("Parts")
-
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			local nameLower = child.Name:lower()
 			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("stair") or nameLower:find("door") or nameLower:find("cubicle") or nameLower:find("office") then
 				continue
 			end
-
-			if child:IsA("BasePart") then
-				if nameLower == "floor" or nameLower:find("floor") then
-					table.insert(floorParts, child)
-				end
+			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
+				table.insert(floorParts, child)
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				if not (nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("stair") or nameLower:find("office")) then
-					collectFloors(child)
-				end
+				collectFloors(child)
 			end
 		end
 	end
+	collectFloors(roomInstance)
 
-	if partsFolder then
-		collectFloors(partsFolder)
+	if #floorParts > 0 then
+		local lowestY = math.huge
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if topY < lowestY then lowestY = topY end
+		end
+		if lowestY ~= math.huge then
+			safeMinY = lowestY
+		end
+	end
+
+	-- 1. Calculate the exact midpoint between RoomEntrance and RoomExit
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+	local entPos = getPosition(roomEntrance)
+	local extPos = getPosition(roomExit)
+
+	local targetPos
+	if entPos and extPos then
+		local mid = (entPos + extPos) / 2
+		targetPos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
 	else
-		collectFloors(roomInstance)
+		targetPos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
 	end
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.FilterDescendantsInstances = { roomInstance }
 
-	if #floorParts > 0 then
-		-- Isolate true ground floor Y level
-		local minY = math.huge
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < minY then minY = topY end
+	-- Clearance check function
+	local function isClear(pos: Vector3): boolean
+		-- Check vertical ceiling clearance
+		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
+			return false
 		end
-
-		local groundParts = {}
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if math.abs(topY - minY) <= 2 then
-				-- Exclude massive plates that span entire walls or rooms
-				if math.max(part.Size.X, part.Size.Z) < 50 then
-					table.insert(groundParts, part)
-				end
-			end
-		end
-
-		-- 2. Find the absolute best floor tile with the maximum clearance from any wall, pillar, or corner
-		local bestPos = nil
-		local maxClearance = -1
+		-- Check 8 horizontal directions for pillars/walls
 		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-
-		for _, part in ipairs(groundParts) do
-			local pCF, pSize = part.CFrame, part.Size
-			local testPos = Vector3.new(pCF.Position.X, minY + 2.5, pCF.Position.Z)
-
-			-- Check vertical ceiling clearance
-			if Workspace:Raycast(testPos, Vector3.new(0, 8, 0), rayParams) then
-				continue
-			end
-
-			-- Measure distance to nearest walls in 8 directions
-			local minRayDist = math.huge
-			local isValid = true
-
-			for _, angle in ipairs(angles) do
-				local rad = math.rad(angle)
-				local dir = Vector3.new(math.cos(rad) * 8, 0, math.sin(rad) * 8)
-				local hit = Workspace:Raycast(testPos, dir, rayParams)
-				if hit then
-					local dist = (hit.Position - testPos).Magnitude
-					if dist < 5.5 then -- Reject if too close to a wall, corner, or pillar
-						isValid = false
-						break
-					end
-					if dist < minRayDist then
-						minRayDist = dist
-					end
-				else
-					minRayDist = 8
-				end
-			end
-
-			-- Pick the position that has the most open space around it
-			if isValid and minRayDist > maxClearance then
-				maxClearance = minRayDist
-				bestPos = testPos
+		for _, angle in ipairs(angles) do
+			local rad = math.rad(angle)
+			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
+			if Workspace:Raycast(pos, dir, rayParams) then
+				return false
 			end
 		end
+		return true
+	end
 
-		if bestPos then
-			return bestPos
-		end
+	-- 2. If the entrance-to-exit midpoint is completely clear, spawn there!
+	if isClear(targetPos) then
+		return targetPos
+	end
 
-		-- Fallback to first valid ground part if strict clearance was too tight
-		if #groundParts > 0 then
-			local best = groundParts[1]
-			return Vector3.new(best.Position.X, minY + 2.5, best.Position.Z)
+	-- 3. If blocked (e.g., by a pillar or wall), search outward in clean offset steps around the midpoint
+	local offsets = {
+		Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
+		Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
+		Vector3.new(4, 0, 4), Vector3.new(-4, 0, 4),
+		Vector3.new(4, 0, -4), Vector3.new(-4, 0, -4),
+		Vector3.new(8, 0, 0), Vector3.new(-8, 0, 0),
+		Vector3.new(0, 0, 8), Vector3.new(0, 0, -8),
+		Vector3.new(12, 0, 0), Vector3.new(-12, 0, 0),
+		Vector3.new(0, 0, 12), Vector3.new(0, 0, -12)
+	}
+
+	for _, offset in ipairs(offsets) do
+		local testPos = targetPos + offset
+		if isClear(testPos) then
+			return testPos
 		end
 	end
 
-	-- Fallback to room bounding center
-	return Vector3.new(roomCF.Position.X, minY + 2.5, roomCF.Position.Z)
+	-- Final absolute fallback
+	return targetPos
 end
+
 
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
