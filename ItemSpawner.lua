@@ -4,10 +4,10 @@ local Workspace = game:GetService("Workspace")
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function to verify if a LootHolder's parent/ancestor matches the allowed list
+-- Helper function to verify if a LootHolder's parent matches the allowed location list
 local function isValidLocation(holder: BasePart, allowedLocations: {string}?): boolean
 	if not allowedLocations or #allowedLocations == 0 then
-		return true -- If left empty, allow all locations by default
+		return true
 	end
 
 	local current = holder.Parent
@@ -23,15 +23,32 @@ local function isValidLocation(holder: BasePart, allowedLocations: {string}?): b
 	return false
 end
 
-function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, config: table?)
+function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?)
 	config = config or {}
-	if not itemTemplate then
-		warn("[ItemSpawner] Failed to spawn: No item template provided.")
+	if not itemModel then
+		warn("[ItemSpawner] Failed to spawn: No item model provided.")
 		return nil
 	end
 	if not roomInstance or not roomInstance:IsA("Model") then
 		warn("[ItemSpawner] Failed to spawn: Invalid room instance provided.")
 		return nil
+	end
+
+	-- If the asset loaded is a Tool, extract the inner Model/BasePart and destroy the tool wrapper
+	if itemModel:IsA("Tool") then
+		local extracted = itemModel:FindFirstChildWhichIsA("Model") or itemModel:FindFirstChildWhichIsA("BasePart")
+		if not extracted then
+			extracted = itemModel:FindFirstChild("Handle")
+		end
+		
+		if extracted and extracted:IsA("Instance") then
+			extracted.Parent = nil
+			itemModel:Destroy()
+			itemModel = extracted
+		else
+			warn("[ItemSpawner] Tool provided but no valid Model or BasePart found inside it.")
+			return nil
+		end
 	end
 
 	local allowedLocations = config.AllowedLocations
@@ -41,7 +58,6 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 	local callbacks = config.callbacks or {}
 	local spawnChance = config.SpawnChance or 100
 
-	-- Track processed holders for safe cleanup
 	local processedHolders = {}
 	local spawnedItems = {}
 	
@@ -54,7 +70,6 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 	local function processHolder(holder: BasePart)
 		if processedHolders[holder] then return end
 		
-		-- Check if the LootHolder is inside an allowed container (Table, DrawerContainer, etc.)
 		if not isValidLocation(holder, allowedLocations) then
 			return
 		end
@@ -65,9 +80,9 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 			return
 		end
 
-		local model = itemTemplate:Clone()
-		model.Parent = holder.Parent or Workspace
-		table.insert(spawnedItems, model)
+		-- Set parent to the container (e.g. inside the Drawer or Table model)
+		itemModel.Parent = holder.Parent or Workspace
+		table.insert(spawnedItems, itemModel)
 
 		local finalCFrame = holder.CFrame + offset
 		local rotationCFrame = CFrame.Angles(
@@ -76,27 +91,39 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 			math.rad(rotOffset.Z)
 		)
 
-		if model:IsA("Model") then
-			model:PivotTo(finalCFrame * rotationCFrame)
-		elseif model:IsA("BasePart") then
-			model.CFrame = finalCFrame * rotationCFrame
+		-- Position based on Model or BasePart
+		if itemModel:IsA("Model") then
+			itemModel:PivotTo(finalCFrame * rotationCFrame)
+		elseif itemModel:IsA("BasePart") then
+			itemModel.CFrame = finalCFrame * rotationCFrame
 		end
 
-		local targetPart = model
-		if model:IsA("Model") then
-			targetPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+		-- Find a valid BasePart inside the item
+		local targetPart = nil
+		if itemModel:IsA("Model") then
+			targetPart = itemModel.PrimaryPart or itemModel:FindFirstChildWhichIsA("BasePart", true)
+		elseif itemModel:IsA("BasePart") then
+			targetPart = itemModel
+		end
+
+		-- Weld the item to the LootHolder so it moves seamlessly when drawers open/close
+		if targetPart and targetPart:IsA("BasePart") then
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = targetPart
+			weld.Part1 = holder
+			weld.Parent = targetPart
 		end
 
 		local actionsHandle = {}
 		
 		function actionsHandle.Destroy()
-			if model and model.Parent then
-				model:Destroy()
+			if itemModel and itemModel.Parent then
+				itemModel:Destroy()
 			end
 		end
 		
 		function actionsHandle.GetItem()
-			return model
+			return itemModel
 		end
 
 		function actionsHandle.GetRoom()
@@ -107,6 +134,7 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 			return holder
 		end
 
+		-- Create ProximityPrompt and parent it to the item's BasePart
 		if targetPart and targetPart:IsA("BasePart") then
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.HoldDuration = promptSettings.HoldDuration or 0
@@ -117,7 +145,7 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 
 			prompt.Triggered:Connect(function(player)
 				if type(callbacks.OnTriggered) == "function" then
-					task.spawn(callbacks.OnTriggered, player, model, actionsHandle)
+					task.spawn(callbacks.OnTriggered, player, itemModel, actionsHandle)
 				else
 					prompt:Destroy()
 					actionsHandle.Destroy()
@@ -126,11 +154,11 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 		end
 
 		if type(callbacks.OnSpawned) == "function" then
-			task.spawn(callbacks.OnSpawned, model, roomInstance, actionsHandle)
+			task.spawn(callbacks.OnSpawned, itemModel, roomInstance, actionsHandle)
 		end
 	end
 
-	-- Full cleanup routine to prevent memory leaks over 20+ room cycles
+	-- Cleanup routine to prevent memory leaks over 20+ room cycles
 	cleanup = function()
 		if connection then connection:Disconnect(); connection = nil end
 		if ancestryConnection then ancestryConnection:Disconnect(); ancestryConnection = nil end
@@ -140,7 +168,7 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 		table.clear(spawnedItems)
 	end
 
-	-- 1. Scan pre-existing LootHolders instantly (e.g., items already on tables)
+	-- 1. Scan pre-existing LootHolders instantly (e.g., items on tables)
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
 		if desc.Name == "LootHolder" and desc:IsA("BasePart") then
 			processHolder(desc)
@@ -154,7 +182,7 @@ function ItemSpawner.spawn(itemTemplate: Instance, roomInstance: Instance, confi
 		end
 	end)
 
-	-- 3. Garbage collection hooks for when old rooms are deleted or recycled
+	-- 3. Garbage collection hooks for room recycling/deletion
 	ancestryConnection = roomInstance.AncestryChanged:Connect(function(_, parent)
 		if not parent then
 			cleanup()
