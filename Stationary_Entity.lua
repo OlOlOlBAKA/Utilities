@@ -46,14 +46,24 @@ local CrucifixStorage = {
 	}
 }
 
+local function getPosition(inst: Instance): Vector3?
+	if not inst then return nil end
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		return inst:GetPivot().Position
+	elseif inst:IsA("Attachment") then
+		return inst.WorldPosition
+	end
+	return nil
+end
+
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local partsFolder = roomInstance:FindFirstChild("Parts")
-	local assetsFolder = roomInstance:FindFirstChild("Assets")
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
-	-- Helper to check if an instance belongs to a sideroom, subroom, or stair steps
+	-- Helper to strictly exclude subrooms, siderooms, stair steps, etc.
 	local function isExcluded(inst: Instance): boolean
 		local curr = inst
 		while curr and curr ~= roomInstance do
@@ -66,98 +76,90 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return false
 	end
 
-	local floors = {}
-	local obstacles = {} -- Collects walls, pillars, AND furniture/assets
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+	local entPos = getPosition(roomEntrance)
+	local extPos = getPosition(roomExit)
 
-	local function scanFolder(parent)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	local excludeList = {}
+	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+		if p.Character then table.insert(excludeList, p.Character) end
+	end
+	rayParams.FilterDescendantsInstances = excludeList
+
+	-- Bulletproof raycast validation function
+	local function isValidPosition(pos: Vector3): boolean
+		-- 1. Check vertical ceiling clearance
+		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
+			return false
+		end
+
+		-- 2. Check 360-degree horizontal raycasts (must have at least 4.5 studs of clear space from any wall, pillar, or asset)
+		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
+		for _, angle in ipairs(angles) do
+			local rad = math.rad(angle)
+			local dir = Vector3.new(math.cos(rad) * 4.5, 0, math.sin(rad) * 4.5)
+			local hit = Workspace:Raycast(pos, dir, rayParams)
+			if hit then
+				local hitPart = hit.Instance
+				local hitName = hitPart.Name:lower()
+				-- If it hits anything that isn't a floor part, it's blocked by a wall or furniture!
+				if not (hitName == "floor" or hitName:find("floor")) then
+					return false
+				end
+			end
+		end
+
+		return true
+	end
+
+	-- Generate candidate points along the path and floor parts
+	local candidates = {}
+
+	if entPos and extPos then
+		-- Sample points along the hallway path (handles turns and straight rooms perfectly)
+		for i = 0.2, 0.8, 0.1 do
+			local p = entPos:Lerp(extPos, i)
+			local downHit = Workspace:Raycast(Vector3.new(p.X, roomCF.Position.Y + (roomSize.Y / 2), p.Z), Vector3.new(0, -roomSize.Y - 20, 0), rayParams)
+			if downHit and not isExcluded(downHit.Instance) then
+				local floorY = downHit.Position.Y
+				table.insert(candidates, Vector3.new(p.X, floorY + 2.5, p.Z))
+			end
+		end
+	end
+
+	-- Collect floor parts from Parts and Assets folders
+	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			if isExcluded(child) then continue end
 			local nameLower = child.Name:lower()
-
-			if child:IsA("BasePart") then
-				if nameLower == "floor" or nameLower:find("floor") then
-					table.insert(floors, child)
-				elseif child.CanCollide then
-					table.insert(obstacles, child)
-				end
+			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
+				local pPos = child.Position
+				table.insert(candidates, Vector3.new(pPos.X, p.Position.Y + (child.Size.Y / 2) + 2.5, pPos.Z))
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				scanFolder(child)
+				collectFloors(child)
 			end
 		end
 	end
 
-	-- Scan both Parts and Assets folders
-	if partsFolder then scanFolder(partsFolder) end
-	if assetsFolder then scanFolder(assetsFolder) end
-	scanFolder(roomInstance) -- Fallback scan of the main room
+	if roomInstance:FindFirstChild("Parts") then collectFloors(roomInstance.Parts) end
+	if roomInstance:FindFirstChild("Assets") then collectFloors(roomInstance.Assets) end
 
-	-- Determine true ground floor Y level
-	local groundY = roomCF.Position.Y - (roomSize.Y / 2) + 3
-	if #floors > 0 then
-		local minY = math.huge
-		for _, f in ipairs(floors) do
-			local topY = f.Position.Y + (f.Size.Y / 2)
-			if topY < minY then minY = topY end
-		end
-		if minY ~= math.huge then groundY = minY end
-	end
-
-	local spawnY = groundY + 2.5
-	local bestPos = nil
-	local maxMinDist = -1
-
-	-- Grid scan across the room space to find the open center away from walls and furniture
-	local step = 3
-	for x = -roomSize.X / 2 + 4, roomSize.X / 2 - 4, step do
-		for z = -roomSize.Z / 2 + 4, roomSize.Z / 2 - 4, step do
-			local localPos = Vector3.new(x, 0, z)
-			local worldPos = roomCF:PointToWorldSpace(localPos)
-			local testPos = Vector3.new(worldPos.X, spawnY, worldPos.Z)
-
-			-- Check distance and collision against all collected walls, pillars, and assets
-			local isInsideObstacle = false
-			local minDist = math.huge
-
-			for _, obs in ipairs(obstacles) do
-				local rel = obs.CFrame:PointToObjectSpace(testPos)
-				local oSize = obs.Size
-				if math.abs(rel.X) <= (oSize.X / 2 + 2) and math.abs(rel.Y) <= (oSize.Y / 2 + 3) and math.abs(rel.Z) <= (oSize.Z / 2 + 2) then
-					isInsideObstacle = true
-					break
-				end
-
-				local dist = (testPos - obs.Position).Magnitude
-				if dist < minDist then minDist = dist end
-			end
-
-			if not isInsideObstacle then
-				-- Verify ceiling clearance via raycast
-				local rayParams = RaycastParams.new()
-				rayParams.FilterType = Enum.RaycastFilterType.Exclude
-				local excludeList = {}
-				for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-					if p.Character then table.insert(excludeList, p.Character) end
-				end
-				rayParams.FilterDescendantsInstances = excludeList
-
-				local ceilingHit = Workspace:Raycast(testPos, Vector3.new(0, 8, 0), rayParams)
-				if not ceilingHit and minDist > maxMinDist then
-					maxMinDist = minDist
-					bestPos = testPos
-				end
-			end
+	-- Test candidates and return the first 100% clear open space
+	for _, cand in ipairs(candidates) do
+		if isValidPosition(cand) then
+			print("clear and success")
+			return cand
 		end
 	end
 
-	if bestPos then
-		print("Got best one")
-		return bestPos
-	end
-
-	-- Fallback to room center
-	print("Failed")
-	return Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z)
+	-- Fallback room center safely placed above floor
+	print("failed")
+	return Vector3.new(roomCF.Position.X, roomCF.Position.Y, roomCF.Position.Z)
 end
+
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
