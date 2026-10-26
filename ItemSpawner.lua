@@ -12,44 +12,66 @@ if httpSuccess and rawCode then
 else
 	warn("Item spawner: Failed to fetch HTTP functions ->", rawCode)
 end
-
 --!strict
 local Workspace = game:GetService("Workspace")
 
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function that checks holder.Parent and ancestry against the config location keys
-local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?)
+-- Helper function with strict ancestry matching for Table, Drawer, Chest, and Wall
+local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
 	if not locationsConfig then
-		return true, nil, nil
+		return true, nil, nil, nil
 	end
 
-	-- Walk up the ancestry starting directly from holder.Parent
-	local current = holder.Parent
+	local matchedType = nil
+	local matchedConfig = nil
+
+	local current = holder
 	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
 		local nameLower = current.Name:lower()
 
-		for locName, locConfig in pairs(locationsConfig) do
-			if type(locConfig) == "table" and locConfig.Enabled ~= false then
-				local locKeyLower = locName:lower()
-
-				-- Check if the parent/ancestor name matches the config keyword (e.g., table, drawer, chest, wall)
-				if nameLower:find(locKeyLower) then
-					-- Block pre-existing drawers/chests found via initial static scan
-					if (locKeyLower:find("drawer") or locKeyLower:find("chest")) and not isDynamic then
-						return false, nil, nil
-					end
-
-					return true, locConfig.Offset, locConfig.RotationOffset
-				end
-			end
+		if nameLower:find("table") and locationsConfig["table"] then
+			matchedType = "table"
+			matchedConfig = locationsConfig["table"]
+			break
+		elseif nameLower:find("drawer") and locationsConfig["drawer"] then
+			matchedType = "drawer"
+			matchedConfig = locationsConfig["drawer"]
+			break
+		elseif nameLower:find("chest") and locationsConfig["chest"] then
+			matchedType = "chest"
+			matchedConfig = locationsConfig["chest"]
+			break
+		elseif (nameLower:find("wall") or nameLower:find("holder")) and locationsConfig["wall"] then
+			matchedType = "wall"
+			matchedConfig = locationsConfig["wall"]
+			break
 		end
 
 		current = current.Parent
 	end
 
-	return false, nil, nil
+	-- Fallback for explicit wall holders named "Holder"
+	if not matchedType and holder.Name == "Holder" and locationsConfig["wall"] then
+		matchedType = "wall"
+		matchedConfig = locationsConfig["wall"]
+	end
+
+	if not matchedConfig or type(matchedConfig) ~= "table" then
+		return false, nil, nil, nil
+	end
+
+	if matchedConfig.Enabled == false then
+		return false, nil, nil, nil
+	end
+
+	-- Block pre-existing drawers and chests found during the initial static scan
+	if (matchedType == "drawer" or matchedType == "chest") and not isDynamic then
+		return false, nil, nil, nil
+	end
+
+	return true, matchedConfig.Offset, matchedConfig.RotationOffset, matchedType
 end
 
 function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?)
@@ -88,7 +110,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	local spawnChance = config.SpawnChance or 100
 
 	local processedHolders = {}
-	local hasSpawned = false -- Enforces 1 item per room limit
+	local staticSpawned = false -- Ensures tables/walls only spawn 1 item max per room
 	
 	local connection: RBXScriptConnection? = nil
 	local ancestryConnection: RBXScriptConnection? = nil
@@ -104,14 +126,13 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	end
 
 	local function processHolder(holder: BasePart, isDynamic: boolean)
-		if hasSpawned then return end
 		if processedHolders[holder] then return end
 		
 		if holder:GetAttribute("IsUsed") == true then
 			return
 		end
 		
-		local isValid, locOffset, locRotOffset = getLocationConfig(holder, locationsConfig, isDynamic)
+		local isValid, locOffset, locRotOffset, matchedType = getLocationConfig(holder, locationsConfig, isDynamic)
 		if not isValid then
 			return
 		end
@@ -122,11 +143,10 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- Lock the room and mark the holder as used
-		hasSpawned = true
-		if connection then
-			connection:Disconnect()
-			connection = nil
+		-- If it's a static location (table/wall), ensure only 1 spawns per room
+		if not isDynamic then
+			if staticSpawned then return end
+			staticSpawned = true
 		end
 
 		holder:SetAttribute("IsUsed", true)
@@ -137,6 +157,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		local finalOffset = locOffset or defaultOffset
 		local finalRotOffset = locRotOffset or defaultRotOffset
 
+		-- Local space CFrame multiplication to properly respect furniture rotation
 		local rotationCFrame = CFrame.Angles(
 			math.rad(finalRotOffset.X),
 			math.rad(finalRotOffset.Y),
@@ -211,21 +232,25 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	-- 1. Scan pre-existing holders instantly (isDynamic = false)
+	-- 1. Scan pre-existing tables and walls instantly on room load (isDynamic = false)
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
-			processHolder(desc, false)
+		if (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
+			local isValid, _, _, matchedType = getLocationConfig(desc, locationsConfig, false)
+			if isValid and (matchedType == "table" or matchedType == "wall") then
+				processHolder(desc, false)
+			end
 		end
 	end
 
-	-- 2. Listen for dynamic holders created at runtime (isDynamic = true)
-	if not hasSpawned then
-		connection = roomInstance.DescendantAdded:Connect(function(desc)
-			if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
+	-- 2. Listen for dynamic drawers and chests created at runtime when opened (isDynamic = true)
+	connection = roomInstance.DescendantAdded:Connect(function(desc)
+		if (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
+			local isValid, _, _, matchedType = getLocationConfig(desc, locationsConfig, true)
+			if isValid and (matchedType == "drawer" or matchedType == "chest") then
 				processHolder(desc, true)
 			end
-		end)
-	end
+		end
+	end)
 
 	-- 3. Room recycling and cleanup hooks
 	ancestryConnection = roomInstance.AncestryChanged:Connect(function(_, parent)
