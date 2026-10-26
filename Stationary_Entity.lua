@@ -63,7 +63,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
-	-- Helper function to strictly exclude subrooms, closets, stair steps, etc.
+	-- Helper function to strictly exclude subrooms, siderooms, stair steps, etc.
 	local function isExcludedFolder(inst: Instance): boolean
 		local curr = inst
 		while curr and curr ~= roomInstance do
@@ -76,7 +76,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return false
 	end
 
-	-- Gather ground floor parts to find the exact floor Y level
+	-- 1. Gather ONLY main floor parts (strictly excluding Siderooms and Steps)
 	local floorParts = {}
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
@@ -91,6 +91,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	collectFloors(roomInstance)
 
+	-- Determine true floor Y level (safely handles CellarRooms and basements)
 	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
 	if #floorParts > 0 then
 		local lowestY = math.huge
@@ -103,86 +104,96 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		end
 	end
 
-	-- Calculate the midpoint between RoomEntrance and RoomExit
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
 	local entPos = getPosition(roomEntrance)
 	local extPos = getPosition(roomExit)
 
-	local basePos
-	if entPos and extPos then
-		local mid = (entPos + extPos) / 2
-		basePos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
-	else
-		basePos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
-	end
-
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	local excludeList = {}
-	for _, p in ipairs(Players:GetPlayers()) do
+	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
 		if p.Character then table.insert(excludeList, p.Character) end
 	end
 	rayParams.FilterDescendantsInstances = excludeList
 
-	-- Strict open-space validation function
-	local function isPositionCompletelyClear(pos: Vector3): boolean
+	-- Function to evaluate how clear a candidate position is from walls/pillars
+	local function getClearanceScore(pos: Vector3): (boolean, number)
 		-- Check vertical ceiling clearance
 		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
-			return false
+			return false, 0
 		end
 
-		-- Check 8 horizontal directions (must have at least 5 studs of clear open space)
+		local minRayDist = math.huge
 		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
 		for _, angle in ipairs(angles) do
 			local rad = math.rad(angle)
-			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
+			local dir = Vector3.new(math.cos(rad) * 6, 0, math.sin(rad) * 6)
 			local hit = Workspace:Raycast(pos, dir, rayParams)
 			if hit then
-				local hitPart = hit.Instance
-				local hitName = hitPart.Name:lower()
-				-- If it hits a non-floor part (wall, pillar, furniture), it's blocked!
-				if not (hitName == "floor" or hitName:find("floor")) then
-					return false
+				local dist = (hit.Position - pos).Magnitude
+				if dist < 3.5 then -- Too close to a wall, corner, or pillar
+					return false, 0
 				end
+				if dist < minRayDist then minRayDist = dist end
+			else
+				minRayDist = math.min(minRayDist, 6)
 			end
 		end
 
-		-- Check box collision overlap
-		local boxSize = Vector3.new(3.5, 4.5, 3.5)
+		-- Check bounding box collision
+		local boxSize = Vector3.new(3, 4, 3)
 		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), boxSize)
 		for _, p in ipairs(partsInBox) do
 			if p.CanCollide and not p.Parent:FindFirstChild("Humanoid") then
 				local pName = p.Name:lower()
 				if not (pName == "floor" or pName:find("floor")) then
-					return false
+					return false, 0
 				end
 			end
 		end
 
-		return true
+		return true, minRayDist
 	end
 
-	-- 1. Test the midpoint position first
-	if isPositionCompletelyClear(basePos) then
-		return basePos
-	end
+	-- 2. Generate multiple candidate positions (handles turns & L-shapes smoothly)
+	local candidates = {}
 
-	data = nil -- placeholder safety
-
-	-- 2. If inside a wall or pillar, spiral outward in clean steps until fully clear open space is found
-	for radius = 3, 18, 3 do
-		for _, angle in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
-			local rad = math.rad(angle)
-			local testPos = basePos + Vector3.new(math.cos(rad) * radius, 0, math.sin(rad) * radius)
-			if isPositionCompletelyClear(testPos) then
-				return testPos
-			end
+	if entPos and extPos then
+		-- Sample points along the entrance-to-exit path (bypasses corner walls on turns)
+		for i = 0.2, 0.8, 0.15 do
+			local p = entPos:Lerp(extPos, i)
+			table.insert(candidates, Vector3.new(p.X, safeMinY + 2.5, p.Z))
 		end
 	end
 
-	-- Absolute fallback
-	return basePos
+	-- Add individual floor tile centers as candidates
+	for _, part in ipairs(floorParts) do
+		local pPos = part.Position
+		table.insert(candidates, Vector3.new(pPos.X, safeMinY + 2.5, pPos.Z))
+	end
+
+	-- Fallback room center
+	table.insert(candidates, Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z))
+
+	-- 3. Test all candidates and pick the one with the highest wall clearance score
+	local bestPos = nil
+	local bestScore = -1
+
+	for _, cand in ipairs(candidates) do
+		local isOk, score = getClearanceScore(cand)
+		if isOk and score > bestScore then
+			bestScore = score
+			bestPos = cand
+		end
+	end
+
+	if bestPos then
+		return bestPos
+	end
+
+	-- Absolute fallback to safe Y level at room center
+	return Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
