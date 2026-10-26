@@ -61,95 +61,131 @@ end
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	-- 1. Get room center XZ from Entrance and Exit or Model Pivot
+	local roomCF, roomSize = roomInstance:GetBoundingBox()
+
+	-- Helper function to strictly check if an instance or any of its parents is a sideroom, subroom, or stair steps
+	local function isExcludedFolder(inst: Instance): boolean
+		local curr = inst
+		while curr and curr ~= roomInstance do
+			local nameLower = curr.Name:lower()
+			if nameLower:find("sideroom") or nameLower:find("subroom") or nameLower:find("steps") or nameLower:find("stair") or nameLower:find("closet") or nameLower:find("secret") then
+				return true
+			end
+			curr = curr.Parent
+		end
+		return false
+	end
+
+	-- 1. Gather ONLY main floor parts (strictly excluding Siderooms and Steps)
+	local floorParts = {}
+	local function collectFloors(parent)
+		for _, child in ipairs(parent:GetChildren()) do
+			if isExcludedFolder(child) then
+				continue
+			end
+
+			local nameLower = child.Name:lower()
+			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
+				table.insert(floorParts, child)
+			elseif child:IsA("Model") or child:IsA("Folder") then
+				collectFloors(child)
+			end
+		end
+	end
+	collectFloors(roomInstance)
+
+	-- Determine safe ground floor Y height
+	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
+	if #floorParts > 0 then
+		local lowestY = math.huge
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if topY < lowestY then lowestY = topY end
+		end
+		if lowestY ~= math.huge then
+			safeMinY = lowestY
+		end
+	end
+
+	-- 2. Calculate the exact midpoint between RoomEntrance and RoomExit for the main hallway
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
 	local entPos = getPosition(roomEntrance)
 	local extPos = getPosition(roomExit)
-	
-	local centerXZ
+
+	local targetPos
 	if entPos and extPos then
 		local mid = (entPos + extPos) / 2
-		centerXZ = Vector2.new(mid.X, mid.Z)
+		targetPos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
 	else
-		local pivot = roomInstance:GetPivot().Position
-		centerXZ = Vector2.new(pivot.X, pivot.Z)
+		targetPos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
 	end
 
-	-- 2. Gather all ground floor parts inside the room
-	local floorParts = {}
-	local function scanFloors(parent)
-		for _, child in ipairs(parent:GetChildren()) do
-			local nameLower = child.Name:lower()
-			-- Skip subrooms, closets, stairwells, and side areas
-			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("stair") or nameLower:find("cubicle") then
-				continue
-			end
-			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
-				table.insert(floorParts, child)
-			elseif child:IsA("Model") or child:IsA("Folder") then
-				scanFloors(child)
-			end
-		end
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	local excludeList = {}
+	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+		if p.Character then table.insert(excludeList, p.Character) end
 	end
-	scanFloors(roomInstance)
+	rayParams.FilterDescendantsInstances = excludeList
 
-	if #floorParts > 0 then
-		-- Find the lowest ground floor Y level to avoid upper levels/balconies
-		local minY = math.huge
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < minY then minY = topY end
+	-- Strict box clearance check (Ensures no walls, pillars, or obstacles overlap)
+	local function isBoxClear(pos: Vector3): boolean
+		-- Check vertical ceiling clearance
+		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
+			return false
 		end
-
-		local groundParts = {}
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if math.abs(topY - minY) <= 2 then
-				table.insert(groundParts, part)
+		-- Check 8 horizontal directions for walls/pillars
+		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
+		for _, angle in ipairs(angles) do
+			local rad = math.rad(angle)
+			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
+			if Workspace:Raycast(pos, dir, rayParams) then
+				return false
 			end
 		end
-
-		-- Sort ground parts by distance to the room's center XZ
-		table.sort(groundParts, function(a, b)
-			local distA = (Vector2.new(a.Position.X, a.Position.Z) - centerXZ).Magnitude
-			local distB = (Vector2.new(b.Position.X, b.Position.Z) - centerXZ).Magnitude
-			return distA < distB
-		end)
-
-		-- Pick the first ground part that doesn't collide with walls or pillars
-		for _, part in ipairs(groundParts) do
-			local pCF, pSize = part.CFrame, part.Size
-			-- Strictly anchor Y to the top of the floor part + 2.5 studs (torso height)
-			local candidatePos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 2.5, pCF.Position.Z)
-
-			-- Check if box is clear of walls or pillars
-			local isBlocked = false
-			local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(candidatePos), Vector3.new(3, 4, 3))
-			for _, p in ipairs(partsInBox) do
-				if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
-					isBlocked = true
-					break
+		-- Check bounding box collision
+		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(pos), Vector3.new(3, 4, 3))
+		for _, p in ipairs(partsInBox) do
+			if p.CanCollide and not p.Parent:FindFirstChild("Humanoid") then
+				if p:IsDescendantOf(roomInstance) then
+					local nameLower = p.Name:lower()
+					if not (nameLower == "floor" or nameLower:find("floor")) then
+						return false
+					end
+				else
+					return false
 				end
 			end
-
-			if not isBlocked then
-				return candidatePos
-			end
 		end
+		return true
+	end
 
-		-- Fallback to the closest ground part even if box check was tight
-		if #groundParts > 0 then
-			local best = groundParts[1]
-			return Vector3.new(best.Position.X, best.Position.Y + (best.Size.Y / 2) + 2.5, best.Position.Z)
+	-- 3. Test the main entrance-to-exit midpoint first
+	if isBoxClear(targetPos) then
+		return targetPos
+	end
+
+	-- 4. If blocked, search outward in clean offset steps around the midpoint
+	local offsets = {
+		Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
+		Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
+		Vector3.new(4, 0, 4), Vector3.new(-4, 0, 4),
+		Vector3.new(4, 0, -4), Vector3.new(-4, 0, -4),
+		Vector3.new(8, 0, 0), Vector3.new(-8, 0, 0),
+		Vector3.new(0, 0, 8), Vector3.new(0, 0, -8)
+	}
+
+	for _, offset in ipairs(offsets) do
+		local testPos = targetPos + offset
+		if isBoxClear(testPos) then
+			return testPos
 		end
 	end
 
-	-- Absolute fallback using model pivot
-	local pivot = roomInstance:GetPivot().Position
-	return Vector3.new(pivot.X, pivot.Y + 2.5, pivot.Z)
+	-- Absolute fallback
+	return targetPos
 end
-
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
