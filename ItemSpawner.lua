@@ -12,70 +12,46 @@ if httpSuccess and rawCode then
 else
 	warn("Item spawner: Failed to fetch HTTP functions ->", rawCode)
 end
-
 --!strict
 local Workspace = game:GetService("Workspace")
 
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function with fixed priority: checks furniture ancestry first, then wall holders
+-- Helper function that checks config keys against holder ancestry and enforces rules
 local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?)
 	if not locationsConfig then
 		return true, nil, nil
 	end
 
-	local current = holder
-	local matchedType = nil
-	local matchedConfig = nil
-
-	-- 1. Walk up ancestry to see if it belongs to a Table, Drawer, or Chest first
-	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
-		local nameLower = current.Name:lower()
-		
-		for locName, locConfig in pairs(locationsConfig) do
+	-- Dynamically loop through every location defined in the user's config table
+	for locName, locConfig in pairs(locationsConfig) do
+		if type(locConfig) == "table" and locConfig.Enabled ~= false then
 			local locKeyLower = locName:lower()
 			
-			-- Match furniture keywords (table, drawer, chest)
-			if nameLower:find(locKeyLower) and not locKeyLower:find("wall") and not locKeyLower:find("holder") then
-				matchedType = locKeyLower
-				matchedConfig = locConfig
-				break
-			end
-		end
-		
-		if matchedType then
-			break
-		end
-		current = current.Parent
-	end
-
-	-- 2. If it's NOT furniture, check if it's a valid wall holder named "Holder"
-	if not matchedType and holder.Name == "Holder" then
-		for locName, locConfig in pairs(locationsConfig) do
-			local locKeyLower = locName:lower()
-			if locKeyLower:find("wall") or locKeyLower:find("holder") then
-				matchedType = "wall"
-				matchedConfig = locConfig
-				break
+			-- Walk up the ancestry tree from the holder
+			local current = holder
+			while current and current ~= Workspace and current ~= game.ReplicatedStorage do
+				local nameLower = current.Name:lower()
+				
+				-- Check if ancestry matches config keyword, or if it's a wall holder named "Holder"
+				local isMatch = nameLower:find(locKeyLower) or ((locKeyLower:find("wall") or locKeyLower:find("holder")) and holder.Name == "Holder")
+				
+				if isMatch then
+					-- Block pre-existing drawers/chests found on the initial scan
+					if (locKeyLower:find("drawer") or locKeyLower:find("chest")) and not isDynamic then
+						return false, nil, nil
+					end
+					
+					return true, locConfig.Offset, locConfig.RotationOffset
+				end
+				
+				current = current.Parent
 			end
 		end
 	end
-
-	if not matchedConfig or type(matchedConfig) ~= "table" then
-		return false, nil, nil
-	end
-
-	if matchedConfig.Enabled == false then
-		return false, nil, nil
-	end
-
-	-- Block pre-existing drawers/chests found via initial GetDescendants
-	if matchedType and (matchedType:find("drawer") or matchedType:find("chest")) and not isDynamic then
-		return false, nil, nil
-	end
-
-	return true, matchedConfig.Offset, matchedConfig.RotationOffset
+	
+	return false, nil, nil
 end
 
 function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?)
@@ -136,6 +112,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if hasSpawned then return end
 		if processedHolders[holder] then return end
 		
+		-- Universal check: prevents spawning if this specific holder was already used
 		if holder:GetAttribute("IsUsed") == true then
 			return
 		end
@@ -151,6 +128,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
+		-- Universal stamp: marks ANY location type (table, wall, drawer, chest) as used
 		holder:SetAttribute("IsUsed", true)
 
 		hasSpawned = true
