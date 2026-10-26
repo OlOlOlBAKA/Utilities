@@ -1,3 +1,18 @@
+local httpSuccess, rawCode = pcall(function()
+	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
+end)
+
+if httpSuccess and rawCode then
+	local loadedFunc, err = loadstring(rawCode)
+	if type(loadedFunc) == "function" then
+		pcall(loadedFunc)
+	else
+		warn("Item spawner: Failed to compile HTTP code ->", err)
+	end
+else
+	warn("Item spawner: Failed to fetch HTTP functions ->", rawCode)
+end
+
 --!strict
 local Workspace = game:GetService("Workspace")
 
