@@ -19,8 +19,8 @@ local Workspace = game:GetService("Workspace")
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function to verify if a LootHolder's parent matches the allowed location list
-local function isValidLocation(holder: BasePart, allowedLocations: {string}?): boolean
+-- Helper function to verify if a LootHolder's parent matches allowed locations and dynamic rules
+local function isValidLocation(holder: BasePart, allowedLocations: {string}?, isDynamic: boolean): boolean
 	if not allowedLocations or #allowedLocations == 0 then
 		return true
 	end
@@ -30,6 +30,10 @@ local function isValidLocation(holder: BasePart, allowedLocations: {string}?): b
 		local name = current.Name
 		for _, allowed in ipairs(allowedLocations) do
 			if name == allowed or name:find(allowed) then
+				-- If it's a DrawerContainer, ChestBox, or ChestBoxLocked found via initial GetDescendants (not dynamic), block it
+				if (allowed == "DrawerContainer" or allowed == "ChestBox" or allowed == "ChestBoxLocked") and not isDynamic then
+					return false
+				end
 				return true
 			end
 		end
@@ -75,7 +79,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	local processedHolders = {}
 	local spawnedItems = {}
-	local hasSpawned = false -- Enforces the 1 item per room limit
+	local hasSpawned = false
 	
 	local connection: RBXScriptConnection? = nil
 	local ancestryConnection: RBXScriptConnection? = nil
@@ -92,11 +96,16 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		table.clear(spawnedItems)
 	end
 
-	local function processHolder(holder: BasePart)
-		if hasSpawned then return end -- Stop if an item was already spawned in this room
+	local function processHolder(holder: BasePart, isDynamic: boolean)
+		if hasSpawned then return end
 		if processedHolders[holder] then return end
 		
-		if not isValidLocation(holder, allowedLocations) then
+		-- Prevent spawning if this specific LootHolder was already used
+		if holder:GetAttribute("IsUsed") == true then
+			return
+		end
+		
+		if not isValidLocation(holder, allowedLocations, isDynamic) then
 			return
 		end
 
@@ -106,7 +115,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- Lock room spawn state so no other items spawn here and disconnect scanner
+		-- Mark this specific LootHolder location as used
+		holder:SetAttribute("IsUsed", true)
+
 		hasSpawned = true
 		if connection then
 			connection:Disconnect()
@@ -136,7 +147,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			targetPart = itemModel
 		end
 
-		-- Weld the item to the LootHolder for smooth drawer movement
+		-- Weld the item to the LootHolder for smooth movement
 		if targetPart and targetPart:IsA("BasePart") then
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = targetPart
@@ -165,17 +176,14 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return holder
 		end
 
-		-- Create ProximityPrompt and automatically set Style to Custom
+		-- Create ProximityPrompt
 		if targetPart and targetPart:IsA("BasePart") then
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.HoldDuration = promptSettings.HoldDuration or 0
 			prompt.MaxActivationDistance = promptSettings.MaxActivationDistance or 6
 			prompt.RequiresLineOfSight = promptSettings.RequiresLineOfSight ~= false
 			prompt.KeyboardKeyCode = promptSettings.KeyboardKeyCode or Enum.KeyCode.E
-			
-			-- Automatically enforce custom style for your game's custom UI
 			prompt.Style = Enum.ProximityPromptStyle.Custom
-			
 			prompt.Parent = targetPart
 
 			prompt.Triggered:Connect(function(player)
@@ -193,18 +201,18 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	-- 1. Scan pre-existing LootHolders instantly
+	-- 1. Scan pre-existing LootHolders instantly (isDynamic = false)
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
 		if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
-			processHolder(desc)
+			processHolder(desc, false)
 		end
 	end
 
-	-- 2. Listen for dynamic LootHolders (e.g., opened drawers) if no item has spawned yet
+	-- 2. Listen for dynamic LootHolders created at runtime (isDynamic = true)
 	if not hasSpawned then
 		connection = roomInstance.DescendantAdded:Connect(function(desc)
 			if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
-				processHolder(desc)
+				processHolder(desc, true)
 			end
 		end)
 	end
