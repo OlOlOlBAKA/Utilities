@@ -63,12 +63,12 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 
-	-- Helper to strictly exclude subrooms, siderooms, stair steps, etc.
+	-- Helper to strictly exclude subrooms, siderooms, stair steps, ceilings, and roofs
 	local function isExcluded(inst: Instance): boolean
 		local curr = inst
 		while curr and curr ~= roomInstance do
 			local nameLower = curr.Name:lower()
-			if nameLower:find("sideroom") or nameLower:find("subroom") or nameLower:find("steps") or nameLower:find("stair") or nameLower:find("closet") or nameLower:find("secret") then
+			if nameLower:find("sideroom") or nameLower:find("subroom") or nameLower:find("steps") or nameLower:find("stair") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("ceiling") or nameLower:find("roof") or nameLower:find("beam") then
 				return true
 			end
 			curr = curr.Parent
@@ -89,23 +89,54 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	rayParams.FilterDescendantsInstances = excludeList
 
-	-- Bulletproof raycast validation function
+	-- Collect ONLY true floor parts, strictly ignoring ceilings and upper structures
+	local floorParts = {}
+	local function collectFloors(parent)
+		for _, child in ipairs(parent:GetChildren()) do
+			if isExcluded(child) then continue end
+			local nameLower = child.Name:lower()
+			if child:IsA("BasePart") then
+				if (nameLower == "floor" or nameLower:find("floor")) and not (nameLower:find("ceiling") or nameLower:find("roof")) then
+					table.insert(floorParts, child)
+				end
+			elseif child:IsA("Model") or child:IsA("Folder") then
+				collectFloors(child)
+			end
+		end
+	end
+
+	if roomInstance:FindFirstChild("Parts") then collectFloors(roomInstance.Parts) end
+	if roomInstance:FindFirstChild("Assets") then collectFloors(roomInstance.Assets) end
+	collectFloors(roomInstance)
+
+	-- Find the absolute lowest ground floor Y level in the room
+	local groundY = roomCF.Position.Y - (roomSize.Y / 2) + 3
+	if #floorParts > 0 then
+		local minY = math.huge
+		for _, f in ipairs(floorParts) do
+			local topY = f.Position.Y + (f.Size.Y / 2)
+			if topY < minY then minY = topY end
+		end
+		if minY ~= math.huge then groundY = minY end
+	end
+
+	local spawnY = groundY + 2.5
+
+	-- Bulletproof validation function ensuring it's in open space away from walls
 	local function isValidPosition(pos: Vector3): boolean
-		-- 1. Check vertical ceiling clearance
+		-- Check ceiling clearance above
 		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
 			return false
 		end
 
-		-- 2. Check 360-degree horizontal raycasts (must have at least 4.5 studs of clear space from any wall, pillar, or asset)
+		-- Check 360-degree horizontal raycasts
 		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
 		for _, angle in ipairs(angles) do
 			local rad = math.rad(angle)
 			local dir = Vector3.new(math.cos(rad) * 4.5, 0, math.sin(rad) * 4.5)
 			local hit = Workspace:Raycast(pos, dir, rayParams)
 			if hit then
-				local hitPart = hit.Instance
-				local hitName = hitPart.Name:lower()
-				-- If it hits anything that isn't a floor part, it's blocked by a wall or furniture!
+				local hitName = hit.Instance.Name:lower()
 				if not (hitName == "floor" or hitName:find("floor")) then
 					return false
 				end
@@ -115,51 +146,33 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		return true
 	end
 
-	-- Generate candidate points along the path and floor parts
+	-- Build candidate points strictly at ground level
 	local candidates = {}
 
 	if entPos and extPos then
-		-- Sample points along the hallway path (handles turns and straight rooms perfectly)
 		for i = 0.2, 0.8, 0.1 do
 			local p = entPos:Lerp(extPos, i)
-			local downHit = Workspace:Raycast(Vector3.new(p.X, roomCF.Position.Y + (roomSize.Y / 2), p.Z), Vector3.new(0, -roomSize.Y - 20, 0), rayParams)
-			if downHit and not isExcluded(downHit.Instance) then
-				local floorY = downHit.Position.Y
-				table.insert(candidates, Vector3.new(p.X, floorY + 2.5, p.Z))
-			end
+			table.insert(candidates, Vector3.new(p.X, spawnY, p.Z))
 		end
 	end
 
-	-- Collect floor parts from Parts and Assets folders
-	local function collectFloors(parent)
-		for _, child in ipairs(parent:GetChildren()) do
-			if isExcluded(child) then continue end
-			local nameLower = child.Name:lower()
-			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
-				local pPos = child.Position
-				table.insert(candidates, Vector3.new(pPos.X, pPos.Y + (child.Size.Y / 2) + 2.5, pPos.Z))
-			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectFloors(child)
-			end
-		end
+	for _, part in ipairs(floorParts) do
+		local pPos = part.Position
+		table.insert(candidates, Vector3.new(pPos.X, spawnY, pPos.Z))
 	end
 
-	if roomInstance:FindFirstChild("Parts") then collectFloors(roomInstance.Parts) end
-	if roomInstance:FindFirstChild("Assets") then collectFloors(roomInstance.Assets) end
+	table.insert(candidates, Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z))
 
-	-- Test candidates and return the first 100% clear open space
+	-- Test candidates and return the first valid open-space position
 	for _, cand in ipairs(candidates) do
 		if isValidPosition(cand) then
-			print("clear and success")
 			return cand
 		end
 	end
 
-	-- Fallback room center safely placed above floor
-	print("failed")
-	return Vector3.new(roomCF.Position.X, roomCF.Position.Y, roomCF.Position.Z)
+	-- Fallback ground position
+	return Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z)
 end
-
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
 	for _, child in ipairs(character:GetChildren()) do
