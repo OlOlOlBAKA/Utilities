@@ -217,7 +217,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			if spawnedItem and spawnedItem.Parent then
 				spawnedItem:Destroy()
 			end
-			cleanup()
 		end
 		
 		function actionsHandle.GetItem()
