@@ -52,7 +52,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				-- Strictly reject any table part named "Holder"
 				return false, nil, nil, nil
 			end
-		elseif nameLower:find("drawer") then
+		elseif nameLower:find("drawer") or nameLower:find("rolltop") then
 			if holderNameLower == "lootholder" then
 				matchedType = "drawer"
 				matchedConfig = locationsConfig["drawer"]
