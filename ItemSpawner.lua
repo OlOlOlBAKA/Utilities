@@ -16,7 +16,7 @@ end
 --!strict
 local Workspace = game:GetService("Workspace")
 
-ItemSpawner = {}
+local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
 -- Helper function with strict LootHolder vs Holder enforcement & scan gating
