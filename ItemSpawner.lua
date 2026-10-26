@@ -49,7 +49,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		return nil
 	end
 
-	-- If the asset loaded is a Tool, extract the inner Model/BasePart and destroy the tool wrapper
+	-- If a Tool is passed, extract the inner Model or BasePart and destroy the tool wrapper
 	if itemModel:IsA("Tool") then
 		local extracted = itemModel:FindFirstChildWhichIsA("Model") or itemModel:FindFirstChildWhichIsA("BasePart")
 		if not extracted then
@@ -75,6 +75,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	local processedHolders = {}
 	local spawnedItems = {}
+	local hasSpawned = false -- Enforces the 1 item per room limit
 	
 	local connection: RBXScriptConnection? = nil
 	local ancestryConnection: RBXScriptConnection? = nil
@@ -82,7 +83,17 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	local cleanup: () -> void
 
+	cleanup = function()
+		if connection then connection:Disconnect(); connection = nil end
+		if ancestryConnection then ancestryConnection:Disconnect(); ancestryConnection = nil end
+		if destroyingConnection then destroyingConnection:Disconnect(); destroyingConnection = nil end
+
+		table.clear(processedHolders)
+		table.clear(spawnedItems)
+	end
+
 	local function processHolder(holder: BasePart)
+		if hasSpawned then return end -- Stop if an item was already spawned in this room
 		if processedHolders[holder] then return end
 		
 		if not isValidLocation(holder, allowedLocations) then
@@ -95,7 +106,13 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- Set parent to the container (e.g. inside the Drawer or Table model)
+		-- Lock room spawn state so no other items spawn here and disconnect scanner
+		hasSpawned = true
+		if connection then
+			connection:Disconnect()
+			connection = nil
+		end
+
 		itemModel.Parent = holder.Parent or Workspace
 		table.insert(spawnedItems, itemModel)
 
@@ -106,14 +123,12 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			math.rad(rotOffset.Z)
 		)
 
-		-- Position based on Model or BasePart
 		if itemModel:IsA("Model") then
 			itemModel:PivotTo(finalCFrame * rotationCFrame)
 		elseif itemModel:IsA("BasePart") then
 			itemModel.CFrame = finalCFrame * rotationCFrame
 		end
 
-		-- Find a valid BasePart inside the item
 		local targetPart = nil
 		if itemModel:IsA("Model") then
 			targetPart = itemModel.PrimaryPart or itemModel:FindFirstChildWhichIsA("BasePart", true)
@@ -121,7 +136,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			targetPart = itemModel
 		end
 
-		-- Weld the item to the LootHolder so it moves seamlessly when drawers open/close
+		-- Weld the item to the LootHolder for smooth drawer movement
 		if targetPart and targetPart:IsA("BasePart") then
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = targetPart
@@ -135,6 +150,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			if itemModel and itemModel.Parent then
 				itemModel:Destroy()
 			end
+			cleanup()
 		end
 		
 		function actionsHandle.GetItem()
@@ -149,13 +165,17 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return holder
 		end
 
-		-- Create ProximityPrompt and parent it to the item's BasePart
+		-- Create ProximityPrompt and automatically set Style to Custom
 		if targetPart and targetPart:IsA("BasePart") then
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.HoldDuration = promptSettings.HoldDuration or 0
 			prompt.MaxActivationDistance = promptSettings.MaxActivationDistance or 6
 			prompt.RequiresLineOfSight = promptSettings.RequiresLineOfSight ~= false
 			prompt.KeyboardKeyCode = promptSettings.KeyboardKeyCode or Enum.KeyCode.E
+			
+			-- Automatically enforce custom style for your game's custom UI
+			prompt.Style = Enum.ProximityPromptStyle.Custom
+			
 			prompt.Parent = targetPart
 
 			prompt.Triggered:Connect(function(player)
@@ -173,31 +193,23 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	-- Cleanup routine to prevent memory leaks over 20+ room cycles
-	cleanup = function()
-		if connection then connection:Disconnect(); connection = nil end
-		if ancestryConnection then ancestryConnection:Disconnect(); ancestryConnection = nil end
-		if destroyingConnection then destroyingConnection:Disconnect(); destroyingConnection = nil end
-
-		table.clear(processedHolders)
-		table.clear(spawnedItems)
-	end
-
-	-- 1. Scan pre-existing LootHolders instantly (e.g., items on tables)
+	-- 1. Scan pre-existing LootHolders instantly
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if desc.Name == "LootHolder" and desc:IsA("BasePart") then
+		if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
 			processHolder(desc)
 		end
 	end
 
-	-- 2. Listen for dynamic LootHolders (e.g., when a drawer is opened)
-	connection = roomInstance.DescendantAdded:Connect(function(desc)
-		if desc.Name == "LootHolder" and desc:IsA("BasePart") then
-			processHolder(desc)
-		end
-	end)
+	-- 2. Listen for dynamic LootHolders (e.g., opened drawers) if no item has spawned yet
+	if not hasSpawned then
+		connection = roomInstance.DescendantAdded:Connect(function(desc)
+			if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
+				processHolder(desc)
+			end
+		end)
+	end
 
-	-- 3. Garbage collection hooks for room recycling/deletion
+	-- 3. Room recycling and cleanup hooks
 	ancestryConnection = roomInstance.AncestryChanged:Connect(function(_, parent)
 		if not parent then
 			cleanup()
