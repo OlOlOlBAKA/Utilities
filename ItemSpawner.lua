@@ -266,7 +266,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
 		if desc:IsA("Model") then
-			processHolder(desc:FindFirstChild("LootHolder")
+			processHolder(desc:FindFirstChild("LootHolder"), true)
 		end
 	end)
 
