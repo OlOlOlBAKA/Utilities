@@ -81,7 +81,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	-- Only exclude players so that walls, pillars, and room geometry correctly block invalid spawns
 	local excludeList = {}
-	for _, p in ipairs(Workspace:GetPlayers()) do
+	for _, p in ipairs(Players:GetPlayers()) do
 		if p.Character then
 			table.insert(excludeList, p.Character)
 		end
