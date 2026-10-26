@@ -84,25 +84,6 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.FilterDescendantsInstances = { roomInstance }
 
-	local function isValidOpenSpace(pos: Vector3): boolean
-		-- Check vertical ceiling clearance (at least 8 studs above)
-		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
-			return false
-		end
-
-		-- Check 8 directions horizontally (requires 5 full studs of clear open space from pillars, walls, and corners)
-		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-		for _, angle in ipairs(angles) do
-			local rad = math.rad(angle)
-			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
-			if Workspace:Raycast(pos, dir, rayParams) then
-				return false -- Hit a pillar, corner, or wall!
-			end
-		end
-
-		return true
-	end
-
 	if #floorParts > 0 then
 		-- Isolate true ground floor Y level
 		local minY = math.huge
@@ -114,54 +95,70 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 		local groundParts = {}
 		for _, part in ipairs(floorParts) do
 			local topY = part.Position.Y + (part.Size.Y / 2)
-			-- Strict ground level check (within 2 studs of the lowest ground floor Y)
 			if math.abs(topY - minY) <= 2 then
-				table.insert(groundParts, part)
+				-- Exclude massive plates that span entire walls or rooms
+				if math.max(part.Size.X, part.Size.Z) < 50 then
+					table.insert(groundParts, part)
+				end
 			end
 		end
 
-		-- Calculate centroid (average XZ) of valid ground floor parts for true center / corner shortcut alignment
-		local sumX, sumZ, count = 0, 0, 0
+		-- 2. Find the absolute best floor tile with the maximum clearance from any wall, pillar, or corner
+		local bestPos = nil
+		local maxClearance = -1
+		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
+
 		for _, part in ipairs(groundParts) do
-			sumX = sumX + part.Position.X
-			sumZ = sumZ + part.Position.Z
-			count = count + 1
+			local pCF, pSize = part.CFrame, part.Size
+			local testPos = Vector3.new(pCF.Position.X, minY + 2.5, pCF.Position.Z)
+
+			-- Check vertical ceiling clearance
+			if Workspace:Raycast(testPos, Vector3.new(0, 8, 0), rayParams) then
+				continue
+			end
+
+			-- Measure distance to nearest walls in 8 directions
+			local minRayDist = math.huge
+			local isValid = true
+
+			for _, angle in ipairs(angles) do
+				local rad = math.rad(angle)
+				local dir = Vector3.new(math.cos(rad) * 8, 0, math.sin(rad) * 8)
+				local hit = Workspace:Raycast(testPos, dir, rayParams)
+				if hit then
+					local dist = (hit.Position - testPos).Magnitude
+					if dist < 5.5 then -- Reject if too close to a wall, corner, or pillar
+						isValid = false
+						break
+					end
+					if dist < minRayDist then
+						minRayDist = dist
+					end
+				else
+					minRayDist = 8
+				end
+			end
+
+			-- Pick the position that has the most open space around it
+			if isValid and minRayDist > maxClearance then
+				maxClearance = minRayDist
+				bestPos = testPos
+			end
 		end
 
-		if count > 0 then
-			local centerX = sumX / count
-			local centerZ = sumZ / count
+		if bestPos then
+			return bestPos
+		end
 
-			-- Cast ray straight down from above the center to find the exact floor surface
-			local rayStart = Vector3.new(centerX, roomCF.Position.Y + (roomSize.Y / 2), centerZ)
-			local floorRay = Workspace:Raycast(rayStart, Vector3.new(0, -roomSize.Y - 20, 0), rayParams)
-
-			if floorRay then
-				local candidatePos = Vector3.new(centerX, minY + 2.5, centerZ)
-				if isValidOpenSpace(candidatePos) then
-					return candidatePos
-				end
-			end
-
-			-- Fallback: test ground parts sorted by distance to the room center
-			table.sort(groundParts, function(a, b)
-				local distA = (Vector3.new(a.Position.X, 0, a.Position.Z) - Vector3.new(centerX, 0, centerZ)).Magnitude
-				local distB = (Vector3.new(b.Position.X, 0, b.Position.Z) - Vector3.new(centerX, 0, centerZ)).Magnitude
-				return distA < distB
-			end)
-
-			for _, part in ipairs(groundParts) do
-				local pCF, pSize = part.CFrame, part.Size
-				local candidatePos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 2.5, pCF.Position.Z)
-				if isValidOpenSpace(candidatePos) then
-					return candidatePos
-				end
-			end
+		-- Fallback to first valid ground part if strict clearance was too tight
+		if #groundParts > 0 then
+			local best = groundParts[1]
+			return Vector3.new(best.Position.X, minY + 2.5, best.Position.Z)
 		end
 	end
 
 	-- Fallback to room bounding center
-	return Vector3.new(roomCF.Position.X, roomCF.Position.Y, roomCF.Position.Z)
+	return Vector3.new(roomCF.Position.X, minY + 2.5, roomCF.Position.Z)
 end
 
 
@@ -416,7 +413,7 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 						end
 						task.wait()
 						if Workspace:FindFirstChild("Drops") then
-							local droppedDrop = Workspace.Drops:FindFirstChild(tool.Name)
+							local droppedDrop = Workspace.Drops:WaitForChild(tool.Name, 3)
 							if droppedDrop then droppedDrop:Destroy() end
 						end
 					else
