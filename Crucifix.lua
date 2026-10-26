@@ -56,6 +56,29 @@ local itemConfig = {
 		OnTriggered = function(player: Player, itemModel: Model | BasePart, handle: table)
 			print(player.Name, "picked up the item!")
 			handle.Destroy()
+            local Players = game:GetService("Players")
+            local LocalPlayer = Players.LocalPlayer
+
+            local asset = LoadCustomInstance("https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Crucifix.rbxm")
+
+            if asset then
+                local tool = nil
+
+                if asset:IsA("Tool") then
+                    tool = asset
+                    tool.Name = "Crucifix"
+                else
+                    tool = Instance.new("Tool")
+                    tool.Name = "Crucifix"
+                    tool.CanBeDropped = false
+        
+                    asset.Name = "Handle"
+                    asset.Parent = tool
+                end
+                tool:AddTag("Crucifix")
+                local char = LocalPlayer.Character
+                tool.Parent = char
+            end
 		end
 	}
 }
