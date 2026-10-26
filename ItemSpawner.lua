@@ -12,13 +12,14 @@ if httpSuccess and rawCode then
 else
 	warn("Item spawner: Failed to fetch HTTP functions ->", rawCode)
 end
+
 --!strict
 local Workspace = game:GetService("Workspace")
 
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function with strict holder name validation & ancestry matching
+-- Helper function with strict LootHolder vs Holder enforcement
 local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?): (boolean, Vector3?, Vector3?, string?, Instance?)
 	if not locationsConfig then
 		return true, nil, nil, nil, nil
@@ -35,31 +36,37 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 		local nameLower = current.Name:lower()
 
 		if nameLower:find("table") and locationsConfig["table"] then
-			-- Tables use LootHolder or Holder
+			-- Tables MUST use LootHolder only (reject Holder)
 			if holderNameLower == "lootholder" then
 				matchedType = "table"
 				matchedConfig = locationsConfig["table"]
 				containerModel = current
 				break
+			else
+				return false, nil, nil, nil, nil
 			end
 		elseif nameLower:find("drawer") and locationsConfig["drawer"] then
-			-- Drawers explicitly use LootHolder
+			-- Drawers MUST use LootHolder only (reject Holder)
 			if holderNameLower == "lootholder" then
 				matchedType = "drawer"
 				matchedConfig = locationsConfig["drawer"]
 				containerModel = current
 				break
+			else
+				return false, nil, nil, nil, nil
 			end
 		elseif nameLower:find("chest") and locationsConfig["chest"] then
-			-- Chests explicitly use LootHolder
+			-- Chests MUST use LootHolder only (reject Holder)
 			if holderNameLower == "lootholder" then
 				matchedType = "chest"
 				matchedConfig = locationsConfig["chest"]
 				containerModel = current
 				break
+			else
+				return false, nil, nil, nil, nil
 			end
 		elseif nameLower:find("wall") and locationsConfig["wall"] then
-			-- Walls explicitly use Holder
+			-- Walls MUST use Holder only
 			if holderNameLower == "holder" then
 				matchedType = "wall"
 				matchedConfig = locationsConfig["wall"]
@@ -71,7 +78,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 		current = current.Parent
 	end
 
-	-- Fallback for explicit wall holder parts
+	-- Fallback for standalone wall holder parts (named "holder")
 	if not matchedType and holderNameLower == "holder" and locationsConfig["wall"] then
 		matchedType = "wall"
 		matchedConfig = locationsConfig["wall"]
