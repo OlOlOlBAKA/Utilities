@@ -61,113 +61,93 @@ end
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local roomCF, roomSize = roomInstance:GetBoundingBox()
-	
+	-- 1. Get room center XZ from Entrance and Exit or Model Pivot
 	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
 	local roomExit = roomInstance:FindFirstChild("RoomExit")
 	local entPos = getPosition(roomEntrance)
 	local extPos = getPosition(roomExit)
-
-	-- Calculate target XZ from room entrance/exit midpoint or room center
-	local targetXZ
+	
+	local centerXZ
 	if entPos and extPos then
 		local mid = (entPos + extPos) / 2
-		targetXZ = Vector2.new(mid.X, mid.Z)
+		centerXZ = Vector2.new(mid.X, mid.Z)
 	else
-		targetXZ = Vector2.new(roomCF.Position.X, roomCF.Position.Z)
+		local pivot = roomInstance:GetPivot().Position
+		centerXZ = Vector2.new(pivot.X, pivot.Z)
 	end
 
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	-- Only exclude players so that walls, pillars, and room geometry correctly block invalid spawns
-	local excludeList = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p.Character then
-			table.insert(excludeList, p.Character)
-		end
-	end
-	rayParams.FilterDescendantsInstances = excludeList
-
-	local function getValidSpawnAt(xz: Vector2): Vector3?
-		-- Cast down from high up to find the true floor surface
-		local rayStart = Vector3.new(xz.X, roomCF.Position.Y + (roomSize.Y / 2), xz.Y)
-		local rayResult = Workspace:Raycast(rayStart, Vector3.new(0, -roomSize.Y - 30, 0), rayParams)
-
-		if not rayResult then return nil end
-
-		local floorPos = rayResult.Position
-		-- Ensure we hit a flat horizontal floor surface (Normal.Y >= 0.7) and not a wall
-		if rayResult.Normal.Y < 0.7 then return nil end
-
-		local spawnPos = Vector3.new(floorPos.X, floorPos.Y + 3, floorPos.Z)
-
-		-- Check overhead ceiling clearance
-		local ceilingCheck = Workspace:Raycast(spawnPos, Vector3.new(0, 8, 0), rayParams)
-		if ceilingCheck then return nil end
-
-		-- Check box collision to ensure no walls, pillars, or furniture overlap with the entity
-		local entityBoxSize = Vector3.new(4, 5, 4)
-		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(spawnPos), entityBoxSize)
-		for _, part in ipairs(partsInBox) do
-			if part.CanCollide and not part.Parent:FindFirstChild("Humanoid") then
-				-- Hit a solid wall, pillar, or object!
-				return nil
-			end
-		end
-
-		return spawnPos
-	end
-
-	-- 1. Test the midpoint between entrance and exit first
-	local validPos = getValidSpawnAt(targetXZ)
-	if validPos then
-		return validPos
-	end
-
-	-- 2. If blocked, search outward in expanding spiral steps
-	local offsets = {}
-	for radius = 4, 16, 4 do
-		for angle = 0, 315, 45 do
-			local rad = math.rad(angle)
-			table.insert(offsets, Vector2.new(math.cos(rad) * radius, math.sin(rad) * radius))
-		end
-	end
-
-	for _, offset in ipairs(offsets) do
-		local testXZ = targetXZ + offset
-		local pos = getValidSpawnAt(testXZ)
-		if pos then
-			return pos
-		end
-	end
-
-	-- 3. Fallback: Scan floor parts in the room
+	-- 2. Gather all ground floor parts inside the room
 	local floorParts = {}
-	local function collectFloors(parent)
+	local function scanFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			local nameLower = child.Name:lower()
-			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("cubicle") then
+			-- Skip subrooms, closets, stairwells, and side areas
+			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("stair") or nameLower:find("cubicle") then
 				continue
 			end
 			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
 				table.insert(floorParts, child)
 			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectFloors(child)
+				scanFloors(child)
 			end
 		end
 	end
-	collectFloors(roomInstance)
+	scanFloors(roomInstance)
 
-	for _, part in ipairs(floorParts) do
-		local pPos = part.Position
-		local pos = getValidSpawnAt(Vector2.new(pPos.X, pPos.Z))
-		if pos then
-			return pos
+	if #floorParts > 0 then
+		-- Find the lowest ground floor Y level to avoid upper levels/balconies
+		local minY = math.huge
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if topY < minY then minY = topY end
+		end
+
+		local groundParts = {}
+		for _, part in ipairs(floorParts) do
+			local topY = part.Position.Y + (part.Size.Y / 2)
+			if math.abs(topY - minY) <= 2 then
+				table.insert(groundParts, part)
+			end
+		end
+
+		-- Sort ground parts by distance to the room's center XZ
+		table.sort(groundParts, function(a, b)
+			local distA = (Vector2.new(a.Position.X, a.Position.Z) - centerXZ).Magnitude
+			local distB = (Vector2.new(b.Position.X, b.Position.Z) - centerXZ).Magnitude
+			return distA < distB
+		end)
+
+		-- Pick the first ground part that doesn't collide with walls or pillars
+		for _, part in ipairs(groundParts) do
+			local pCF, pSize = part.CFrame, part.Size
+			-- Strictly anchor Y to the top of the floor part + 2.5 studs (torso height)
+			local candidatePos = Vector3.new(pCF.Position.X, pCF.Position.Y + (pSize.Y / 2) + 2.5, pCF.Position.Z)
+
+			-- Check if box is clear of walls or pillars
+			local isBlocked = false
+			local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(candidatePos), Vector3.new(3, 4, 3))
+			for _, p in ipairs(partsInBox) do
+				if p.CanCollide and not p:IsDescendantOf(roomInstance) and not p.Parent:FindFirstChild("Humanoid") then
+					isBlocked = true
+					break
+				end
+			end
+
+			if not isBlocked then
+				return candidatePos
+			end
+		end
+
+		-- Fallback to the closest ground part even if box check was tight
+		if #groundParts > 0 then
+			local best = groundParts[1]
+			return Vector3.new(best.Position.X, best.Position.Y + (best.Size.Y / 2) + 2.5, best.Position.Z)
 		end
 	end
 
-	-- Absolute last resort fallback
-	return Vector3.new(roomCF.Position.X, roomCF.Position.Y + 3, roomCF.Position.Z)
+	-- Absolute fallback using model pivot
+	local pivot = roomInstance:GetPivot().Position
+	return Vector3.new(pivot.X, pivot.Y + 2.5, pivot.Z)
 end
 
 
