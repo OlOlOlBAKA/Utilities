@@ -14,7 +14,29 @@ local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 local itemConfig = {
 	SpawnWeight = 50,
 	SpawnChance = 100,
-	AllowedLocations = {"Table", "DrawerContainer", "ChestBox", "LockedChestBox"},
+	
+	Locations = {
+		table = {
+			Enabled = true,
+			Offset = Vector3.new(0, 0, 0),
+			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
+		},
+		drawer = {
+			Enabled = true,
+			Offset = Vector3.new(0, 0, 0),
+			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
+		},
+		chest = {
+			Enabled = true,
+			Offset = Vector3.new(0, 0, 0),
+			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
+		},
+		wall = {
+			Enabled = true,
+			Offset = Vector3.new(0, 0, 0),
+			RotationOffset = Vector3.new(0, 0, 0),
+		},
+	},
 	
 	Offset = Vector3.new(0, 0, 0),
 	RotationOffset = Vector3.new(90, 0, math.random(0,180)),
