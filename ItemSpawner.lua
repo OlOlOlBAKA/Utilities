@@ -11,34 +11,28 @@ if httpSuccess and rawCode then
 	end
 else
 	warn("Item spawner: Failed to fetch HTTP functions ->", rawCode)
-end
---!strict
+end--!strict
 local Workspace = game:GetService("Workspace")
 
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function that checks config keys against holder ancestry and enforces rules
 local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?)
 	if not locationsConfig then
 		return true, nil, nil
 	end
 
-	-- Dynamically loop through every location defined in the user's config table
 	for locName, locConfig in pairs(locationsConfig) do
 		if type(locConfig) == "table" and locConfig.Enabled ~= false then
 			local locKeyLower = locName:lower()
 			
-			-- Walk up the ancestry tree from the holder
 			local current = holder
 			while current and current ~= Workspace and current ~= game.ReplicatedStorage do
 				local nameLower = current.Name:lower()
 				
-				-- Check if ancestry matches config keyword, or if it's a wall holder named "Holder"
 				local isMatch = nameLower:find(locKeyLower) or ((locKeyLower:find("wall") or locKeyLower:find("holder")) and holder.Name == "Holder")
 				
 				if isMatch then
-					-- Block pre-existing drawers/chests found on the initial scan
 					if (locKeyLower:find("drawer") or locKeyLower:find("chest")) and not isDynamic then
 						return false, nil, nil
 					end
@@ -65,7 +59,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		return nil
 	end
 
-	-- If a Tool is passed, extract the inner Model or BasePart and destroy the tool wrapper
 	if itemModel:IsA("Tool") then
 		local extracted = itemModel:FindFirstChildWhichIsA("Model") or itemModel:FindFirstChildWhichIsA("BasePart")
 		if not extracted then
@@ -90,8 +83,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	local spawnChance = config.SpawnChance or 100
 
 	local processedHolders = {}
-	local spawnedItems = {}
-	local hasSpawned = false
 	
 	local connection: RBXScriptConnection? = nil
 	local ancestryConnection: RBXScriptConnection? = nil
@@ -103,16 +94,12 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if connection then connection:Disconnect(); connection = nil end
 		if ancestryConnection then ancestryConnection:Disconnect(); ancestryConnection = nil end
 		if destroyingConnection then destroyingConnection:Disconnect(); destroyingConnection = nil end
-
 		table.clear(processedHolders)
-		table.clear(spawnedItems)
 	end
 
 	local function processHolder(holder: BasePart, isDynamic: boolean)
-		if hasSpawned then return end
 		if processedHolders[holder] then return end
 		
-		-- Universal check: prevents spawning if this specific holder was already used
 		if holder:GetAttribute("IsUsed") == true then
 			return
 		end
@@ -128,42 +115,37 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- Universal stamp: marks ANY location type (table, wall, drawer, chest) as used
+		-- Mark this holder as used so it never spawns twice
 		holder:SetAttribute("IsUsed", true)
 
-		hasSpawned = true
-		if connection then
-			connection:Disconnect()
-			connection = nil
-		end
-
-		itemModel.Parent = holder.Parent or Workspace
-		table.insert(spawnedItems, itemModel)
+		-- Clone the item instance if spawning multiple across containers
+		local spawnedItem = itemModel:Clone()
+		spawnedItem.Parent = holder.Parent or Workspace
 
 		local finalOffset = locOffset or defaultOffset
 		local finalRotOffset = locRotOffset or defaultRotOffset
 
-		local finalCFrame = holder.CFrame + finalOffset
+		-- FIX: Local space CFrame multiplication so offsets respect the furniture's rotation
 		local rotationCFrame = CFrame.Angles(
 			math.rad(finalRotOffset.X),
 			math.rad(finalRotOffset.Y),
 			math.rad(finalRotOffset.Z)
 		)
+		local finalCFrame = holder.CFrame * CFrame.new(finalOffset) * rotationCFrame
 
-		if itemModel:IsA("Model") then
-			itemModel:PivotTo(finalCFrame * rotationCFrame)
-		elseif itemModel:IsA("BasePart") then
-			itemModel.CFrame = finalCFrame * rotationCFrame
+		if spawnedItem:IsA("Model") then
+			spawnedItem:PivotTo(finalCFrame)
+		elseif spawnedItem:IsA("BasePart") then
+			spawnedItem.CFrame = finalCFrame
 		end
 
 		local targetPart = nil
-		if itemModel:IsA("Model") then
-			targetPart = itemModel.PrimaryPart or itemModel:FindFirstChildWhichIsA("BasePart", true)
-		elseif itemModel:IsA("BasePart") then
-			targetPart = itemModel
+		if spawnedItem:IsA("Model") then
+			targetPart = spawnedItem.PrimaryPart or spawnedItem:FindFirstChildWhichIsA("BasePart", true)
+		elseif spawnedItem:IsA("BasePart") then
+			targetPart = spawnedItem
 		end
 
-		-- Weld the item to the holder for smooth movement/locking
 		if targetPart and targetPart:IsA("BasePart") then
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = targetPart
@@ -174,14 +156,13 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		local actionsHandle = {}
 		
 		function actionsHandle.Destroy()
-			if itemModel and itemModel.Parent then
-				itemModel:Destroy()
+			if spawnedItem and spawnedItem.Parent then
+				spawnedItem:Destroy()
 			end
-			cleanup()
 		end
 		
 		function actionsHandle.GetItem()
-			return itemModel
+			return spawnedItem
 		end
 
 		function actionsHandle.GetRoom()
@@ -192,7 +173,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return holder
 		end
 
-		-- Create ProximityPrompt
 		if targetPart and targetPart:IsA("BasePart") then
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.HoldDuration = promptSettings.HoldDuration or 0
@@ -204,7 +184,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 			prompt.Triggered:Connect(function(player)
 				if type(callbacks.OnTriggered) == "function" then
-					task.spawn(callbacks.OnTriggered, player, itemModel, actionsHandle)
+					task.spawn(callbacks.OnTriggered, player, spawnedItem, actionsHandle)
 				else
 					prompt:Destroy()
 					actionsHandle.Destroy()
@@ -213,25 +193,23 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 
 		if type(callbacks.OnSpawned) == "function" then
-			task.spawn(callbacks.OnSpawned, itemModel, roomInstance, actionsHandle)
+			task.spawn(callbacks.OnSpawned, spawnedItem, roomInstance, actionsHandle)
 		end
 	end
 
-	-- 1. Scan pre-existing LootHolders and Wall Holders instantly (isDynamic = false)
+	-- 1. Scan pre-existing LootHolders instantly
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
+		if (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
 			processHolder(desc, false)
 		end
 	end
 
-	-- 2. Listen for dynamic LootHolders/Holders created at runtime (isDynamic = true)
-	if not hasSpawned then
-		connection = roomInstance.DescendantAdded:Connect(function(desc)
-			if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
-				processHolder(desc, true)
-			end
-		end)
-	end
+	-- 2. Listen for dynamic LootHolders/Holders created at runtime (e.g., opened drawers/chests)
+	connection = roomInstance.DescendantAdded:Connect(function(desc)
+		if (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
+			processHolder(desc, true)
+		end
+	end)
 
 	-- 3. Room recycling and cleanup hooks
 	ancestryConnection = roomInstance.AncestryChanged:Connect(function(_, parent)
