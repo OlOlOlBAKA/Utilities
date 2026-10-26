@@ -7,10 +7,10 @@ if httpSuccess and rawCode then
 	if type(loadedFunc) == "function" then
 		pcall(loadedFunc)
 	else
-		warn("PathfindingMovement: Failed to compile HTTP code ->", err)
+		warn("Stationary Entity System: Failed to compile HTTP code ->", err)
 	end
 else
-	warn("PathfindingMovement: Failed to fetch HTTP functions ->", rawCode)
+	warn("Stationary Entity System: Failed to fetch HTTP functions ->", rawCode)
 end
 
 --!strict
