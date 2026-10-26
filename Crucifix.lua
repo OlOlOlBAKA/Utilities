@@ -3,7 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 -- Load the Item Spawner module from GitHub
-local ItemSpawner = loadstring(game:HttpGet("YOUR_ITEM_SPAWNER_RAW_GITHUB_LINK"))()
+local ItemSpawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/ItemSpawner.lua"))()
 
 local currentRooms = workspace:WaitForChild("CurrentRooms")
 local GameData = ReplicatedStorage:WaitForChild("GameData")
