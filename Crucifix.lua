@@ -14,10 +14,10 @@ local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 local itemConfig = {
 	SpawnWeight = 50,
 	SpawnChance = 100,
-	AllowedLocations = { "Table", "DrawerContainer" },
+	AllowedLocations = {"Table", "DrawerContainer", "ChestBox", "LockedChestBox"},
 	
-	Offset = Vector3.new(0, 0.2, 0),
-	RotationOffset = Vector3.new(0, 0, 0),
+	Offset = Vector3.new(0, 0, 0),
+	RotationOffset = Vector3.new(90, 0, math.random(0,180)),
 	
 	Prompt = {
 		HoldDuration = 0,
