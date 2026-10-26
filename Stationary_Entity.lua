@@ -46,132 +46,87 @@ local CrucifixStorage = {
 	}
 }
 
-local function getPosition(inst: Instance): Vector3?
-	if not inst then return nil end
-	if inst:IsA("BasePart") then
-		return inst.Position
-	elseif inst:IsA("Model") then
-		return inst:GetPivot().Position
-	elseif inst:IsA("Attachment") then
-		return inst.WorldPosition
+local roomFloorCache = setmetatable({}, { __mode = "k" })
+
+local function getRoomFloorParts(roomInstance: Instance): { BasePart }
+	if roomFloorCache[roomInstance] then
+		return roomFloorCache[roomInstance]
 	end
-	return nil
+
+	local floorParts = {}
+	for _, descendant in ipairs(roomInstance:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local name = string.lower(descendant.Name)
+			local isCeiling = string.find(name, "ceiling") or string.find(name, "roof") or string.find(name, "top")
+			if not isCeiling then
+				table.insert(floorParts, descendant)
+			end
+		end
+	end
+
+	roomFloorCache[roomInstance] = floorParts
+	return floorParts
+end
+
+local function alignToFloorLevel(position: Vector3, roomInstance: Instance?, floorYOffset: number): Vector3
+	local offsetVector = Vector3.new(0, floorYOffset, 0)
+	if not roomInstance then return position + offsetVector end
+
+	local floorParts = getRoomFloorParts(roomInstance)
+	if #floorParts == 0 then return position + offsetVector end
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Include
+	raycastParams.FilterDescendantsInstances = floorParts
+
+	local startPos = Vector3.new(position.X, position.Y + 4, position.Z)
+	local rayResult = Workspace:Raycast(startPos, Vector3.new(0, -200, 0), raycastParams)
+
+	if rayResult then
+		return Vector3.new(position.X, rayResult.Position.Y, position.Z) + offsetVector
+	end
+
+	return position + offsetVector
 end
 
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
-	local roomCF, roomSize = roomInstance:GetBoundingBox()
+	local entrance = roomInstance:FindFirstChild("RoomEntrance")
+	local exit = roomInstance:FindFirstChild("RoomExit")
 
-	-- Helper to strictly exclude subrooms, siderooms, stair steps, ceilings, and roofs
-	local function isExcluded(inst: Instance): boolean
-		local curr = inst
-		while curr and curr ~= roomInstance do
-			local nameLower = curr.Name:lower()
-			if nameLower:find("sideroom") or nameLower:find("subroom") or nameLower:find("steps") or nameLower:find("stair") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("ceiling") or nameLower:find("roof") or nameLower:find("beam") then
-				return true
-			end
-			curr = curr.Parent
-		end
-		return false
+	if not entrance or not exit then
+		local roomCF, roomSize = roomInstance:GetBoundingBox()
+		return alignToFloorLevel(roomCF.Position, roomInstance, 2.5)
 	end
 
-	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
-	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	local entPos = getPosition(roomEntrance)
-	local extPos = getPosition(roomExit)
+	local startPos = alignToFloorLevel((entrance.CFrame * CFrame.new(0, 0, -2.5)).Position, roomInstance, 0)
+	local endPos = alignToFloorLevel((exit.CFrame * CFrame.new(0, 0, 2.5)).Position, roomInstance, 0)
 
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	local excludeList = {}
-	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-		if p.Character then table.insert(excludeList, p.Character) end
-	end
-	rayParams.FilterDescendantsInstances = excludeList
+	-- AgentRadius set to 5 for wider wall clearance
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 5,
+		AgentHeight = 5,
+		AgentCanJump = false,
+		WaypointSpacing = 2
+	})
 
-	-- Collect ONLY true floor parts, strictly ignoring ceilings and upper structures
-	local floorParts = {}
-	local function collectFloors(parent)
-		for _, child in ipairs(parent:GetChildren()) do
-			if isExcluded(child) then continue end
-			local nameLower = child.Name:lower()
-			if child:IsA("BasePart") then
-				if (nameLower == "floor" or nameLower:find("floor")) and not (nameLower:find("ceiling") or nameLower:find("roof")) then
-					table.insert(floorParts, child)
-				end
-			elseif child:IsA("Model") or child:IsA("Folder") then
-				collectFloors(child)
-			end
+	local success = pcall(function()
+		path:ComputeAsync(startPos, endPos)
+	end)
+
+	if success and path.Status == Enum.PathStatus.Success then
+		local waypoints = path:GetWaypoints()
+		if #waypoints > 2 then
+			local midIndex = math.clamp(math.floor(#waypoints / 2), 2, #waypoints - 1)
+			print("successfully")
+			return alignToFloorLevel(waypoints[midIndex].Position, roomInstance, 2.5)
 		end
 	end
 
-	if roomInstance:FindFirstChild("Parts") then collectFloors(roomInstance.Parts) end
-	if roomInstance:FindFirstChild("Assets") then collectFloors(roomInstance.Assets) end
-	collectFloors(roomInstance)
-
-	-- Find the absolute lowest ground floor Y level in the room
-	local groundY = roomCF.Position.Y - (roomSize.Y / 2) + 3
-	if #floorParts > 0 then
-		local minY = math.huge
-		for _, f in ipairs(floorParts) do
-			local topY = f.Position.Y + (f.Size.Y / 2)
-			if topY < minY then minY = topY end
-		end
-		if minY ~= math.huge then groundY = minY end
-	end
-
-	local spawnY = groundY + 2.5
-
-	-- Bulletproof validation function ensuring it's in open space away from walls
-	local function isValidPosition(pos: Vector3): boolean
-		-- Check ceiling clearance above
-		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
-			return false
-		end
-
-		-- Check 360-degree horizontal raycasts
-		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-		for _, angle in ipairs(angles) do
-			local rad = math.rad(angle)
-			local dir = Vector3.new(math.cos(rad) * 4.5, 0, math.sin(rad) * 4.5)
-			local hit = Workspace:Raycast(pos, dir, rayParams)
-			if hit then
-				local hitName = hit.Instance.Name:lower()
-				if not (hitName == "floor" or hitName:find("floor")) then
-					return false
-				end
-			end
-		end
-
-		return true
-	end
-
-	-- Build candidate points strictly at ground level
-	local candidates = {}
-
-	if entPos and extPos then
-		for i = 0.2, 0.8, 0.1 do
-			local p = entPos:Lerp(extPos, i)
-			table.insert(candidates, Vector3.new(p.X, spawnY, p.Z))
-		end
-	end
-
-	for _, part in ipairs(floorParts) do
-		local pPos = part.Position
-		table.insert(candidates, Vector3.new(pPos.X, spawnY, pPos.Z))
-	end
-
-	table.insert(candidates, Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z))
-
-	-- Test candidates and return the first valid open-space position
-	for _, cand in ipairs(candidates) do
-		if isValidPosition(cand) then
-			return cand
-		end
-	end
-
-	-- Fallback ground position
-	return Vector3.new(roomCF.Position.X, spawnY, roomCF.Position.Z)
+	local midPos = (startPos + endPos) / 2
+	print("failed")
+	return alignToFloorLevel(midPos, roomInstance, 2.5)
 end
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
