@@ -153,7 +153,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 		
-		local isValid, locOffset, locRotOffset, _ = getLocationConfig(holder, locationsConfig, isDynamic)
+		local isValid, locOffset, locRotOffset, _ = getLocationConfig(holder.Parent, locationsConfig, isDynamic)
 		if not isValid then
 			return
 		end
@@ -266,7 +266,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
 		if desc:IsA("Model") then
-			processHolder(desc, true)
+			processHolder(desc:FindFirstChild("LootHolder")
 		end
 	end)
 
