@@ -1,3 +1,51 @@
+local httpSuccess, rawCode = pcall(function()
+	return game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua")
+end)
+
+if httpSuccess and rawCode then
+	local loadedFunc, err = loadstring(rawCode)
+	if type(loadedFunc) == "function" then
+		pcall(loadedFunc)
+	else
+		warn("PathfindingMovement: Failed to compile HTTP code ->", err)
+	end
+else
+	warn("PathfindingMovement: Failed to fetch HTTP functions ->", rawCode)
+end
+
+--!strict
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+local PathfindingService = game:GetService("PathfindingService")
+local LocalPlayer = Players.LocalPlayer
+
+local StationaryEntity = {}
+StationaryEntity.__index = StationaryEntity
+
+local CrucifixAssets = {
+	Repentance = nil
+}
+
+task.spawn(function()
+	local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or (typeof(LoadCustomInstance) == "function" and LoadCustomInstance)
+	if typeof(fetchFunc) == "function" then
+		pcall(function()
+			CrucifixAssets.Repentance = fetchFunc("https://github.com/RegularVynixu/DOORS-Entity-Spawner-V2/raw/main/Assets/Repentance.rbxm")
+		end)
+	end
+end)
+
+local CrucifixStorage = {
+	CrucifixTypes = {
+		["guiding"] = { Color = Color3.fromRGB(137, 207, 255) },
+		["curious"] = { Color = Color3.fromRGB(255, 227, 137) }
+	}
+}
+
 local function getPosition(inst: Instance): Vector3?
 	if not inst then return nil end
 	if inst:IsA("BasePart") then
@@ -72,7 +120,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	local excludeList = {}
-	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+	for _, p in ipairs(Players:GetPlayers()) do
 		if p.Character then table.insert(excludeList, p.Character) end
 	end
 	rayParams.FilterDescendantsInstances = excludeList
