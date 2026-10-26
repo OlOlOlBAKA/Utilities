@@ -130,7 +130,8 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	local defaultRotOffset = config.RotationOffset or Vector3.new(0, 0, 0)
 	local promptSettings = config.Prompt or {}
 	local callbacks = config.callbacks or {}
-	local spawnChance = config.SpawnChance or 100
+	local spawnChance = config.SpawnChance or 10
+	local MaxChance = config.MaxChance or 100
 
 	local processedHolders = {}
 	local staticSpawned = false -- Enforces 1 static item max per room for tables/walls
@@ -162,7 +163,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 		processedHolders[holder] = true
 
-		if math.random(1, 100) > spawnChance then
+		if math.random(1, MaxChance) > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
 			return
 		end
