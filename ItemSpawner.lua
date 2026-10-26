@@ -19,85 +19,76 @@ local Workspace = game:GetService("Workspace")
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function with strict LootHolder vs Holder enforcement & zero false positives
-local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
+-- Helper function using model-based keyword checks & strict part name enforcement
+local function getLocationConfig(model: Model, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
 	if not locationsConfig then
 		return true, nil, nil, nil
 	end
 
-	local holderNameLower = holder.Name:lower()
+	local model = model.Name:lower()
 	local matchedType = nil
 	local matchedConfig = nil
 
-	-- Walk up ancestry from holder
-	local current = holder
-	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
-		local nameLower = current.Name:lower()
+	-- Walk up ancestry to find the model containing the keyword
+	while model and model ~= Workspace and model ~= game.ReplicatedStorage do
+		local nameLower = model.Name:lower()
 
-		-- Check Table ancestry
-		if nameLower:find("table") and locationsConfig["table"] and locationsConfig["table"].Enabled ~= false then
-			if holderNameLower == "lootholder" then
+		if nameLower:find("onthewall") then
+			if model:FindFirstChild("Holder") then
+				matchedType = "onthewall"
+				matchedConfig = locationsConfig["onthewall"] or locationsConfig["wall"]
+				break
+			else
+				-- Reject if an onthewall model's part is not named "holder"
+				return false, nil, nil, nil
+			end
+		elseif nameLower:find("table") then
+			if model:FindFirstChild("LootHolder") then
 				matchedType = "table"
 				matchedConfig = locationsConfig["table"]
 				break
 			else
-				-- If it's a table but uses "Holder" instead of "LootHolder", strictly reject it!
+				-- Strictly reject any table part named "Holder"
 				return false, nil, nil, nil
 			end
-		end
-
-		-- Check Drawer ancestry
-		if nameLower:find("drawer") and locationsConfig["drawer"] and locationsConfig["drawer"].Enabled ~= false then
-			if holderNameLower == "lootholder" then
+		elseif nameLower:find("drawer") then
+			if model:FindFirstChild("LootHolder") then
 				matchedType = "drawer"
 				matchedConfig = locationsConfig["drawer"]
 				break
 			else
 				return false, nil, nil, nil
 			end
-		end
-
-		-- Check Chest ancestry
-		if nameLower:find("chest") and locationsConfig["chest"] and locationsConfig["chest"].Enabled ~= false then
-			if holderNameLower == "lootholder" then
-				matchedType = "chest"
-				matchedConfig = locationsConfig["chest"]
+		elseif nameLower:find("chestbox") or nameLower:find("chest") then
+			if model:FindFirstChild("LootHolder") then
+				matchedType = "chestbox"
+				matchedConfig = locationsConfig["chestbox"] or locationsConfig["chest"]
 				break
 			else
 				return false, nil, nil, nil
 			end
+			task.wait()
 		end
-
-		-- Check Wall ancestry
-		if (nameLower:find("wall") or nameLower:find("holder")) and locationsConfig["wall"] and locationsConfig["wall"].Enabled ~= false then
-			if holderNameLower == "holder" then
-				matchedType = "wall"
-				matchedConfig = locationsConfig["wall"]
-				break
-			end
-		end
-
-		current = current.Parent
 	end
 
-	-- Standalone wall fallback (only if strictly named "holder" and not part of a furniture piece)
-	if not matchedType and holderNameLower == "holder" and locationsConfig["wall"] and locationsConfig["wall"].Enabled ~= false then
-		matchedType = "wall"
-		matchedConfig = locationsConfig["wall"]
+	-- Fallback for standalone wall holder parts
+	if not matchedType and model:FindFirstChild("Holder") then
+		matchedType = "onthewall"
+		matchedConfig = locationsConfig["onthewall"] or locationsConfig["wall"]
 	end
 
-	if not matchedConfig or type(matchedConfig) ~= "table" then
+	if not matchedConfig or type(matchedConfig) ~= "table" or matchedConfig.Enabled == false then
 		return false, nil, nil, nil
 	end
 
 	-- Enforce scan separation rules:
-	-- Drawers & chests must ONLY be processed dynamically at runtime via DescendantAdded
-	if (matchedType == "drawer" or matchedType == "chest") and not isDynamic then
+	-- Drawers & chestboxes must ONLY be processed dynamically at runtime via DescendantAdded
+	if (matchedType == "drawer" or matchedType == "chestbox" or matchedType == "chest") and not isDynamic then
 		return false, nil, nil, nil
 	end
 
-	-- Tables & walls must ONLY be processed statically on room load via GetDescendants
-	if (matchedType == "table" or matchedType == "wall") and isDynamic then
+	-- Tables & onthewall must ONLY be processed statically on room load via GetDescendants
+	if (matchedType == "table" or matchedType == "onthewall" or matchedType == "wall") and isDynamic then
 		return false, nil, nil, nil
 	end
 
@@ -174,7 +165,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- For static items (tables and walls), ensure only 1 spawns per room on load
+		-- For static items (tables and onthewall), ensure only 1 spawns per room on load
 		if not isDynamic then
 			if staticSpawned then return end
 			staticSpawned = true
@@ -263,16 +254,18 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	-- 1. Static Scan: Process pre-existing tables and walls on room load using GetDescendants
+	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if desc:IsA("BasePart") then
-			processHolder(desc, false)
+		if desc:IsA("Model") and desc.Name:lower():find("onthewall") then
+			processHolder(desc:FindFirstChild("Holder"), false)
+		elseif desc:IsA("Model") and desc.Name:lower():find("table") then
+			processHolder(desc:FindFirstChild("LootHolder"), false)
 		end
 	end
 
-	-- 2. Dynamic Scan: Listen for drawer and chest loot holders added at runtime via DescendantAdded
+	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
-		if desc:IsA("BasePart") then
+		if desc:IsA("Model") then
 			processHolder(desc, true)
 		end
 	end)
