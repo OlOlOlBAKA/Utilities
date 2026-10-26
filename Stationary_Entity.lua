@@ -137,7 +137,7 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 			local floorRay = Workspace:Raycast(rayStart, Vector3.new(0, -roomSize.Y - 20, 0), rayParams)
 
 			if floorRay then
-				local candidatePos = floorRay.Position + Vector3.new(0, 2.5, 0) -- Fixed torso height offset (prevents floating and floor clipping)
+				local candidatePos = Vector3.new(centerX, minY + 2.5, centerZ)
 				if isValidOpenSpace(candidatePos) then
 					return candidatePos
 				end
