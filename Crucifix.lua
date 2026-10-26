@@ -75,6 +75,7 @@ local itemConfig = {
                     asset.Name = "Handle"
                     asset.Parent = tool
                 end
+				task.wait(0.1)
                 tool:AddTag("Crucifix")
                 local char = LocalPlayer.Character
                 tool.Parent = char
