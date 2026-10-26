@@ -20,21 +20,22 @@ local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
 -- Helper function using model-based keyword checks & strict part name enforcement
-local function getLocationConfig(model: Model, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
+local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?, string?)
 	if not locationsConfig then
 		return true, nil, nil, nil
 	end
 
-	local model = model.Name:lower()
+	local holderNameLower = holder.Name:lower()
 	local matchedType = nil
 	local matchedConfig = nil
 
 	-- Walk up ancestry to find the model containing the keyword
-	while model and model ~= Workspace and model ~= game.ReplicatedStorage do
-		local nameLower = model.Name:lower()
+	local current = holder.Parent
+	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
+		local nameLower = current.Name:lower()
 
 		if nameLower:find("onthewall") then
-			if model:FindFirstChild("Holder") then
+			if holderNameLower == "holder" then
 				matchedType = "onthewall"
 				matchedConfig = locationsConfig["onthewall"] or locationsConfig["wall"]
 				break
@@ -43,7 +44,7 @@ local function getLocationConfig(model: Model, locationsConfig: {[string]: any}?
 				return false, nil, nil, nil
 			end
 		elseif nameLower:find("table") then
-			if model:FindFirstChild("LootHolder") then
+			if holderNameLower == "lootholder" then
 				matchedType = "table"
 				matchedConfig = locationsConfig["table"]
 				break
@@ -52,7 +53,7 @@ local function getLocationConfig(model: Model, locationsConfig: {[string]: any}?
 				return false, nil, nil, nil
 			end
 		elseif nameLower:find("drawer") then
-			if model:FindFirstChild("LootHolder") then
+			if holderNameLower == "lootholder" then
 				matchedType = "drawer"
 				matchedConfig = locationsConfig["drawer"]
 				break
@@ -60,19 +61,20 @@ local function getLocationConfig(model: Model, locationsConfig: {[string]: any}?
 				return false, nil, nil, nil
 			end
 		elseif nameLower:find("chestbox") or nameLower:find("chest") then
-			if model:FindFirstChild("LootHolder") then
+			if holderNameLower == "lootholder" then
 				matchedType = "chestbox"
 				matchedConfig = locationsConfig["chestbox"] or locationsConfig["chest"]
 				break
 			else
 				return false, nil, nil, nil
 			end
-			task.wait()
 		end
+
+		current = current.Parent
 	end
 
 	-- Fallback for standalone wall holder parts
-	if not matchedType and model:FindFirstChild("Holder") then
+	if not matchedType and holderNameLower == "holder" then
 		matchedType = "onthewall"
 		matchedConfig = locationsConfig["onthewall"] or locationsConfig["wall"]
 	end
@@ -153,7 +155,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 		
-		local isValid, locOffset, locRotOffset, _ = getLocationConfig(holder.Parent, locationsConfig, isDynamic)
+		local isValid, locOffset, locRotOffset, _ = getLocationConfig(holder, locationsConfig, isDynamic)
 		if not isValid then
 			return
 		end
@@ -256,17 +258,15 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if desc:IsA("Model") and desc.Name:lower():find("onthewall") then
-			processHolder(desc:FindFirstChild("Holder"), false)
-		elseif desc:IsA("Model") and desc.Name:lower():find("table") then
-			processHolder(desc:FindFirstChild("LootHolder"), false)
+		if desc:IsA("BasePart") then
+			processHolder(desc, false)
 		end
 	end
 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
-		if desc:IsA("Model") then
-			processHolder(desc:FindFirstChild("LootHolder"), true)
+		if desc:IsA("BasePart") then
+			processHolder(desc, true)
 		end
 	end)
 
