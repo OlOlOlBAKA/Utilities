@@ -19,27 +19,38 @@ local Workspace = game:GetService("Workspace")
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
 
--- Helper function to verify if a LootHolder's parent matches allowed locations and dynamic rules
-local function isValidLocation(holder: BasePart, allowedLocations: {string}?, isDynamic: boolean): boolean
-	if not allowedLocations or #allowedLocations == 0 then
-		return true
+-- Helper function with ancestry keyword matching for both LootHolders and Wall Models/Holders
+local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: any}?, isDynamic: boolean): (boolean, Vector3?, Vector3?)
+	if not locationsConfig then
+		return true, nil, nil
 	end
 
-	local current = holder.Parent
+	local current = holder
 	while current and current ~= Workspace and current ~= game.ReplicatedStorage do
-		local name = current.Name
-		for _, allowed in ipairs(allowedLocations) do
-			if name == allowed or name:find(allowed) then
-				-- If it's a DrawerContainer, ChestBox, or ChestBoxLocked found via initial GetDescendants (not dynamic), block it
-				if (allowed == "DrawerContainer" or allowed == "ChestBox" or allowed == "ChestBoxLocked") and not isDynamic then
-					return false
+		local nameLower = current.Name:lower()
+		
+		for locName, locConfig in pairs(locationsConfig) do
+			local locKeyLower = locName:lower()
+			
+			-- Match via ancestry keyword (e.g., wall model name, drawer folder name, or part name being "Holder")
+			if nameLower:find(locKeyLower) or (holder.Name == "Holder" and (locKeyLower:find("wall") or locKeyLower:find("holder"))) then
+				if type(locConfig) == "table" then
+					if locConfig.Enabled == false then
+						return false, nil, nil
+					end
+					
+					-- Block pre-existing drawers/chests found via initial GetDescendants
+					if (locKeyLower:find("drawer") or locKeyLower:find("chest")) and not isDynamic then
+						return false, nil, nil
+					end
+					
+					return true, locConfig.Offset, locConfig.RotationOffset
 				end
-				return true
 			end
 		end
 		current = current.Parent
 	end
-	return false
+	return false, nil, nil
 end
 
 function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?)
@@ -70,9 +81,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	local allowedLocations = config.AllowedLocations
-	local offset = config.Offset or Vector3.new(0, 0.2, 0)
-	local rotOffset = config.RotationOffset or Vector3.new(0, 0, 0)
+	local locationsConfig = config.Locations
+	local defaultOffset = config.Offset or Vector3.new(0, 0.2, 0)
+	local defaultRotOffset = config.RotationOffset or Vector3.new(0, 0, 0)
 	local promptSettings = config.Prompt or {}
 	local callbacks = config.callbacks or {}
 	local spawnChance = config.SpawnChance or 100
@@ -100,12 +111,12 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if hasSpawned then return end
 		if processedHolders[holder] then return end
 		
-		-- Prevent spawning if this specific LootHolder was already used
 		if holder:GetAttribute("IsUsed") == true then
 			return
 		end
 		
-		if not isValidLocation(holder, allowedLocations, isDynamic) then
+		local isValid, locOffset, locRotOffset = getLocationConfig(holder, locationsConfig, isDynamic)
+		if not isValid then
 			return
 		end
 
@@ -115,7 +126,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			return
 		end
 
-		-- Mark this specific LootHolder location as used
 		holder:SetAttribute("IsUsed", true)
 
 		hasSpawned = true
@@ -127,11 +137,14 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		itemModel.Parent = holder.Parent or Workspace
 		table.insert(spawnedItems, itemModel)
 
-		local finalCFrame = holder.CFrame + offset
+		local finalOffset = locOffset or defaultOffset
+		local finalRotOffset = locRotOffset or defaultRotOffset
+
+		local finalCFrame = holder.CFrame + finalOffset
 		local rotationCFrame = CFrame.Angles(
-			math.rad(rotOffset.X),
-			math.rad(rotOffset.Y),
-			math.rad(rotOffset.Z)
+			math.rad(finalRotOffset.X),
+			math.rad(finalRotOffset.Y),
+			math.rad(finalRotOffset.Z)
 		)
 
 		if itemModel:IsA("Model") then
@@ -147,7 +160,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			targetPart = itemModel
 		end
 
-		-- Weld the item to the LootHolder for smooth movement
+		-- Weld the item to the holder for smooth movement/locking
 		if targetPart and targetPart:IsA("BasePart") then
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = targetPart
@@ -201,17 +214,17 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 	end
 
-	-- 1. Scan pre-existing LootHolders instantly (isDynamic = false)
+	-- 1. Scan pre-existing LootHolders and Wall Holders instantly (isDynamic = false)
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
+		if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
 			processHolder(desc, false)
 		end
 	end
 
-	-- 2. Listen for dynamic LootHolders created at runtime (isDynamic = true)
+	-- 2. Listen for dynamic LootHolders/Holders created at runtime (isDynamic = true)
 	if not hasSpawned then
 		connection = roomInstance.DescendantAdded:Connect(function(desc)
-			if not hasSpawned and desc.Name == "LootHolder" and desc:IsA("BasePart") then
+			if not hasSpawned and (desc.Name == "LootHolder" or desc.Name == "Holder") and desc:IsA("BasePart") then
 				processHolder(desc, true)
 			end
 		end)
