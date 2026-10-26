@@ -48,6 +48,49 @@ local CrucifixStorage = {
 
 local roomFloorCache = setmetatable({}, { __mode = "k" })
 
+local keywordList = {
+	"door",
+	"gate",
+	"board",
+	"cart",
+}
+
+local function setupRoomPathfinding(parentInstance: Instance)
+	if not parentInstance then return end
+
+	-- Scan descendants for models containing any target keyword
+	for _, descendant in ipairs(parentInstance:GetDescendants()) do
+		if descendant:IsA("Model") then
+			local nameLower = descendant.Name:lower()
+			local isMatch = false
+			
+			-- Check if the model name contains any keyword from the list
+			for _, keyword in ipairs(keywordList) do
+				if string.find(nameLower, keyword) then
+					isMatch = true
+					break
+				end
+			end
+
+			if isMatch then
+				-- Configure all parts inside this matched model
+				for _, p in ipairs(descendant:GetDescendants()) do
+					if p:IsA("BasePart") then
+						p.CanQuery = false
+						if not p:FindFirstChild("PathfindingModifier") then
+							local skip = Instance.new("PathfindingModifier")
+							skip.Label = "Skip"
+							skip.PassThrough = true
+							skip.Parent = p
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+
 local function getRoomFloorParts(roomInstance: Instance): { BasePart }
 	if roomFloorCache[roomInstance] then
 		return roomFloorCache[roomInstance]
@@ -92,6 +135,8 @@ end
 local function getRoomCenter(roomInstance: Instance): Vector3?
 	if not roomInstance or not roomInstance:IsA("Model") then return nil end
 
+	setupRoomPathfinding(workspace.CurrentRooms)
+	
 	local entrance = roomInstance:FindFirstChild("RoomEntrance")
 	local exit = roomInstance:FindFirstChild("RoomExit")
 
