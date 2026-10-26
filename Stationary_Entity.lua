@@ -63,15 +63,90 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 
 	local roomCF, roomSize = roomInstance:GetBoundingBox()
 	
-	-- Guaranteed fallback Y height to prevent nil errors
-	local safeMinY = roomCF.Position.Y - (roomSize.Y / 2) + 3
+	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
+	local roomExit = roomInstance:FindFirstChild("RoomExit")
+	local entPos = getPosition(roomEntrance)
+	local extPos = getPosition(roomExit)
 
-	-- Try to find the true floor Y level safely
+	-- Calculate target XZ from room entrance/exit midpoint or room center
+	local targetXZ
+	if entPos and extPos then
+		local mid = (entPos + extPos) / 2
+		targetXZ = Vector2.new(mid.X, mid.Z)
+	else
+		targetXZ = Vector2.new(roomCF.Position.X, roomCF.Position.Z)
+	end
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	-- Only exclude players so that walls, pillars, and room geometry correctly block invalid spawns
+	local excludeList = {}
+	for _, p in ipairs(Workspace:GetPlayers()) do
+		if p.Character then
+			table.insert(excludeList, p.Character)
+		end
+	end
+	rayParams.FilterDescendantsInstances = excludeList
+
+	local function getValidSpawnAt(xz: Vector2): Vector3?
+		-- Cast down from high up to find the true floor surface
+		local rayStart = Vector3.new(xz.X, roomCF.Position.Y + (roomSize.Y / 2), xz.Y)
+		local rayResult = Workspace:Raycast(rayStart, Vector3.new(0, -roomSize.Y - 30, 0), rayParams)
+
+		if not rayResult then return nil end
+
+		local floorPos = rayResult.Position
+		-- Ensure we hit a flat horizontal floor surface (Normal.Y >= 0.7) and not a wall
+		if rayResult.Normal.Y < 0.7 then return nil end
+
+		local spawnPos = Vector3.new(floorPos.X, floorPos.Y + 3, floorPos.Z)
+
+		-- Check overhead ceiling clearance
+		local ceilingCheck = Workspace:Raycast(spawnPos, Vector3.new(0, 8, 0), rayParams)
+		if ceilingCheck then return nil end
+
+		-- Check box collision to ensure no walls, pillars, or furniture overlap with the entity
+		local entityBoxSize = Vector3.new(4, 5, 4)
+		local partsInBox = Workspace:GetPartBoundsInBox(CFrame.new(spawnPos), entityBoxSize)
+		for _, part in ipairs(partsInBox) do
+			if part.CanCollide and not part.Parent:FindFirstChild("Humanoid") then
+				-- Hit a solid wall, pillar, or object!
+				return nil
+			end
+		end
+
+		return spawnPos
+	end
+
+	-- 1. Test the midpoint between entrance and exit first
+	local validPos = getValidSpawnAt(targetXZ)
+	if validPos then
+		return validPos
+	end
+
+	-- 2. If blocked, search outward in expanding spiral steps
+	local offsets = {}
+	for radius = 4, 16, 4 do
+		for angle = 0, 315, 45 do
+			local rad = math.rad(angle)
+			table.insert(offsets, Vector2.new(math.cos(rad) * radius, math.sin(rad) * radius))
+		end
+	end
+
+	for _, offset in ipairs(offsets) do
+		local testXZ = targetXZ + offset
+		local pos = getValidSpawnAt(testXZ)
+		if pos then
+			return pos
+		end
+	end
+
+	-- 3. Fallback: Scan floor parts in the room
 	local floorParts = {}
 	local function collectFloors(parent)
 		for _, child in ipairs(parent:GetChildren()) do
 			local nameLower = child.Name:lower()
-			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("stair") or nameLower:find("door") or nameLower:find("cubicle") or nameLower:find("office") then
+			if nameLower:find("subroom") or nameLower:find("closet") or nameLower:find("secret") or nameLower:find("side") or nameLower:find("cubicle") then
 				continue
 			end
 			if child:IsA("BasePart") and (nameLower == "floor" or nameLower:find("floor")) then
@@ -83,81 +158,17 @@ local function getRoomCenter(roomInstance: Instance): Vector3?
 	end
 	collectFloors(roomInstance)
 
-	if #floorParts > 0 then
-		local lowestY = math.huge
-		for _, part in ipairs(floorParts) do
-			local topY = part.Position.Y + (part.Size.Y / 2)
-			if topY < lowestY then lowestY = topY end
-		end
-		if lowestY ~= math.huge then
-			safeMinY = lowestY
+	for _, part in ipairs(floorParts) do
+		local pPos = part.Position
+		local pos = getValidSpawnAt(Vector2.new(pPos.X, pPos.Z))
+		if pos then
+			return pos
 		end
 	end
 
-	-- 1. Calculate the exact midpoint between RoomEntrance and RoomExit
-	local roomEntrance = roomInstance:FindFirstChild("RoomEntrance")
-	local roomExit = roomInstance:FindFirstChild("RoomExit")
-	local entPos = getPosition(roomEntrance)
-	local extPos = getPosition(roomExit)
-
-	local targetPos
-	if entPos and extPos then
-		local mid = (entPos + extPos) / 2
-		targetPos = Vector3.new(mid.X, safeMinY + 2.5, mid.Z)
-	else
-		targetPos = Vector3.new(roomCF.Position.X, safeMinY + 2.5, roomCF.Position.Z)
-	end
-
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = { roomInstance }
-
-	-- Clearance check function
-	local function isClear(pos: Vector3): boolean
-		-- Check vertical ceiling clearance
-		if Workspace:Raycast(pos, Vector3.new(0, 8, 0), rayParams) then
-			return false
-		end
-		-- Check 8 horizontal directions for pillars/walls
-		local angles = { 0, 45, 90, 135, 180, 225, 270, 315 }
-		for _, angle in ipairs(angles) do
-			local rad = math.rad(angle)
-			local dir = Vector3.new(math.cos(rad) * 5, 0, math.sin(rad) * 5)
-			if Workspace:Raycast(pos, dir, rayParams) then
-				return false
-			end
-		end
-		return true
-	end
-
-	-- 2. If the entrance-to-exit midpoint is completely clear, spawn there!
-	if isClear(targetPos) then
-		return targetPos
-	end
-
-	-- 3. If blocked (e.g., by a pillar or wall), search outward in clean offset steps around the midpoint
-	local offsets = {
-		Vector3.new(4, 0, 0), Vector3.new(-4, 0, 0),
-		Vector3.new(0, 0, 4), Vector3.new(0, 0, -4),
-		Vector3.new(4, 0, 4), Vector3.new(-4, 0, 4),
-		Vector3.new(4, 0, -4), Vector3.new(-4, 0, -4),
-		Vector3.new(8, 0, 0), Vector3.new(-8, 0, 0),
-		Vector3.new(0, 0, 8), Vector3.new(0, 0, -8),
-		Vector3.new(12, 0, 0), Vector3.new(-12, 0, 0),
-		Vector3.new(0, 0, 12), Vector3.new(0, 0, -12)
-	}
-
-	for _, offset in ipairs(offsets) do
-		local testPos = targetPos + offset
-		if isClear(testPos) then
-			return testPos
-		end
-	end
-
-	-- Final absolute fallback
-	return targetPos
+	-- Absolute last resort fallback
+	return Vector3.new(roomCF.Position.X, roomCF.Position.Y + 3, roomCF.Position.Z)
 end
-
 
 
 local function defaultCheckCrucifix(character: Model): (boolean, Tool?)
