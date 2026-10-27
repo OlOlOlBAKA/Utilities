@@ -166,7 +166,21 @@ local entityConfig = {
 		end,
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
-			canKill = false
+			local newEffect = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/BlinkCrucify.rbxm")
+			local model = handle.GetEntity()
+			local part = model.Main
+
+			for _,v in ipairs(part:GetChildren()) do
+				v:Destroy()
+			end
+
+			for _,v in ipairs(newEffect:GetChildren()) do
+				v.Parent = part
+				if v:IsA("Sound") then
+					v.TimePosition = 0
+					v:Play()
+				end
+			end
 		end
 	}
 }
