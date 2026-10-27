@@ -44,7 +44,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				-- Reject if an onthewall model's part is not named "holder"
 				return false, nil, nil, nil
 			end
-		if nameLower:find("floorloot") then
+		elseif nameLower:find("floorloot") then
 			if holderNameLower == "holder" then
 				matchedType = "floor"
 				matchedConfig = locationsConfig["floor"]
