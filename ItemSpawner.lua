@@ -68,6 +68,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				matchedConfig = locationsConfig["drawer"]
 				break
 			else
+				-- Strictly reject any drawer part named "Holder"
 				return false, nil, nil, nil
 			end
 		elseif nameLower:find("chestbox") or nameLower:find("chest") then
@@ -76,6 +77,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				matchedConfig = locationsConfig["chestbox"] or locationsConfig["chest"]
 				break
 			else
+				-- Strictly reject any chest part named "Holder"
 				return false, nil, nil, nil
 			end
 		elseif current:FindFirstChild("HiddenPlayer") then
@@ -91,19 +93,15 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 		current = current.Parent
 	end
 
-	-- Fallback for standalone wall holder parts
-
 	if not matchedConfig or type(matchedConfig) ~= "table" or matchedConfig.Enabled == false then
 		return false, nil, nil, nil
 	end
 
 	-- Enforce scan separation rules:
-	-- Drawers & chestboxes must ONLY be processed dynamically at runtime via DescendantAdded
 	if (matchedType == "drawer" or matchedType == "chestbox" or matchedType == "chest" or matchedType == "closet") and not isDynamic then
 		return false, nil, nil, nil
 	end
 
-	-- Tables & onthewall must ONLY be processed statically on room load via GetDescendants
 	if (matchedType == "table" or matchedType == "onthewall" or matchedType == "wall" or matchedType == "floor") and isDynamic then
 		return false, nil, nil, nil
 	end
@@ -111,7 +109,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 	return true, matchedConfig.Offset, matchedConfig.RotationOffset, matchedType
 end
 
-function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?, SeedNumber: Number)
+function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?, SeedNumber: number?)
 	config = config or {}
 	if not itemModel then
 		warn("[ItemSpawner] Failed to spawn: No item model provided.")
@@ -147,7 +145,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	local spawnChance = config.SpawnChance or 10
 	local MaxChance = config.MaxChance or 100
 
-	local rngNumber = Random.new(SeedNumber)
+	local rngNumber = SeedNumber and Random.new(SeedNumber) or Random.new()
 
 	local processedHolders = {}
 	local staticSpawned = false -- Enforces 1 static item max per room for tables/walls
@@ -165,7 +163,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		table.clear(processedHolders)
 	end
 
-	local function processHolder(holder: BasePart, isDynamic: boolean, rngResult: Number)
+	local function processHolder(holder: BasePart, isDynamic: boolean, rngResult: number?)
 		if processedHolders[holder] then return end
 		
 		if holder:GetAttribute("IsUsed") == true then
@@ -179,7 +177,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 		processedHolders[holder] = true
 
-		if not rngResult then rngResult = rngNumber:NextInteger(spawnChance, MaxChance) end
+		if not rngResult then 
+			rngResult = rngNumber:NextInteger(spawnChance, MaxChance) 
+		end
 
 		print(rngResult)
 		
@@ -269,7 +269,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 					actionsHandle.Destroy()
 				end
 			end)
-			cleanup()
 		end
 
 		if type(callbacks.OnSpawned) == "function" then
@@ -279,7 +278,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		local room = ReplicatedStorage.GameData.LatestRoom
+		local room = ReplicatedStorage:WaitForChild("GameData"):WaitForChild("LatestRoom")
 		if roomInstance.Name ~= tostring(room.Value) and roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
@@ -287,14 +286,13 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
-			
 			processHolder(desc, false, rngResult)
 		end
 	end
 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
-		local room = ReplicatedStorage.GameData.LatestRoom
+		local room = ReplicatedStorage:WaitForChild("GameData"):WaitForChild("LatestRoom")
 		if roomInstance.Name ~= tostring(room.Value) and roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
@@ -302,7 +300,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		end
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
-
 			processHolder(desc, true, rngResult)
 		end
 	end)
