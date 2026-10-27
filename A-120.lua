@@ -161,8 +161,8 @@ end)
                         actions.MoveTo(playerCharacter.PrimaryPart, {
                             Speed = 50,
                             ReachDistance = 2,
-                            HeightOffset = 3,
-						    Offset = Vector3.new(0,1,0),
+                            HeightOffset = 2,
+						    Offset = Vector3.new(0,0,-1),
                         })
                         --task.wait(0.1)
                         --actions.Resume(2)
