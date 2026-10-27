@@ -14,7 +14,7 @@ local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 
 local itemConfig = {
 	SpawnChance = 1,
-	MaxChance = 200,
+	MaxChance = 125,
 	
 	Locations = {
 		table = {
