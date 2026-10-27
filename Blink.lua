@@ -174,7 +174,7 @@ local entityConfig = {
 				v:Destroy()
 			end
 
-			for _,v in ipairs(newEffect:GetChildren()) do
+			for _,v in ipairs(newEffect.Main:GetChildren()) do
 				v.Parent = part
 				if v:IsA("Sound") then
 					v.TimePosition = 0
