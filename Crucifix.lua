@@ -54,8 +54,6 @@ local itemConfig = {
 		end,
 		
 		OnTriggered = function(player: Player, itemModel: Model | BasePart, handle: table)
-			print(player.Name, "picked up the item!")
-			handle.Destroy()
             local Players = game:GetService("Players")
             local LocalPlayer = Players.LocalPlayer
 			local backpack = LocalPlayer:WaitForChild("Backpack")
@@ -90,6 +88,9 @@ local itemConfig = {
                 end
                 tool:AddTag("Crucifix")
                 tool.Parent = backpack
+
+				print(player.Name, "picked up the item!")
+			    handle.Destroy()
             end
 		end
 	}
