@@ -130,6 +130,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if extracted and extracted:IsA("Instance") then
 			extracted.Parent = nil
 			itemModel:Destroy()
+			extracted.Name = itemModel.Name
 			itemModel = extracted
 		else
 			warn("[ItemSpawner] Tool provided but no valid Model or BasePart found inside it.")
@@ -180,8 +181,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if not rngResult then 
 			rngResult = rngNumber:NextInteger(spawnChance, MaxChance) 
 		end
-
-		print(rngResult)
 		
 		if rngResult > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
@@ -208,6 +207,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 			math.rad(finalRotOffset.Y),
 			math.rad(finalRotOffset.Z)
 		)
+		print(finalOffset)
 		local finalCFrame = holder.CFrame * CFrame.new(finalOffset) * rotationCFrame
 
 		if spawnedItem:IsA("Model") then
