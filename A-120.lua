@@ -189,6 +189,15 @@ end)
 					        v.TimePosition = 0
 					        v:Play()
 				        end
+				        if v:IsA("Attachment") then
+					        local face = v:FindFirstChildWhichIsA("ParticleEmitter") or v:FindFirstChild("ParticleEmitter1")
+					        if face then
+						        face.Size = NumberSequence.new({
+                                     NumberSequenceKeypoint.new(0, 3, 0.2),
+								     NumberSequenceKeypoint.new(1, 3, 0.0926)
+							    })
+					        end
+				        end
 			        end
 	            end,
 
