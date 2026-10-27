@@ -153,8 +153,11 @@ local entityConfig = {
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
-				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
+				if v:IsA("ParticleEmitter") then
 					v.Enabled = false
+				elseif v:IsA("PointLight") then
+					v.Range = math.floor(v.Range / 2)
+					v.Brightness = math.floor(v.Brightness / 1.5)
 				end
 			end
 			
@@ -308,8 +311,11 @@ task.spawn(function()
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
-				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
+				if v:IsA("ParticleEmitter") then
 					v.Enabled = false
+				elseif v:IsA("PointLight") then
+					v.Range = math.floor(v.Range / 2)
+					v.Brightness = math.floor(v.Brightness / 1.5)
 				end
 			end
 			
