@@ -1000,7 +1000,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			AgentRadius = 0.5,
 			AgentHeight = 1,
 			AgentCanJump = false,
-			WaypointSpacing = 5,
+			WaypointSpacing = 3,
 			Costs = {
 				Default = 1,
 				Skip = 1
