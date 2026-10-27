@@ -190,6 +190,7 @@ end)
 					        v:Play()
 				        end
 				        if v:IsA("Attachment") then
+					        v.Position = Vector3.new(0,3,0)
 					        local face = v:FindFirstChildWhichIsA("ParticleEmitter") or v:FindFirstChild("ParticleEmitter1")
 					        if face then
 						        face.Size = NumberSequence.new({
