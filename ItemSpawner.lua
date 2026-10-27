@@ -15,6 +15,7 @@ end
 
 --!strict
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ItemSpawner = {}
 ItemSpawner.__index = ItemSpawner
@@ -251,6 +252,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 					actionsHandle.Destroy()
 				end
 			end)
+			cleanup()
 		end
 
 		if type(callbacks.OnSpawned) == "function" then
@@ -260,7 +262,11 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		
+		if roomInstance.Name ~= tostring(ReplicatedStorage.GameData.LatestRoom.Value) then 
+			print("not current room") 
+			cleanup() 
+			return 
+		end
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
 			
@@ -270,6 +276,11 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
+		if roomInstance.Name ~= tostring(ReplicatedStorage.GameData.LatestRoom.Value) then 
+			print("not current room") 
+			cleanup() 
+			return 
+		end
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
 
