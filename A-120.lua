@@ -161,7 +161,7 @@ end)
                         actions.MoveTo(playerCharacter.PrimaryPart, {
                             Speed = 50,
                             ReachDistance = 2,
-                            HeightOffset = 1,
+                            HeightOffset = 3,
 						    Offset = Vector3.new(0,1,0),
                         })
                         --task.wait(0.1)
@@ -190,7 +190,6 @@ end)
 					        v:Play()
 				        end
 				        if v:IsA("Attachment") then
-					        v.Position = Vector3.new(0,3,0)
 					        local face = v:FindFirstChildWhichIsA("ParticleEmitter") or v:FindFirstChild("ParticleEmitter1")
 					        if face then
 						        face.Size = NumberSequence.new({
