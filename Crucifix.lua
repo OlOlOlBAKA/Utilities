@@ -39,7 +39,7 @@ local itemConfig = {
 		},
 		floor = { -- ONLY ARCHIVES FLOOR SUPPORTED
 			Enabled = true,
-			Offset = Vector3.new(0, -0.2, 0),
+			Offset = Vector3.new(0, -0.4, 0),
 			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
 		},
 		wall = {
@@ -54,14 +54,36 @@ local itemConfig = {
 	
 	Prompt = {
 		HoldDuration = 0,
-		MaxActivationDistance = 6,
+		MaxActivationDistance = 8,
 		RequiresLineOfSight = true,
 		KeyboardKeyCode = Enum.KeyCode.E,
 	},
 	
 	callbacks = {
 		OnSpawned = function(itemModel: Model | BasePart, room: Model, handle: table)
-			print("Item spawned successfully in room:", room.Name)
+			local itemHandle = handle.GetItem()
+			local holderPart = handle.GetHolder()
+			
+			local light = Instance.new("PointLight")
+			light.Brightness = 0.5
+			light.Color = Color3.fromRGB(255,245,234)
+			light.Range = 1.66
+			light.Parent = itemHandle
+			
+			local sound = Instance.new("Sound")
+			sound.SoundId = "rbxassetid://18125587966"
+			sound.PlaybackSpeed = 1
+			sound.RollOffMaxDistance = 60
+			sound.RollOffMinDistance = 7
+			sound.Volume = 0.5
+			sound.RollOffMode = Enum.RollOffMode.Linear
+			sound.Parent = holderPart
+
+			local distortion = Instance.new("DistortionSoundEffect")
+			distortion.Level = 0.44
+			distortion.Parent = sound
+
+			sound:Play()
 		end,
 		
 		OnTriggered = function(player: Player, itemModel: Model | BasePart, handle: table)
