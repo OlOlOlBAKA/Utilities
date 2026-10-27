@@ -997,8 +997,8 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 		end
 
 		local path = PathfindingService:CreatePath({
-			AgentRadius = 0.5,
-			AgentHeight = 1,
+			AgentRadius = 1,
+			AgentHeight = 2.5,
 			AgentCanJump = false,
 			WaypointSpacing = 3,
 			Costs = {
