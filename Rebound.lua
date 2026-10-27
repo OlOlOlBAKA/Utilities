@@ -254,7 +254,8 @@ task.spawn(function()
 
                 Callbacks = {
                     OnSpawned = function(model, actions)
-						if reboundsLeft == 1 then
+						if reboundsLeft == 0 then
+							print("Last Rebound")
 							model:SetAttribute("LastRebound", true)
 						end
                         isPresent = true
