@@ -167,6 +167,9 @@ local entityConfig = {
 
 		OnCrucifixion = function(entity: Model, character: Model, handle: table)
 			canKill = false
+			local model = handle.GetEntity()
+			local part = model.Main
+			part.Whisper.Volume = 2
 		end
 	}
 }
