@@ -162,6 +162,8 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		processedHolders[holder] = true
 
 		if not rngResult then rngResult = rngNumber:NextInteger(spawnChance, MaxChance) end
+
+		print(rngResult)
 		
 		if rngResult > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
@@ -261,8 +263,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
-
-	        print(rngResult)
 			
 			processHolder(desc, false, rngResult)
 		end
@@ -273,7 +273,6 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		if desc:IsA("BasePart") then
 			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
 
-	        print(rngResult)
 			processHolder(desc, true, rngResult)
 		end
 	end)
