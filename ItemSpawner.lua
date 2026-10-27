@@ -161,7 +161,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 		processedHolders[holder] = true
 
-		if not rngResult then rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
+		if not rngResult then rngResult = rngNumber:NextInteger(spawnChance, MaxChance) end
 		
 		if rngResult > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
