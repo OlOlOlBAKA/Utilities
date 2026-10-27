@@ -178,6 +178,17 @@ end)
                 OnCrucifixion = function(model: Model | BasePart, actions)
 		            model:SetAttribute("Crucified", true)
 			        model:SetAttribute("Despawned", true)
+			        local ce = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/A120Crucify.rbxm")
+			        local part = model.Main
+			        for _,v in ipairs(part:GetChildren()) do
+				        v:Destroy()
+			        end
+			        for _,v in ipairs(ce:GetChildren()) do
+				        v.Parent = part
+				        if v:IsA("Sound") then
+					        v:Play()
+				        end
+			        end
 	            end,
 
                 OnDespawn = function(model, actions)
