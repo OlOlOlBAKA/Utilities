@@ -262,8 +262,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
-		local room = ReplicatedStorage.GameData.LatestRoom.Value
-		if roomInstance.Name ~= tostring(room) or roomInstance.Name ~= tostring(room - 1) then
+		local room = ReplicatedStorage.GameData.LatestRoom
+		print(room.Value)
+		if roomInstance.Name ~= tostring(room.Value) or roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
 			return 
@@ -277,8 +278,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
-		local room = ReplicatedStorage.GameData.LatestRoom.Value
-		if roomInstance.Name ~= tostring(room) or roomInstance.Name ~= tostring(room - 1) then
+		local room = ReplicatedStorage.GameData.LatestRoom
+		print(room.Value)
+		if roomInstance.Name ~= tostring(room.Value) or roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
 			return 
