@@ -93,7 +93,7 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 	return true, matchedConfig.Offset, matchedConfig.RotationOffset, matchedType
 end
 
-function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?)
+function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: table?, SeedNumber: Number)
 	config = config or {}
 	if not itemModel then
 		warn("[ItemSpawner] Failed to spawn: No item model provided.")
@@ -159,7 +159,9 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 		processedHolders[holder] = true
 
-		if math.random(1, MaxChance) > spawnChance then
+		local rngNumber = Random.new(SeedNumber)
+
+		if rngNumber:NextInteger(1, MaxChance) > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
 			return
 		end
