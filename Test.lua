@@ -265,10 +265,6 @@ local function spawnEntity(entityName, roomNumber)
                         registerDespawn("Rebound")
                         break
                     end
-                else
-                    print("[Hardcore Mode] Rebound model missing/despawned. Safety unlocking.")
-                    registerDespawn("Rebound")
-                    break
                 end
             end
         end)
