@@ -98,6 +98,7 @@ local entityConfig = {
                 task.wait(15)
                 if ReboundColor then ReboundColor:Destroy() end
             end)
+			Instance.new("Sound", model.ReboundNew).Name = "Rebound_Ratio"
             model.Rebound_Cue2.Volume = 0.5
 			model.Rebound_Cue.Volume = model.Rebound_Cue.Volume - 1
             model.Rebound_Cue:Play()
