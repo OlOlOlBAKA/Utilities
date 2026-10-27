@@ -149,7 +149,7 @@ local entityConfig = {
 					v:Stop()
 				end
 			end
-			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
 				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
 					v.Enabled = false
 				end
@@ -301,7 +301,7 @@ task.spawn(function()
 					v:Stop()
 				end
 			end
-			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
 				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
 					v.Enabled = false
 				end
