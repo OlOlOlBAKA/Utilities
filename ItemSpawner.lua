@@ -264,7 +264,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
 		local room = ReplicatedStorage.GameData.LatestRoom
 		print(room.Value)
-		if roomInstance.Name ~= tostring(room.Value) or roomInstance.Name ~= tostring(room.Value - 1) then
+		if roomInstance.Name ~= tostring(room.Value) and roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
 			return 
@@ -280,7 +280,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
 		local room = ReplicatedStorage.GameData.LatestRoom
 		print(room.Value)
-		if roomInstance.Name ~= tostring(room.Value) or roomInstance.Name ~= tostring(room.Value - 1) then
+		if roomInstance.Name ~= tostring(room.Value) and roomInstance.Name ~= tostring(room.Value - 1) then
 			print("not current room") 
 			cleanup() 
 			return 
