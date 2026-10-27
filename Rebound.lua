@@ -149,6 +149,7 @@ local entityConfig = {
 					v:Stop()
 				elseif v:IsA("Sound") then
 					v.Volume = v.Volume * 2
+					v.RollOffMaxDistance = 150
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
@@ -303,6 +304,7 @@ task.spawn(function()
 					v:Stop()
 				elseif v:IsA("Sound") then
 					v.Volume = v.Volume * 2
+					v.RollOffMaxDistance = 150
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
