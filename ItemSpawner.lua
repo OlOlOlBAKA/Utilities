@@ -129,6 +129,8 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 	local spawnChance = config.SpawnChance or 10
 	local MaxChance = config.MaxChance or 100
 
+	local rngNumber = Random.new(SeedNumber)
+
 	local processedHolders = {}
 	local staticSpawned = false -- Enforces 1 static item max per room for tables/walls
 	
@@ -145,7 +147,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		table.clear(processedHolders)
 	end
 
-	local function processHolder(holder: BasePart, isDynamic: boolean)
+	local function processHolder(holder: BasePart, isDynamic: boolean, rngResult: Number)
 		if processedHolders[holder] then return end
 		
 		if holder:GetAttribute("IsUsed") == true then
@@ -159,10 +161,7 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 		processedHolders[holder] = true
 
-		local rngNumber = Random.new(SeedNumber)
-		local rngResult = rngNumber:NextInteger(1, MaxChance)
-
-		print(rngResult)
+		if not rngResult then rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
 		
 		if rngResult > spawnChance then
 			holder:SetAttribute("IsUsed", true) -- Mark as searched/empty so it doesn't re-roll
@@ -259,15 +258,23 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 
 	-- 1. Static Scan: Process pre-existing tables and onthewall on room load using GetDescendants
 	for _, desc in ipairs(roomInstance:GetDescendants()) do
+		
 		if desc:IsA("BasePart") then
-			processHolder(desc, false)
+			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
+
+	        print(rngResult)
+			
+			processHolder(desc, false, rngResult)
 		end
 	end
 
 	-- 2. Dynamic Scan: Listen for drawer and chestbox loot holders added at runtime via DescendantAdded
 	connection = roomInstance.DescendantAdded:Connect(function(desc)
 		if desc:IsA("BasePart") then
-			processHolder(desc, true)
+			local rngResult = rngNumber:NextInteger(spawnChance, MaxChance)
+
+	        print(rngResult)
+			processHolder(desc, true, rngResult)
 		end
 	end)
 
