@@ -198,6 +198,14 @@ function ItemSpawner.spawn(itemModel: Instance, roomInstance: Instance, config: 
 		local spawnedItem = itemModel:Clone()
 		spawnedItem.Parent = holder.Parent or Workspace
 
+		if holder:FindFirstChild("SpawnPile") then
+			for _,trash in ipairs(holder:FindFirstChild("SpawnPile"):GetChildren()) do
+				if trash:IsA("BasePart") then
+					trash:Destroy()
+				end
+			end
+		end
+
 		local finalOffset = locOffset or defaultOffset
 		local finalRotOffset = locRotOffset or defaultRotOffset
 
