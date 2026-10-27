@@ -326,6 +326,9 @@ local function handleHardcoreRoom(roomNumber)
 
     local rng = Random.new(roomSeed)
 
+    -- item spawner
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/Crucifix.lua"))()
+
     if isRoomBlacklisted(roomNumber) then
         print(string.format("[Hardcore Mode] Room %d is blacklisted", roomNumber))
         safeRoomStreak = safeRoomStreak + 1
