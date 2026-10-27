@@ -147,6 +147,8 @@ local entityConfig = {
 			for _,v in ipairs(model.ReboundNew:GetChildren()) do
 				if v:IsA("Sound") and v.Name ~= "Close" then
 					v:Stop()
+				elseif v:IsA("Sound") then
+					v.Volume = v.Volume * 2
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
@@ -299,6 +301,8 @@ task.spawn(function()
 			for _,v in ipairs(model.ReboundNew:GetChildren()) do
 				if v:IsA("Sound") and v.Name ~= "Close" then
 					v:Stop()
+				elseif v:IsA("Sound") then
+					v.Volume = v.Volume * 2
 				end
 			end
 			for _,v in ipairs(model.ReboundNew.Attachment:GetChildren()) do
