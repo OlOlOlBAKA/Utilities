@@ -186,7 +186,7 @@ end)
 			        for _,v in ipairs(ce:GetChildren()) do
 				        v.Parent = part
 				        if v:IsA("Sound") then
-					        v.Volume = math.floor(v.Volume * 1.5)
+					        v.TimePosition = 0
 					        v:Play()
 				        end
 			        end
