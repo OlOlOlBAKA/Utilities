@@ -144,6 +144,20 @@ local entityConfig = {
             isCrucified = true
             isPresent = false
             model:SetAttribute("Crucified", true)
+			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+				if v:IsA("Sound") and v.Name ~= "Close" then
+					v:Stop()
+				end
+			end
+			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
+					v.Enabled = false
+				end
+			end
+			
+			local face = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/ReboundCrucify.rbxm")
+			face.Parent = model.ReboundNew.Attachment
+			face.Enabled = true
         end,
 
         OnDespawn = function(model, actions)
@@ -280,6 +294,22 @@ task.spawn(function()
                         isCrucified = true
                         isPresent = false
                         model:SetAttribute("Crucified", true)
+
+						model:SetAttribute("Crucified", true)
+			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+				if v:IsA("Sound") and v.Name ~= "Close" then
+					v:Stop()
+				end
+			end
+			for _,v in ipairs(model.ReboundNew:GetChildren()) do
+				if v:IsA("ParticleEmitter") or v:IsA("PointLight") then
+					v.Enabled = false
+				end
+			end
+			
+			local face = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/ReboundCrucify.rbxm")
+			face.Parent = model.ReboundNew.Attachment
+			face.Enabled = true
                     end,
 
                     OnDespawn = function(model, actions)
