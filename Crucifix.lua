@@ -32,14 +32,14 @@ local itemConfig = {
 			Offset = Vector3.new(0, 0, 0),
 			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
 		},
-		closet = { -- ONLY ARCHIVES FLOOR SUPPORTED
+		--[[closet = { -- ONLY ARCHIVES FLOOR SUPPORTED AND WORKING ON IT
 			Enabled = true,
 			Offset = Vector3.new(0, 0, 0),
 			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
-		},
+		},]]--
 		floor = { -- ONLY ARCHIVES FLOOR SUPPORTED
 			Enabled = true,
-			Offset = Vector3.new(0, 0, 0),
+			Offset = Vector3.new(0, -0.2, 0),
 			RotationOffset = Vector3.new(90, 0, math.random(0,180)),
 		},
 		wall = {
