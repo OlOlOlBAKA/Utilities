@@ -434,7 +434,9 @@ function StationaryEntity.spawn(entityTemplate: Model, roomInstance: Instance, c
 				end)
 
 				task.spawn(function()
-					performCrucifixion(entity, character, shakerInstance)
+					task.spawn(function()
+					    performCrucifixion(entity, character, shakerInstance)
+					end)
 					
 					if type(callbacks.OnCrucifixion) == "function" then
 						task.spawn(callbacks.OnCrucifixion, entity, character, actionsHandle)
