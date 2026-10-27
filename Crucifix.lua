@@ -58,6 +58,19 @@ local itemConfig = {
 			handle.Destroy()
             local Players = game:GetService("Players")
             local LocalPlayer = Players.LocalPlayer
+			local backpack = LocalPlayer:WaitForChild("Backpack")
+			local char = LocalPlayer.Character
+
+			local checkCrucifix = char:FindFirstChild("Crucifix") or backpack:FindFirstChild("Crucifix")
+			if checkCrucifix then
+				local Event = ReplicatedStorage.RemotesFolder.FlashSpecify
+                firesignal(Event.OnClientEvent, 
+                    "AmountMax",
+                    checkCrucifix,
+                    1
+                )
+				return
+			end
 
             local asset = LoadCustomInstance("https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Crucifix.rbxm")
 
@@ -75,10 +88,8 @@ local itemConfig = {
                     asset.Name = "Handle"
                     asset.Parent = tool
                 end
-				task.wait(0.1)
                 tool:AddTag("Crucifix")
-                local char = LocalPlayer.Character
-                tool.Parent = char
+                tool.Parent = backpack
             end
 		end
 	}
