@@ -8,6 +8,7 @@ local ItemSpawner = loadstring(game:HttpGet("https://raw.githubusercontent.com/O
 local currentRooms = workspace:WaitForChild("CurrentRooms")
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local LatestRoom = GameData:WaitForChild("LatestRoom")
+local seedNumber = GameData:WaitForChild("GameSeedInitial")
 
 local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 
@@ -99,4 +100,4 @@ local itemConfig = {
 local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or LoadCustomInstance
 local itemTemplate = fetchFunc("https://github.com/RegularVynixu/DOORS-Crucifix-Everything/raw/refs/heads/main/Assets/Crucifix.rbxm")
 
-ItemSpawner.spawn(itemTemplate, spawnRoom, itemConfig)
+ItemSpawner.spawn(itemTemplate, spawnRoom, itemConfig, seedNumber.Value)
