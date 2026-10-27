@@ -44,6 +44,15 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 				-- Reject if an onthewall model's part is not named "holder"
 				return false, nil, nil, nil
 			end
+		if nameLower:find("floor") then
+			if holderNameLower == "holder" then
+				matchedType = "floor"
+				matchedConfig = locationsConfig["floor"]
+				break
+			else
+				-- Reject if an onthewall model's part is not named "holder"
+				return false, nil, nil, nil
+			end
 		elseif nameLower:find("table") then
 			if holderNameLower == "lootholder" then
 				matchedType = "table"
@@ -69,6 +78,14 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 			else
 				return false, nil, nil, nil
 			end
+		elseif current:FindFirstChild("HiddenPlayer") then
+			if holderNameLower == "lootholder" then
+				matchedType = "closet"
+				matchedConfig = locationsConfig["closet"]
+				break
+			else
+				return false, nil, nil, nil
+			end
 		end
 
 		current = current.Parent
@@ -82,12 +99,12 @@ local function getLocationConfig(holder: BasePart, locationsConfig: {[string]: a
 
 	-- Enforce scan separation rules:
 	-- Drawers & chestboxes must ONLY be processed dynamically at runtime via DescendantAdded
-	if (matchedType == "drawer" or matchedType == "chestbox" or matchedType == "chest") and not isDynamic then
+	if (matchedType == "drawer" or matchedType == "chestbox" or matchedType == "chest" or matchedType == "closet") and not isDynamic then
 		return false, nil, nil, nil
 	end
 
 	-- Tables & onthewall must ONLY be processed statically on room load via GetDescendants
-	if (matchedType == "table" or matchedType == "onthewall" or matchedType == "wall") and isDynamic then
+	if (matchedType == "table" or matchedType == "onthewall" or matchedType == "wall" or matchedType == "floor") and isDynamic then
 		return false, nil, nil, nil
 	end
 
