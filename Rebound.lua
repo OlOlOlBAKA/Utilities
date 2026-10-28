@@ -188,8 +188,9 @@ task.spawn(function()
             print("Rebound got crucified, the spawn loop is ended")
             break
         end
-        if latestRoom.Value == 49 or latestRoom.Value == 50 or latestRoom.Value == 99 or latestRoom.Value == 100 or workspace:FindFirstChild("SeekMovingNewClone") then
-            print("break the loop, boss room")
+        local mod = latestRoom.Value % 50
+        if mod >= 49 or mod <= 5 then
+            print("blacklisted room, despawned and break the loop")
             break
         end
 
@@ -215,8 +216,9 @@ task.spawn(function()
             break
         end
 
-        if latestRoom.Value == 49 or latestRoom.Value == 50 or latestRoom.Value == 99 or latestRoom.Value == 100 or workspace:FindFirstChild("SeekMovingNewClone") then
-            print("break the loop, boss room")
+        local mod = latestRoom.Value % 50
+        if mod >= 49 or mod <= 5 then
+            print("blacklisted room, despawned and break the loop")
             break
         end
 
