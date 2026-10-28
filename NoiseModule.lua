@@ -7,8 +7,6 @@ local random = Random.new()
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
--- โหลด Asset หลักผ่าน newScript และ LoadCustomInstance
--- local newScript = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseTV_Module.rbxm")
 local noiseModel: Instance = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseModel.rbxm")
 local tapeZeroColors = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/TapeZeroColor.lua"))()
 local floor: Instance = replicatedStorage:WaitForChild("GameData"):WaitForChild("Floor")
@@ -23,7 +21,6 @@ local BODY_PARTS = {
 	"RightFoot"
 }
 
--- Palettes / ธีมสี (ปกติ และ Halloween)
 local PALETTE_NORMAL = {
 	highlight = Color3.fromRGB(350, 0, 0),
 	outline = Color3.fromRGB(255, 0, 0),
@@ -50,9 +47,6 @@ local function hijackPalette()
 	return isHalloween() and PALETTE_HALLOWEEN or PALETTE_NORMAL
 end
 
--- ==========================================
--- 1. TAPE FX (เอฟเฟกต์เล่นเทป/หน้าจอทีวี)
--- ==========================================
 local function runTapeFX(tvObject)
 	local tvMain = tvObject and tvObject:FindFirstChild("TVMain")
 	local tvScreen = tvMain and tvMain:FindFirstChild("TVScreen")
@@ -134,9 +128,6 @@ local function runTapeFX(tvObject)
 	end)
 end
 
--- ==========================================
--- 2. MAIN MODULE FUNCTION
--- ==========================================
 return function(p7, newScript, ...)
 	local argString, argInstance
 
@@ -163,7 +154,6 @@ return function(p7, newScript, ...)
 		return p7.noiseVisuals
 	end
 
-	-- สร้าง Folder ซ่อนโมเดลใน Workspace
 	local hiddenNoiseRigs = workspace:FindFirstChild("HiddenNoiseRigs")
 	if not hiddenNoiseRigs then
 		hiddenNoiseRigs = Instance.new("Folder")
@@ -193,9 +183,6 @@ return function(p7, newScript, ...)
 		end
 	end
 
-	-- ==========================================
-	-- 3. BUILD NOISE ENTITY (FULL MECHANICS)
-	-- ==========================================
 	local function buildNoise(p10)
 		local targetUserId = p10:GetAttribute("TargetUserId")
 		local userVisibility = playerVisibility[targetUserId]
@@ -241,7 +228,6 @@ return function(p7, newScript, ...)
 			local clone = noiseModel:Clone()
 			local clonePrimaryPart = clone.PrimaryPart
 			
-			-- State variables
 			local isAlive = true
 			local isKilling = false
 			local isDissolving = false
@@ -250,13 +236,9 @@ return function(p7, newScript, ...)
 			local heartConnection = nil
 			local currentPivot = nil
 			local isRewinding = false
-			local rewindTimeStart = 0
-			local rewindCleanupFn = nil
 			local isEnraged = p10:GetAttribute("Enraged") == true
 			local isRedLit = false
 			local isCrucified = false
-			local crucifixModel = nil
-			local crucifixCleanupFn = nil
 			local locoSpeed = 1
 			local noiseData = { noise = clone, targetUserId = targetUserId, folder = p10 }
 
@@ -322,7 +304,6 @@ return function(p7, newScript, ...)
 				end
 			end
 
-			-- Animations System
 			local animTracks = {}
 			for _, anim in clone.Animations:GetChildren() do
 				animTracks[anim.Name] = clone.AnimationController:LoadAnimation(anim)
@@ -372,7 +353,7 @@ return function(p7, newScript, ...)
 							prevTrack:AdjustWeight(1 - progress, 0)
 							track:AdjustWeight(math.max(progress, 0.01), 0)
 						end
-						if fadingLocoTrack then fadingLocoTrack:Stop(0); fadingLocoTrack = nil end
+						if fadingLocoTrack then fadingLocoTrack:Stop(0); fadingLocoTrust = nil end
 						if currentLocoTrack then currentLocoTrack:AdjustWeight(1, 0) end
 					end)
 					return
@@ -380,84 +361,6 @@ return function(p7, newScript, ...)
 
 				if prevTrack and prevTrack ~= track then prevTrack:Stop(0) end
 				track:Play(0, 1, locoSpeed)
-			end
-
-			local isCrawlingState = false
-			local isSyncingCrawl = false
-
-			local function syncCrawl()
-				if not isSyncingCrawl and currentLocoTrack and isAlive and not isKilling and not isDissolving then
-					local targetCrawl = p10:GetAttribute("Crawling") == true
-					if targetCrawl == isCrawlingState then return end
-
-					isSyncingCrawl = true
-					task.spawn(function()
-						local transitionTrack
-						if isRewinding then
-							transitionTrack = targetCrawl and animTracks.CrawlToWalk or animTracks.WalkToCrawl
-							local currentSpd = locoSpeed
-							locoSpeed = 0
-							playLoco(transitionTrack, 0.25)
-							transitionTrack.TimePosition = math.max(transitionTrack.Length - 0.01, 0)
-							locoSpeed = currentSpd
-							if currentLocoTrack then currentLocoTrack:AdjustSpeed(currentSpd) end
-						else
-							transitionTrack = targetCrawl and animTracks.WalkToCrawl or animTracks.CrawlToWalk
-							playLoco(transitionTrack, 0.25)
-						end
-
-						-- Wait Track finish
-						while isAlive and not isKilling and not isDissolving do
-							runService.RenderStepped:Wait()
-							if not transitionTrack.IsPlaying or transitionTrack.TimePosition >= transitionTrack.Length - 0.03 then break end
-						end
-
-						isCrawlingState = targetCrawl
-						playLoco(targetCrawl and animTracks.Crawl or animTracks.Walk, 0)
-						isSyncingCrawl = false
-
-						if isAlive and not isKilling and not isDissolving then syncCrawl() end
-					end)
-				end
-			end
-
-			p10:GetAttributeChangedSignal("Crawling"):Connect(syncCrawl)
-
-			local function setScreenState(state)
-				local tvScreen = tvValue and tvValue:FindFirstChild("TVMain") and tvValue.TVMain:FindFirstChild("TVScreen")
-				if not tvScreen then return end
-
-				tvScreen.Highlight.Enabled = false
-				isRedLit = (state == "Red")
-
-				if state == "Red" then
-					local palette = hijackPalette()
-					tvScreen:SetAttribute("RedLit", true)
-					tvScreen.StaticTexture.Transparency = 0
-					tvScreen.StaticTexture.Color3 = palette.static
-					tvScreen.Material = Enum.Material.Neon
-					tvScreen.Color = palette.screen
-					tvScreen.Static.PlaybackSpeed = 1.35
-					tvScreen.Static:Play()
-
-					for _, child in tvScreen:GetDescendants() do
-						if child:IsA("Light") then
-							child.Enabled = true
-							child.Color = palette.light
-						end
-					end
-					return
-				end
-
-				tvScreen:SetAttribute("RedLit", nil)
-				tvScreen.Static:Stop()
-				tvScreen.StaticTexture.Transparency = 1
-				tvScreen.Material = Enum.Material.Glass
-				tvScreen.Color = Color3.fromRGB(29, 30, 38)
-
-				for _, child in tvScreen:GetDescendants() do
-					if child:IsA("Light") then child.Enabled = false end
-				end
 			end
 
 			noiseData.setAudible = function(audible)
@@ -468,7 +371,6 @@ return function(p7, newScript, ...)
 
 			noiseData.setAudible(shouldShow(noiseData))
 
-			-- PointLight Flicker loop
 			local pointLight = clonePrimaryPart:FindFirstChild("PointLight")
 			local targetBrightness = 0
 			if pointLight then
@@ -500,49 +402,23 @@ return function(p7, newScript, ...)
 				clone.Destroying:Once(function() lightConn:Disconnect() end)
 			end
 
+			-- [แก้ไขเรื่องสี] ให้ตัว Noise เป็นสีขาวตอนเดิน/ปกติ และเป็นสีมืด/ดำเฉพาะตอน Paused
 			local function updateVisuals()
-				local baseColor = Color3.fromRGB(150, 150, 150)
-				local textCol = Color3.fromRGB(0, 0, 0)
-				local fillCol = Color3.fromRGB(218, 218, 218)
-				local lightCol = Color3.fromRGB(255, 255, 255)
-				local fillTrans = 10
-
-				if isCrucified then
-					baseColor = Color3.fromRGB(205, 205, 215)
-					textCol = Color3.fromRGB(35, 35, 35)
-					fillCol = Color3.fromRGB(255, 255, 255)
-					lightCol = Color3.fromRGB(255, 244, 214)
-					fillTrans = 0.5
-				elseif isEnraged then
-					local palette = hijackPalette()
-					baseColor = Color3.fromRGB(0, 0, 0)
-					textCol = palette.texture
-					fillCol = palette.highlight
-					lightCol = palette.light
-					fillTrans = -99999
-				elseif stateMode == "FastForward" then
-					baseColor = Color3.fromRGB(144, 136, 94)
-					fillCol = Color3.fromRGB(85, 97, 154)
-					lightCol = Color3.fromRGB(116, 137, 255)
-					fillTrans = -999999
-				elseif stateMode == "Paused" then
-					baseColor = Color3.fromRGB(71, 70, 50)
-					textCol = Color3.fromRGB(255, 255, 255)
-					fillCol = Color3.fromRGB(6, 6, 8)
-					lightCol = Color3.fromRGB(0, 17, 255)
-					fillTrans = -999999
-				end
-
 				local isPaused = (stateMode == "Paused" and not isEnraged)
-				local isNormalWalk = (stateMode == "Walking" and not isEnraged and not isCrucified)
+				
+				local baseColor = isPaused and Color3.fromRGB(71, 70, 50) or Color3.fromRGB(240, 240, 240)
+				local textCol = isPaused and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+				local fillCol = isPaused and Color3.fromRGB(6, 6, 8) or Color3.fromRGB(218, 218, 218)
+				local lightCol = isPaused and Color3.fromRGB(0, 17, 255) or Color3.fromRGB(255, 255, 255)
+				local fillTrans = isPaused and -999999 or 10
 
 				for _, part in basePartList do
-					part.Color = (isNormalWalk and (part:GetAttribute("NoiseColor") or originalPartColors[part])) or baseColor
+					part.Color = (not isPaused and (part:GetAttribute("NoiseColor") or originalPartColors[part])) or baseColor
 				end
 
 				for _, tex in textureList do
-					tex.Color3 = (isNormalWalk and tex:GetAttribute("NoiseColor3")) or textCol
-					tex.Transparency = (isNormalWalk and tex:GetAttribute("NoiseTransparency")) or (isPaused and 0.85 or 0)
+					tex.Color3 = (not isPaused and tex:GetAttribute("NoiseColor3")) or textCol
+					tex.Transparency = isPaused and 0.85 or 0
 				end
 
 				for _, particle in particleList do
@@ -554,40 +430,29 @@ return function(p7, newScript, ...)
 				for _, hl in highlightList do
 					hl.FillColor = fillCol
 					hl.FillTransparency = fillTrans
-					hl.OutlineColor = isCrucified and Color3.new(1, 1, 1) or (isEnraged and hijackPalette().outline or Color3.new(0, 0, 0))
+					hl.OutlineColor = Color3.new(0, 0, 0)
 					hl.OutlineTransparency = 0
 				end
 
 				if pointLight then pointLight.Color = lightCol end
 				clone:SetAttribute("StaticEnabled", not isPaused)
-				clone:SetAttribute("StaticSpeed", isCrucified and 3 or (isEnraged and 2 or (stateMode == "FastForward" and 2.5 or 1)))
 			end
-
-			p10:GetAttributeChangedSignal("Enraged"):Connect(function()
-				if p10:GetAttribute("Enraged") and not isEnraged and not isCrucified then
-					isEnraged = true
-					clone.Head.Attachment.HijackFace.Enabled = true
-					clone.Head.HijackFaceGlitch.Enabled = true
-					clone.HumanoidRootPart.HijackGlitch.Enabled = true
-					remapEnragedSounds()
-					updateVisuals()
-				end
-			end)
 
 			local function setMode(mode)
 				if mode == stateMode then return end
-				local prevMode = stateMode
 				stateMode = mode
 				updateVisuals()
 
-				local newSpeed = (mode == "Paused" and 0) or (mode == "FastForward" and 2.88) or (isEnraged and 1.15 or 1)
+				local newSpeed = (mode == "Paused" and 0) or (mode == "FastForward" and 2.88) or 1
 				locoSpeed = newSpeed
 				if currentLocoTrack then currentLocoTrack:AdjustSpeed(newSpeed) end
 
-				if mode == "Paused" and soundMap.Pause then
-					soundMap.Pause:Play()
-				elseif mode == "FastForward" and soundMap.FastForward then
-					soundMap.FastForward:Play()
+				-- ควบคุมเสียง Pause / FastForward ไม่ให้ค้างซ้อนกัน
+				if soundMap.Pause then
+					if mode == "Paused" then soundMap.Pause:Play() else soundMap.Pause:Stop() end
+				end
+				if soundMap.FastForward then
+					if mode == "FastForward" then soundMap.FastForward:Play() else soundMap.FastForward:Stop() end
 				end
 			end
 
@@ -595,14 +460,10 @@ return function(p7, newScript, ...)
 				if not isAlive then return end
 				isAlive = false
 				if heartConnection then heartConnection:Disconnect() end
-				if rewindCleanupFn then rewindCleanupFn() end
-				if crucifixCleanupFn then crucifixCleanupFn() end
-				if isRedLit then setScreenState("Off") end
 				activeNoises[p10] = nil
 				clone:Destroy()
 			end
 
-			-- Root Connection Interpolation Loop
 			heartConnection = runService.Heartbeat:Connect(function(dt)
 				if not isAlive or isRewinding or isCrucified or isKilling then return end
 				local targetCF = p10:GetAttribute("TargetCF")
@@ -621,17 +482,8 @@ return function(p7, newScript, ...)
 
 				currentPivot = CFrame.Angles(0, newYaw, 0) + newPos
 				clone:PivotTo(currentPivot)
-
-				if isEnraged then
-					footstepDistance += ((newPos - pivot.Position) * Vector3.new(1, 0, 1)).Magnitude
-					if footstepDistance >= 2.4 then
-						footstepDistance = 0
-						playFootstep()
-					end
-				end
 			end)
 
-			-- Handle Entity State Changes
 			p10:GetAttributeChangedSignal("State"):Connect(function()
 				local newState = p10:GetAttribute("State")
 				if not isAlive or isKilling or isDissolving then return end
@@ -649,7 +501,6 @@ return function(p7, newScript, ...)
 					if not isWalking then
 						isWalking = true
 						playLoco(animTracks.Walk, 0)
-						syncCrawl()
 					end
 					setMode(newState)
 				end
@@ -657,19 +508,18 @@ return function(p7, newScript, ...)
 
 			p10.Destroying:Connect(cleanup)
 
-			-- Emerge Spawn Thread
+			-- [แก้เสียงตอนเกิด] ห้ามให้มีเสียง Idle หรือเสียงเดินดังขึ้นตอนช่วง Emerging ให้รอจนเล่น Spawn จบก่อน
 			task.spawn(function()
-				if isEnraged then
-					clone.Head.Attachment.HijackFace.Enabled = true
-					updateVisuals()
-					if shouldShow(noiseData) then setScreenState("Red") end
+				if animTracks.Spawn then 
+					animTracks.Spawn:Play(0, 1, 1) 
 				end
-
-				if animTracks.Spawn then animTracks.Spawn:Play(0, 1, isEnraged and 3.1 or 1) end
-				if soundMap.Emerge then soundMap.Emerge:Play() end
-				if soundMap.Idle then soundMap.Idle:Play() end
-
-				task.wait(isEnraged and 0.45 or 1)
+				-- รออนิเมชัน Spawn เล่นจนจบ (ประมาณ 1.2 วินาที หรือตามความยาวจริง)
+				task.wait(1.2)
+				
+				if soundMap.Idle and isAlive and p10:GetAttribute("State") ~= "Emerging" then 
+					soundMap.Idle:Play() 
+				end
+				
 				if p10:GetAttribute("State") == "Emerging" then
 					p10:SetAttribute("State", "Walking")
 				end
@@ -679,7 +529,6 @@ return function(p7, newScript, ...)
 		end
 	end
 
-	-- Listener จาก NoiseReplication ที่อยู่ข้างใน newScript
 	task.spawn(function()
 		local noiseReplication = newScript:WaitForChild("NoiseReplication")
 
@@ -692,13 +541,11 @@ return function(p7, newScript, ...)
 		end
 	end)
 
-	-- Vignette Screen UI Setup (ดึงจาก newScript)
 	local vignette = newScript:WaitForChild("NoiseVignette"):Clone()
 	vignette.Amount.Value = 0
 	vignette.Visible = false
 	vignette.Parent = LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("MainUI")
 
-	-- API Expose (เช็คเสียง HijackRewind และ TapePlaying จาก newScript)
 	local api = {
 		setVisible = function(userId, visible)
 			playerVisibility[userId] = visible
