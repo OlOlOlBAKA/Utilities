@@ -403,22 +403,27 @@ return function(p7, newScript, ...)
 			p10.Destroying:Connect(cleanup)
 
 			-- จัดการอนิเมชัน Spawn ตอนเกิด
-			task.spawn(function()
-				if animTracks.Spawn then 
-					animTracks.Spawn:Play(0, 1, 1) 
-				end
-				-- รอจนแอนิมิชัน Spawn เล่นจบ (ประมาณ 1.2 วินาที) ค่อยเริ่มสถานะเดิน
-				task.wait(1.2)
-				
-				if soundMap.Idle and isAlive then 
-					soundMap.Idle:Play() 
-				end
-				
-				if p10:GetAttribute("State") == "Emerging" then
-					p10:SetAttribute("State", "Walking")
-					playLoco(animTracks.Walk)
-				end
-			end)
+			-- แก้ไขส่วนจัดการแอนิมิชัน Spawn ใน Module Script ให้ใช้ .Stopped แทน task.wait(1.2)
+task.spawn(function()
+    if animTracks.Spawn then 
+        animTracks.Spawn:Play(0, 1, 1) 
+        
+        -- รอจนกว่าอนิเมชัน Spawn จะเล่นจบจริงๆ โดยอัตโนมัติ
+        animTracks.Spawn.Stopped:Wait()
+    else
+        task.wait(2) -- เผื่อกรณีไม่มีอนิเมชัน
+    end
+    
+    if soundMap.Idle and isAlive then 
+        soundMap.Idle:Play() 
+    end
+    
+    if p10:GetAttribute("State") == "Emerging" then
+        p10:SetAttribute("State", "Walking")
+        playLoco(animTracks.Walk)
+    end
+end)
+
 
 			return
 		end
