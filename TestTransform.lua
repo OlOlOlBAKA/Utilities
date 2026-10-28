@@ -49,12 +49,6 @@ local function onCharacterAdded(char)
 	local root = char:FindFirstChild("HumanoidRootPart")
 	local humanoid = char:FindFirstChild("Humanoid")
 	local openEyeState = false
-  
-	for _, v in ipairs(char:GetChildren()) do
-		if v:IsA("BasePart") then
-			v.LocalTransparencyModifier = 1
-		end
-	end
 
 	-- Move model contents into the root part safely
 	if model and model:FindFirstChild("Main") then
@@ -85,13 +79,13 @@ local function onCharacterAdded(char)
 	-- Eye blinking loop
 	task.spawn(function()
 		while char and humanoid and humanoid.Health > 0 do
-			task.wait(r:NextNumber(2, 8))
-			setState(root, false)
-			openEyeState = false
-			
 			task.wait(r:NextNumber(2, 10))
 			setState(root, true)
 			openEyeState = true
+			
+			task.wait(r:NextNumber(2, 8))
+			setState(root, false)
+			openEyeState = false
 		end
 	end)
 
@@ -99,6 +93,11 @@ local function onCharacterAdded(char)
 	task.spawn(function()
 		while char and humanoid and humanoid.Health > 0 do
 			task.wait(0.5)
+			for _, v in ipairs(char:GetDescendants()) do
+		        if v:IsA("BasePart") and v.LocalTransparencyModifier < 1 then
+			        v.LocalTransparencyModifier = 1
+		        end
+	        end
 			if root:FindFirstChild("Whisper") then
 				if openEyeState then
 					root.Whisper.PlaybackSpeed = r:NextNumber(0.1, 1.1)
