@@ -8,7 +8,7 @@ local random = Random.new()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 -- โหลด Asset หลักผ่าน newScript และ LoadCustomInstance
-local newScript = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseTV_Module.rbxm")
+-- local newScript = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseTV_Module.rbxm")
 local noiseModel: Instance = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseModel.rbxm")
 local tapeZeroColors = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/TapeZeroColor.lua"))()
 local floor: Instance = replicatedStorage:WaitForChild("GameData"):WaitForChild("Floor")
@@ -137,7 +137,7 @@ end
 -- ==========================================
 -- 2. MAIN MODULE FUNCTION
 -- ==========================================
-return function(p7, ...)
+return function(p7, newScript, ...)
 	local argString, argInstance
 
 	for _, val in { ... } do
