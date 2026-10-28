@@ -108,7 +108,7 @@ local entityConfig = {
 			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
 			model.Main.Attachment.Closed.Enabled = true
-			task.wait(2)
+			task.wait(1)
 			setState(true)
 			task.spawn(function()
 				while model and model.Parent do
