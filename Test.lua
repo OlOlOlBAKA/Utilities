@@ -219,7 +219,20 @@ local function spawnEntity(entityName, roomNumber)
             while activeEntities["Rebound"] do
                 task.wait(0.1)
                 local entityModel = workspace:WaitForChild("Rebound", 10)
-                
+
+                if workspace:FindFirstChild("SeekMovingNewClone") or workspace:FindFirstChild("HonchoRig") then
+                    print("Rebound loop break, chasing session")
+                    registerDespawn("Rebound")
+                    break
+                end
+
+                local mod = roomNumber % 50
+                if mod >= 49 or mod <= 5 then
+                    print("blacklisted room, despawned")
+                    registerDespawn("Rebound")
+                    break
+                end
+                    
                 if entityModel then
                     local isCrucified = false
 
