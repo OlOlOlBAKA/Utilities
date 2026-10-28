@@ -108,18 +108,8 @@ local entityConfig = {
 			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
 			model.Main.Attachment.Closed.Enabled = true
-
-			task.spawn(function()
-				while model and model.Parent do
-					task.wait(r:NextNumber(2, 8))
-					if gotCrucified then break end
-					setState(true)
-					task.wait(r:NextNumber(2, 10))
-					if gotCrucified then break end
-					setState(false)
-				end
-			end)
-
+			task.wait(2)
+			setState(true)
 			task.spawn(function()
 				while model and model.Parent do
 					task.wait(0.5)
@@ -156,6 +146,17 @@ local entityConfig = {
 						    model.Main.Whisper.PlaybackSpeed = 0.45
 						end
 					end
+				end
+			end)
+
+			task.spawn(function()
+				while model and model.Parent do
+					task.wait(r:NextNumber(2, 8))
+					if gotCrucified then break end
+					setState(false)
+					task.wait(r:NextNumber(2, 10))
+					if gotCrucified then break end
+					setState(true)
 				end
 			end)
 
