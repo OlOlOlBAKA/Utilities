@@ -97,6 +97,11 @@ local function onCharacterAdded(char)
 	-- Whisper pitch adjustment loop
 	task.spawn(function()
 		while char and humanoid and humanoid.Health > 0 do
+			for _, v in ipairs(char:GetDescendants()) do
+		        if v:IsA("BasePart") and v.LocalTransparencyModifier < 1 then
+			        v.LocalTransparencyModifier = 1
+		        end
+	        end
 			task.wait(0.5)
 			for _, v in ipairs(char:GetDescendants()) do
 		        if v:IsA("BasePart") and v.LocalTransparencyModifier < 1 then
