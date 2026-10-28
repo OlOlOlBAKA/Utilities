@@ -333,21 +333,31 @@ return function(p7, newScript, ...)
 				updateVisuals()
 
 				if mode == "Paused" then
-					if soundMap.Pause then soundMap.Pause:Play() end
 					if soundMap.FastForward then soundMap.FastForward:Stop() end
+					if soundMap.Walk then soundMap.Walk:Stop() end
+					-- เล่นเสียง Pause อย่างถูกต้องและเคลียร์เวลาเริ่มต้นใหม่
+					if soundMap.Pause then 
+						soundMap.Pause.TimePosition = 0
+						soundMap.Pause:Play() 
+					end
 					playLoco(nil)
 				else
 					if soundMap.Pause then soundMap.Pause:Stop() end
+					
 					if mode == "FastForward" then
-						if soundMap.FastForward then soundMap.FastForward:Play() end
+						if soundMap.FastForward and not soundMap.FastForward.IsPlaying then 
+							soundMap.FastForward:Play() 
+						end
 					else
 						if soundMap.FastForward then soundMap.FastForward:Stop() end
 					end
+					
 					if p10:GetAttribute("State") ~= "Emerging" then
 						playLoco(animTracks.Walk)
 					end
 				end
 			end
+
 
 			local function cleanup()
 				if not isAlive then return end
