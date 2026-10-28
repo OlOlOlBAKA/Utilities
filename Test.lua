@@ -198,10 +198,6 @@ local function spawnEntity(entityName, roomNumber)
     -- Lock active state immediately
     activeEntities[entityName] = true
 
-    if entityName ~= "Blink" then
-        task.wait(0.5)
-    end
-
     -- 1. Run entity script via loadstring
     task.spawn(function()
         if entityName == "A-120" then
