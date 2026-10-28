@@ -14,7 +14,7 @@ local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 
 local chance = nil
 
-if GameData.Floor.Value == "Archives" or GameData.Floor.Value == "Mines" the
+if GameData.Floor.Value == "Archives" or GameData.Floor.Value == "Mines" then
 	chance = 125
 else
 	chance = 75
