@@ -98,6 +98,18 @@ local PathfindingMovement = loadstring(game:HttpGet("https://raw.githubuserconte
 
                 OnCrucifixion = function(model: Model | BasePart, actions)
 		            model:SetAttribute("Crucified", true)
+			        local ce = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/DepthCrucify.rbxm")
+			        local part = model.DepthNew
+			        for _,v in ipairs(part:GetChildren()) do
+				        v:Destroy()
+			        end
+			        for _,v in ipairs(ce:GetChildren()) do
+				        v.Parent = part
+				        if v:IsA("Sound") then
+					        v.TimePosition = 0
+					        v:Play()
+				        end
+			        end
 			        if _G.CrucifyDepth == false then
 				        _G.CrucifyDepth = true
 				        CustomAchievements:Grant({
