@@ -8,18 +8,24 @@ local random = Random.new()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Functions.lua"))()
 
 local noiseModel: Instance = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseModel.rbxm")
-local tapeZeroColors = loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/TapeZeroColor.lua"))()
-local floor: Instance = replicatedStorage:WaitForChild("GameData"):WaitForChild("Floor")
 
-local BODY_PARTS = {
-	"Head",
-	"UpperTorso",
-	"LowerTorso",
-	"LeftHand",
-	"RightHand",
-	"LeftFoot",
-	"RightFoot"
+-- ป้องกันข้อผิดพลาดกรณีโหลด TapeZeroColor ไม่สำเร็จ (แก้ปัญหา nil table ที่บรรทัด 82)
+local success, result = pcall(function()
+	return loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/TapeZeroColor.lua"))()
+end)
+
+local tapeZeroColors = (success and type(result) == "table") and result or {
+	sample = function()
+		return Color3.fromRGB(25, 0, 0), 1, false
+	end
 }
+
+local gameData = replicatedStorage:FindFirstChild("GameData")
+local floor = gameData and gameData:FindFirstChild("Floor")
+
+local function isHalloween()
+	return floor and floor.Value == "Halloween26"
+end
 
 local PALETTE_NORMAL = {
 	highlight = Color3.fromRGB(350, 0, 0),
@@ -39,10 +45,6 @@ local PALETTE_HALLOWEEN = {
 	static = Color3.fromRGB(255, 140, 0)
 }
 
-local function isHalloween()
-	return floor.Value == "Halloween26"
-end
-
 local function hijackPalette()
 	return isHalloween() and PALETTE_HALLOWEEN or PALETTE_NORMAL
 end
@@ -55,6 +57,10 @@ local function runTapeFX(tvObject)
 	local videoGui = tvScreen:FindFirstChild("VideoGui")
 	local videoFrame = videoGui and videoGui:FindFirstChild("VideoFrame")
 	if not videoFrame then return end
+
+	if not tapeZeroColors or type(tapeZeroColors.sample) ~= "function" then
+		return
+	end
 
 	local lightList = {}
 	local lightBrightness = {}
@@ -107,6 +113,7 @@ local function runTapeFX(tvObject)
 		end
 
 		local sampleColor, sampleBright, hasFlicker = tapeZeroColors.sample(videoFrame.TimePosition)
+		if not sampleColor then return end
 
 		if hasFlicker then
 			sampleBright *= random:NextNumber(0.55, 1.15)
@@ -131,13 +138,16 @@ end
 return function(p7, newScript, ...)
 	local argString, argInstance
 
-	for _, val in { ... } do
+	return function(p7, newScript, ...)
+	local argString, argInstance
+
+	for _, val in pairs({ ... }) do -- แก้ตรงนี้ให้มี pairs() ครอบ
 		if typeof(val) == "string" then
 			argString = val
 		elseif typeof(val) == "Instance" then
 			argInstance = val
 		elseif typeof(val) == "table" then
-			for _, subVal in val do
+			for _, subVal in pairs(val) do -- และแก้ตรงนี้ให้มี pairs(val)
 				if typeof(subVal) == "string" then
 					argString = subVal
 				elseif typeof(subVal) == "Instance" then
@@ -230,21 +240,15 @@ return function(p7, newScript, ...)
 			
 			local isAlive = true
 			local isKilling = false
-			local isDissolving = false
-			local isWalking = false
 			local stateMode = nil
 			local heartConnection = nil
-			local currentPivot = nil
-			local isRewinding = false
 			local isEnraged = p10:GetAttribute("Enraged") == true
-			local isRedLit = false
-			local isCrucified = false
-			local locoSpeed = 1
 			local noiseData = { noise = clone, targetUserId = targetUserId, folder = p10 }
 
 			activeNoises[p10] = noiseData
-			tvValue.PrimaryPart:WaitForChild("NoiseAttach")
-			noiseData.tvAttach = tvValue.PrimaryPart:FindFirstChild("NoiseAttach")
+			
+			-- ค้นหา NoiseAttach จากโครงสร้าง Base ภายในทีวีอย่างปลอดภัย
+			noiseData.tvAttach = tvValue:FindFirstChild("NoiseAttach", true)
 			clone:PivotTo(CFrame.new(0, -1000, 0))
 
 			local visible = shouldShow(noiseData)
@@ -276,16 +280,6 @@ return function(p7, newScript, ...)
 				end
 			end
 
-			local footstepDistance = 0
-			local function playFootstep()
-				if soundMap.Footstep then
-					local regionIdx = random:NextInteger(0, 6)
-					soundMap.Footstep.PlaybackRegion = NumberRange.new(regionIdx, regionIdx + 0.9)
-					soundMap.Footstep.PlaybackSpeed = random:NextNumber(0.95, 1.05)
-					soundMap.Footstep:Play()
-				end
-			end
-
 			local animTracks = {}
 			for _, anim in clone.Animations:GetChildren() do
 				animTracks[anim.Name] = clone.AnimationController:LoadAnimation(anim)
@@ -296,7 +290,7 @@ return function(p7, newScript, ...)
 				if currentLocoTrack then currentLocoTrack:Stop(0) end
 				currentLocoTrack = track
 				if track then
-					track:Play(0.1, 1, locoSpeed)
+					track:Play(0.1, 1, 1)
 				end
 			end
 
@@ -308,9 +302,10 @@ return function(p7, newScript, ...)
 
 			noiseData.setAudible(shouldShow(noiseData))
 
-			-- ปรับสีตัวละคร: ตอนเดินเป็นสีขาว/ปกติ, ตอนหยุด (Paused) เป็นสีดำ/มืด
+			-- จัดการสีตัวละคร: ตอนกำลังเกิด (Emerging) หรือเดิน เป็นสีขาว | ตอนหยุด (Paused) เป็นสีดำ
 			local function updateVisuals()
-				local isPaused = (stateMode == "Paused" and not isEnraged)
+				local isEmerging = (p10:GetAttribute("State") == "Emerging")
+				local isPaused = (stateMode == "Paused" and not isEnraged and not isEmerging)
 				
 				local baseColor = isPaused and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(245, 245, 245)
 				local textCol = isPaused and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
@@ -339,7 +334,7 @@ return function(p7, newScript, ...)
 				if mode == "Paused" then
 					if soundMap.Pause then soundMap.Pause:Play() end
 					if soundMap.FastForward then soundMap.FastForward:Stop() end
-					playLoco(nil) -- หยุดอนิเมชันเดินเมื่อหยุดนิ่ง
+					playLoco(nil)
 				else
 					if soundMap.Pause then soundMap.Pause:Stop() end
 					if mode == "FastForward" then
@@ -347,7 +342,6 @@ return function(p7, newScript, ...)
 					else
 						if soundMap.FastForward then soundMap.FastForward:Stop() end
 					end
-					-- เล่นแอนิมิชันเดินถ้าพ้นช่วง Emerging แล้ว
 					if p10:GetAttribute("State") ~= "Emerging" then
 						playLoco(animTracks.Walk)
 					end
@@ -362,7 +356,6 @@ return function(p7, newScript, ...)
 				clone:Destroy()
 			end
 
-			-- Heartbeat จัดการการเคลื่อนที่ตาม TargetCF อย่างสมบูรณ์
 			heartConnection = runService.Heartbeat:Connect(function(dt)
 				if not isAlive or isKilling then return end
 				local targetCF = p10:GetAttribute("TargetCF")
@@ -402,28 +395,25 @@ return function(p7, newScript, ...)
 
 			p10.Destroying:Connect(cleanup)
 
-			-- จัดการอนิเมชัน Spawn ตอนเกิด
-			-- แก้ไขส่วนจัดการแอนิมิชัน Spawn ใน Module Script ให้ใช้ .Stopped แทน task.wait(1.2)
-task.spawn(function()
-    if animTracks.Spawn then 
-        animTracks.Spawn:Play(0, 1, 1) 
-        
-        -- รอจนกว่าอนิเมชัน Spawn จะเล่นจบจริงๆ โดยอัตโนมัติ
-        animTracks.Spawn.Ended:Wait()
-    else
-        task.wait(2) -- เผื่อกรณีไม่มีอนิเมชัน
-    end
-    
-    if soundMap.Idle and isAlive then 
-        soundMap.Idle:Play() 
-    end
-    
-    if p10:GetAttribute("State") == "Emerging" then
-        p10:SetAttribute("State", "Walking")
-        playLoco(animTracks.Walk)
-    end
-end)
-
+			-- จัดการอนิเมชันตอนเกิด (ใช้ .Ended รอจนจบเป๊ะๆ และบังคับตัวเป็นสีขาว)
+			task.spawn(function
+				updateVisuals() -- บังคับสีขาวตอนเกิด
+				if animTracks.Spawn then 
+					animTracks.Spawn:Play(0, 1, 1) 
+					animTracks.Spawn.Ended:Wait() -- รอจนจบแอนิมิชัน Spawn สมบูรณ์แบบ
+				else
+					task.wait(1.2)
+				end
+				
+				if soundMap.Idle and isAlive then 
+					soundMap.Idle:Play() 
+				end
+				
+				if p10:GetAttribute("State") == "Emerging" then
+					p10:SetAttribute("State", "Walking")
+					playLoco(animTracks.Walk)
+				end
+			end)
 
 			return
 		end
