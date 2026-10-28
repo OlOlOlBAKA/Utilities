@@ -12,9 +12,17 @@ local seedNumber = GameData:WaitForChild("GameSeedInitial")
 
 local spawnRoom = currentRooms:WaitForChild(tostring(LatestRoom.Value))
 
+local chance = nil
+
+if GameData.Floor.Value == "Archives" or "Mines" the
+	chance = 125
+else
+	chance = 75
+end
+
 local itemConfig = {
 	SpawnChance = 1,
-	MaxChance = 125,
+	MaxChance = chance or 125,
 	
 	Locations = {
 		table = {
