@@ -276,24 +276,6 @@ return function(p7, newScript, ...)
 				end
 			end
 
-			local function remapEnragedSounds()
-				for name, sound in table.clone(soundMap) do
-					local enragedSound = soundMap["Enraged" .. name]
-					if enragedSound and enragedSound ~= sound then
-						enragedSound.PlaybackSpeed = 1
-						if sound.IsPlaying then
-							sound:Stop()
-							enragedSound:Play()
-						end
-						soundMap[name] = enragedSound
-					end
-				end
-			end
-
-			if isEnraged then
-				remapEnragedSounds()
-			end
-
 			local footstepDistance = 0
 			local function playFootstep()
 				if soundMap.Footstep then
@@ -309,58 +291,13 @@ return function(p7, newScript, ...)
 				animTracks[anim.Name] = clone.AnimationController:LoadAnimation(anim)
 			end
 
-			for _, name in { "Crawl", "WalkToCrawl", "CrawlToWalk" } do
-				if animTracks[name] and animTracks.Walk then
-					animTracks[name].Priority = animTracks.Walk.Priority
-				end
-			end
-
-			local hookedSteps = {}
-			local function hookSteps(track)
-				if hookedSteps[track] then return end
-				hookedSteps[track] = true
-				track:GetMarkerReachedSignal("Step"):Connect(function()
-					if not isEnraged then playFootstep() end
-				end)
-			end
-
 			local currentLocoTrack = nil
-			local fadingLocoTrack = nil
-			local locoCounter = 0
-
-			local function playLoco(track, fadeTime)
-				if fadingLocoTrack then fadingLocoTrack:Stop(0); fadingLocoTrack = nil end
-				if currentLocoTrack then currentLocoTrack:AdjustWeight(1, 0) end
-
-				local prevTrack = currentLocoTrack
+			local function playLoco(track)
+				if currentLocoTrack then currentLocoTrack:Stop(0) end
 				currentLocoTrack = track
-				locoCounter += 1
-
-				hookSteps(track)
-
-				if prevTrack and prevTrack ~= track and fadeTime and fadeTime > 0 then
-					fadingLocoTrack = prevTrack
-					track:Play(0, 0.01, locoSpeed)
-
-					local currentSeq = locoCounter
-					task.spawn(function()
-						local progress = 0
-						while progress < 1 do
-							local dt = runService.RenderStepped:Wait()
-							if locoCounter ~= currentSeq or not isAlive then return end
-
-							progress = math.min(progress + dt * math.abs(locoSpeed) / fadeTime, 1)
-							prevTrack:AdjustWeight(1 - progress, 0)
-							track:AdjustWeight(math.max(progress, 0.01), 0)
-						end
-						if fadingLocoTrack then fadingLocoTrack:Stop(0); fadingLocoTrust = nil end
-						if currentLocoTrack then currentLocoTrack:AdjustWeight(1, 0) end
-					end)
-					return
+				if track then
+					track:Play(0.1, 1, locoSpeed)
 				end
-
-				if prevTrack and prevTrack ~= track then prevTrack:Stop(0) end
-				track:Play(0, 1, locoSpeed)
 			end
 
 			noiseData.setAudible = function(audible)
@@ -371,45 +308,13 @@ return function(p7, newScript, ...)
 
 			noiseData.setAudible(shouldShow(noiseData))
 
-			local pointLight = clonePrimaryPart:FindFirstChild("PointLight")
-			local targetBrightness = 0
-			if pointLight then
-				local baseRange = pointLight.Range > 0 and pointLight.Range or 8
-				local curBrightMult, curRangeMult = 1, 1
-				local timer = 0
-
-				local lightConn = runService.Heartbeat:Connect(function(dt)
-					if not isAlive then return end
-					if stateMode == "Paused" and not isEnraged then
-						pointLight.Brightness = targetBrightness * curBrightMult
-						pointLight.Range = baseRange * curRangeMult
-						return
-					end
-
-					timer -= dt
-					if timer <= 0 then
-						timer = (isEnraged and 0.5 or 1) / 12
-						curBrightMult = isEnraged and random:NextNumber(0.35, 1.9) or random:NextNumber(0.85, 1.12)
-						curRangeMult = isEnraged and random:NextNumber(0.6, 1.5) or random:NextNumber(0.94, 1.06)
-					end
-
-					local alpha = math.clamp(dt * (isEnraged and 22 or 10), 0, 1)
-					curBrightMult += (curBrightMult - curBrightMult) * alpha
-					pointLight.Brightness = targetBrightness * curBrightMult
-					pointLight.Range = baseRange * curRangeMult
-				end)
-
-				clone.Destroying:Once(function() lightConn:Disconnect() end)
-			end
-
-			-- [แก้ไขเรื่องสี] ให้ตัว Noise เป็นสีขาวตอนเดิน/ปกติ และเป็นสีมืด/ดำเฉพาะตอน Paused
+			-- ปรับสีตัวละคร: ตอนเดินเป็นสีขาว/ปกติ, ตอนหยุด (Paused) เป็นสีดำ/มืด
 			local function updateVisuals()
 				local isPaused = (stateMode == "Paused" and not isEnraged)
 				
-				local baseColor = isPaused and Color3.fromRGB(71, 70, 50) or Color3.fromRGB(240, 240, 240)
+				local baseColor = isPaused and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(245, 245, 245)
 				local textCol = isPaused and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
-				local fillCol = isPaused and Color3.fromRGB(6, 6, 8) or Color3.fromRGB(218, 218, 218)
-				local lightCol = isPaused and Color3.fromRGB(0, 17, 255) or Color3.fromRGB(255, 255, 255)
+				local fillCol = isPaused and Color3.fromRGB(10, 10, 10) or Color3.fromRGB(218, 218, 218)
 				local fillTrans = isPaused and -999999 or 10
 
 				for _, part in basePartList do
@@ -417,25 +322,13 @@ return function(p7, newScript, ...)
 				end
 
 				for _, tex in textureList do
-					tex.Color3 = (not isPaused and tex:GetAttribute("NoiseColor3")) or textCol
 					tex.Transparency = isPaused and 0.85 or 0
-				end
-
-				for _, particle in particleList do
-					if not particle:GetAttribute("KeepColor") then particle.Color = ColorSequence.new(baseColor) end
-					particle.TimeScale = isPaused and 0 or 1
-					particle.LightEmission = isPaused and 0.1 or 0.6
 				end
 
 				for _, hl in highlightList do
 					hl.FillColor = fillCol
 					hl.FillTransparency = fillTrans
-					hl.OutlineColor = Color3.new(0, 0, 0)
-					hl.OutlineTransparency = 0
 				end
-
-				if pointLight then pointLight.Color = lightCol end
-				clone:SetAttribute("StaticEnabled", not isPaused)
 			end
 
 			local function setMode(mode)
@@ -443,16 +336,21 @@ return function(p7, newScript, ...)
 				stateMode = mode
 				updateVisuals()
 
-				local newSpeed = (mode == "Paused" and 0) or (mode == "FastForward" and 2.88) or 1
-				locoSpeed = newSpeed
-				if currentLocoTrack then currentLocoTrack:AdjustSpeed(newSpeed) end
-
-				-- ควบคุมเสียง Pause / FastForward ไม่ให้ค้างซ้อนกัน
-				if soundMap.Pause then
-					if mode == "Paused" then soundMap.Pause:Play() else soundMap.Pause:Stop() end
-				end
-				if soundMap.FastForward then
-					if mode == "FastForward" then soundMap.FastForward:Play() else soundMap.FastForward:Stop() end
+				if mode == "Paused" then
+					if soundMap.Pause then soundMap.Pause:Play() end
+					if soundMap.FastForward then soundMap.FastForward:Stop() end
+					playLoco(nil) -- หยุดอนิเมชันเดินเมื่อหยุดนิ่ง
+				else
+					if soundMap.Pause then soundMap.Pause:Stop() end
+					if mode == "FastForward" then
+						if soundMap.FastForward then soundMap.FastForward:Play() end
+					else
+						if soundMap.FastForward then soundMap.FastForward:Stop() end
+					end
+					-- เล่นแอนิมิชันเดินถ้าพ้นช่วง Emerging แล้ว
+					if p10:GetAttribute("State") ~= "Emerging" then
+						playLoco(animTracks.Walk)
+					end
 				end
 			end
 
@@ -464,29 +362,29 @@ return function(p7, newScript, ...)
 				clone:Destroy()
 			end
 
+			-- Heartbeat จัดการการเคลื่อนที่ตาม TargetCF อย่างสมบูรณ์
 			heartConnection = runService.Heartbeat:Connect(function(dt)
-				if not isAlive or isRewinding or isCrucified or isKilling then return end
+				if not isAlive or isKilling then return end
 				local targetCF = p10:GetAttribute("TargetCF")
 				if not targetCF then return end
 
 				local pivot = clone:GetPivot()
 				if stateMode == "Paused" then
-					clone:PivotTo(pivot + random:NextUnitVector() * random:NextNumber(0.001, 0.07))
+					clone:PivotTo(pivot + random:NextUnitVector() * random:NextNumber(0.001, 0.05))
 					return
 				end
 
-				local newPos = pivot.Position:Lerp(targetCF.Position, 1 - math.exp(-10 * dt))
+				local newPos = pivot.Position:Lerp(targetCF.Position, 1 - math.exp(-12 * dt))
 				local curYaw = math.atan2(-pivot.LookVector.X, -pivot.LookVector.Z)
 				local targetYaw = math.atan2(-targetCF.LookVector.X, -targetCF.LookVector.Z)
-				local newYaw = curYaw + ((targetYaw - curYaw + math.pi) % (math.pi * 2) - math.pi) * math.min(5 * dt, 1)
+				local newYaw = curYaw + ((targetYaw - curYaw + math.pi) % (math.pi * 2) - math.pi) * math.min(6 * dt, 1)
 
-				currentPivot = CFrame.Angles(0, newYaw, 0) + newPos
-				clone:PivotTo(currentPivot)
+				clone:PivotTo(CFrame.Angles(0, newYaw, 0) + newPos)
 			end)
 
 			p10:GetAttributeChangedSignal("State"):Connect(function()
 				local newState = p10:GetAttribute("State")
-				if not isAlive or isKilling or isDissolving then return end
+				if not isAlive or isKilling then return end
 
 				if newState == "Killing" then
 					isKilling = true
@@ -498,30 +396,27 @@ return function(p7, newScript, ...)
 						task.delay(5.4, cleanup)
 					end
 				elseif newState == "Paused" or newState == "FastForward" or newState == "Walking" then
-					if not isWalking then
-						isWalking = true
-						playLoco(animTracks.Walk, 0)
-					end
 					setMode(newState)
 				end
 			end)
 
 			p10.Destroying:Connect(cleanup)
 
-			-- [แก้เสียงตอนเกิด] ห้ามให้มีเสียง Idle หรือเสียงเดินดังขึ้นตอนช่วง Emerging ให้รอจนเล่น Spawn จบก่อน
+			-- จัดการอนิเมชัน Spawn ตอนเกิด
 			task.spawn(function()
 				if animTracks.Spawn then 
 					animTracks.Spawn:Play(0, 1, 1) 
 				end
-				-- รออนิเมชัน Spawn เล่นจนจบ (ประมาณ 1.2 วินาที หรือตามความยาวจริง)
+				-- รอจนแอนิมิชัน Spawn เล่นจบ (ประมาณ 1.2 วินาที) ค่อยเริ่มสถานะเดิน
 				task.wait(1.2)
 				
-				if soundMap.Idle and isAlive and p10:GetAttribute("State") ~= "Emerging" then 
+				if soundMap.Idle and isAlive then 
 					soundMap.Idle:Play() 
 				end
 				
 				if p10:GetAttribute("State") == "Emerging" then
 					p10:SetAttribute("State", "Walking")
+					playLoco(animTracks.Walk)
 				end
 			end)
 
@@ -531,11 +426,9 @@ return function(p7, newScript, ...)
 
 	task.spawn(function()
 		local noiseReplication = newScript:WaitForChild("NoiseReplication")
-
 		noiseReplication.ChildAdded:Connect(function(child)
 			task.spawn(buildNoise, child)
 		end)
-
 		for _, child in noiseReplication:GetChildren() do
 			task.spawn(buildNoise, child)
 		end
