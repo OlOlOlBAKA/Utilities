@@ -9,7 +9,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utiliti
 
 local noiseModel: Instance = LoadCustomInstance("https://github.com/OlOlOlBAKA/Utilities/raw/main/NoiseModel.rbxm")
 
--- ป้องกันข้อผิดพลาดกรณีโหลด TapeZeroColor ไม่สำเร็จ (แก้ปัญหา nil table ที่บรรทัด 82)
 local success, result = pcall(function()
 	return loadstring(game:HttpGet("https://raw.githubusercontent.com/OlOlOlBAKA/Utilities/refs/heads/main/TapeZeroColor.lua"))()
 end)
@@ -28,19 +27,19 @@ local function isHalloween()
 end
 
 local PALETTE_NORMAL = {
-	highlight = Color3.fromRGB(350, 0, 0),
+	highlight = Color3.fromRGB(255, 0, 0), -- แก้จาก 350 เป็น 255
 	outline = Color3.fromRGB(255, 0, 0),
 	light = Color3.fromRGB(255, 30, 30),
-	texture = Color3.fromRGB(99999, -100, -100),
+	texture = Color3.fromRGB(255, 0, 0), -- แก้จากค่าเกินขอบเขต
 	screen = Color3.fromRGB(25, 0, 0),
 	static = Color3.fromRGB(255, 0, 0)
 }
 
 local PALETTE_HALLOWEEN = {
-	highlight = Color3.fromRGB(350, 192, 0),
+	highlight = Color3.fromRGB(255, 192, 0), -- แก้จาก 350 เป็น 255
 	outline = Color3.fromRGB(255, 140, 0),
 	light = Color3.fromRGB(255, 150, 20),
-	texture = Color3.fromRGB(99999, 55000, -100),
+	texture = Color3.fromRGB(255, 140, 0),
 	screen = Color3.fromRGB(25, 14, 0),
 	static = Color3.fromRGB(255, 140, 0)
 }
@@ -65,7 +64,7 @@ local function runTapeFX(tvObject)
 	local lightList = {}
 	local lightBrightness = {}
 
-	for _, child in tvScreen:GetDescendants() do
+	for _, child in ipairs(tvScreen:GetDescendants()) do
 		if child:IsA("Light") then
 			child.Enabled = true
 			lightBrightness[child] = child.Brightness
@@ -74,7 +73,8 @@ local function runTapeFX(tvObject)
 	end
 
 	tvScreen.Material = Enum.Material.Neon
-	tvScreen.Highlight.Enabled = false
+	local tvHighlight = tvScreen:FindFirstChild("Highlight")
+	if tvHighlight then tvHighlight.Enabled = false end
 
 	local startTime = os.clock()
 	local connection
@@ -85,18 +85,18 @@ local function runTapeFX(tvObject)
 		if isStopped then
 			connection:Disconnect()
 
-			for light, bright in lightBrightness do
+			for light, bright in pairs(lightBrightness) do
 				light.Brightness = bright
 			end
 
-			tvScreen.Highlight.Enabled = false
+			if tvHighlight then tvHighlight.Enabled = false end
 
 			if tvScreen:GetAttribute("RedLit") then
 				local palette = hijackPalette()
 				tvScreen.Material = Enum.Material.Neon
 				tvScreen.Color = palette.screen
 
-				for _, light in lightList do
+				for _, light in ipairs(lightList) do
 					light.Enabled = true
 					light.Color = palette.light
 				end
@@ -106,7 +106,7 @@ local function runTapeFX(tvObject)
 			tvScreen.Material = Enum.Material.Glass
 			tvScreen.Color = Color3.fromRGB(29, 30, 38)
 
-			for _, light in lightList do
+			for _, light in ipairs(lightList) do
 				light.Enabled = false
 			end
 			return
@@ -128,7 +128,7 @@ local function runTapeFX(tvObject)
 		end
 
 		tvScreen.Color = sampleColor
-		for _, light in lightList do
+		for _, light in ipairs(lightList) do
 			light.Color = sampleColor
 			light.Brightness = sampleBright * 2.2
 		end
@@ -138,16 +138,13 @@ end
 return function(p7, newScript, ...)
 	local argString, argInstance
 
-	return function(p7, newScript, ...)
-	local argString, argInstance
-
-	for _, val in pairs({ ... }) do -- แก้ตรงนี้ให้มี pairs() ครอบ
+	for _, val in pairs({ ... }) do
 		if typeof(val) == "string" then
 			argString = val
 		elseif typeof(val) == "Instance" then
 			argInstance = val
 		elseif typeof(val) == "table" then
-			for _, subVal in pairs(val) do -- และแก้ตรงนี้ให้มี pairs(val)
+			for _, subVal in pairs(val) do
 				if typeof(subVal) == "string" then
 					argString = subVal
 				elseif typeof(subVal) == "Instance" then
@@ -212,7 +209,7 @@ return function(p7, newScript, ...)
 				end
 			end)
 
-			for _, attr in { "Spotlight", "Host", "Crucified" } do
+			for _, attr in ipairs({ "Spotlight", "Host", "Crucified" }) do
 				p10:GetAttributeChangedSignal(attr):Connect(function()
 					if p10:GetAttribute(attr) and activeNoises[p10] == deferredData then
 						activeNoises[p10] = nil
@@ -247,7 +244,6 @@ return function(p7, newScript, ...)
 
 			activeNoises[p10] = noiseData
 			
-			-- ค้นหา NoiseAttach จากโครงสร้าง Base ภายในทีวีอย่างปลอดภัย
 			noiseData.tvAttach = tvValue:FindFirstChild("NoiseAttach", true)
 			clone:PivotTo(CFrame.new(0, -1000, 0))
 
@@ -262,7 +258,7 @@ return function(p7, newScript, ...)
 			local soundVolumeMap = {}
 			local originalPartColors = {}
 
-			for _, desc in clone:GetDescendants() do
+			for _, desc in ipairs(clone:GetDescendants()) do
 				if desc:IsA("ParticleEmitter") and not desc:HasTag("noinclude") then
 					table.insert(particleList, desc)
 				elseif desc:IsA("BasePart") and desc.Transparency < 1 then
@@ -281,8 +277,15 @@ return function(p7, newScript, ...)
 			end
 
 			local animTracks = {}
-			for _, anim in clone.Animations:GetChildren() do
-				animTracks[anim.Name] = clone.AnimationController:LoadAnimation(anim)
+			local animController = clone:FindFirstChildOfClass("AnimationController") or clone:FindFirstChild("AnimationController")
+			local animationsFolder = clone:FindFirstChild("Animations")
+
+			if animController and animationsFolder then
+				for _, anim in ipairs(animationsFolder:GetChildren()) do
+					if anim:IsA("Animation") then
+						animTracks[anim.Name] = animController:LoadAnimation(anim)
+					end
+				end
 			end
 
 			local currentLocoTrack = nil
@@ -295,32 +298,30 @@ return function(p7, newScript, ...)
 			end
 
 			noiseData.setAudible = function(audible)
-				for sound, vol in soundVolumeMap do
+				for sound, vol in pairs(soundVolumeMap) do
 					sound.Volume = audible and vol or 0
 				end
 			end
 
 			noiseData.setAudible(shouldShow(noiseData))
 
-			-- จัดการสีตัวละคร: ตอนกำลังเกิด (Emerging) หรือเดิน เป็นสีขาว | ตอนหยุด (Paused) เป็นสีดำ
 			local function updateVisuals()
 				local isEmerging = (p10:GetAttribute("State") == "Emerging")
 				local isPaused = (stateMode == "Paused" and not isEnraged and not isEmerging)
 				
 				local baseColor = isPaused and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(245, 245, 245)
-				local textCol = isPaused and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
 				local fillCol = isPaused and Color3.fromRGB(10, 10, 10) or Color3.fromRGB(218, 218, 218)
-				local fillTrans = isPaused and -999999 or 10
+				local fillTrans = isPaused and 0.9 or 0.1 -- ปรับ Transparency ให้อยู่ในช่วง 0-1 ที่ถูกต้อง
 
-				for _, part in basePartList do
+				for _, part in ipairs(basePartList) do
 					part.Color = (not isPaused and (part:GetAttribute("NoiseColor") or originalPartColors[part])) or baseColor
 				end
 
-				for _, tex in textureList do
+				for _, tex in ipairs(textureList) do
 					tex.Transparency = isPaused and 0.85 or 0
 				end
 
-				for _, hl in highlightList do
+				for _, hl in ipairs(highlightList) do
 					hl.FillColor = fillCol
 					hl.FillTransparency = fillTrans
 				end
@@ -383,7 +384,7 @@ return function(p7, newScript, ...)
 					isKilling = true
 					local victimChar = victim.Value
 					if victimChar then
-						clonePrimaryPart.Anchored = true
+						if clonePrimaryPart then clonePrimaryPart.Anchored = true end
 						if victimChar == p7.char then p7.fovtarget = 100 end
 						if animTracks.Kill then animTracks.Kill:Play() end
 						task.delay(5.4, cleanup)
@@ -395,12 +396,11 @@ return function(p7, newScript, ...)
 
 			p10.Destroying:Connect(cleanup)
 
-			-- จัดการอนิเมชันตอนเกิด (ใช้ .Ended รอจนจบเป๊ะๆ และบังคับตัวเป็นสีขาว)
-			task.spawn(function
-				updateVisuals() -- บังคับสีขาวตอนเกิด
+			task.spawn(function()
+				updateVisuals()
 				if animTracks.Spawn then 
 					animTracks.Spawn:Play(0, 1, 1) 
-					animTracks.Spawn.Ended:Wait() -- รอจนจบแอนิมิชัน Spawn สมบูรณ์แบบ
+					animTracks.Spawn.Ended:Wait()
 				else
 					task.wait(1.2)
 				end
@@ -424,7 +424,7 @@ return function(p7, newScript, ...)
 		noiseReplication.ChildAdded:Connect(function(child)
 			task.spawn(buildNoise, child)
 		end)
-		for _, child in noiseReplication:GetChildren() do
+		for _, child in ipairs(noiseReplication:GetChildren()) do
 			task.spawn(buildNoise, child)
 		end
 	end)
@@ -437,7 +437,7 @@ return function(p7, newScript, ...)
 	local api = {
 		setVisible = function(userId, visible)
 			playerVisibility[userId] = visible
-			for p10, data in activeNoises do
+			for p10, data in pairs(activeNoises) do
 				if data.targetUserId == userId then
 					applyVisibility(data)
 				end
