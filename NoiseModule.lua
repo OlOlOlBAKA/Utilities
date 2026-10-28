@@ -409,7 +409,7 @@ task.spawn(function()
         animTracks.Spawn:Play(0, 1, 1) 
         
         -- รอจนกว่าอนิเมชัน Spawn จะเล่นจบจริงๆ โดยอัตโนมัติ
-        animTracks.Spawn.Stopped:Wait()
+        animTracks.Spawn.Ended:Wait()
     else
         task.wait(2) -- เผื่อกรณีไม่มีอนิเมชัน
     end
