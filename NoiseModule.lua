@@ -311,7 +311,7 @@ return function(p7, newScript, ...)
 				
 				local baseColor = isPaused and Color3.fromRGB(40, 40, 40) or Color3.fromRGB(245, 245, 245)
 				local fillCol = isPaused and Color3.fromRGB(10, 10, 10) or Color3.fromRGB(218, 218, 218)
-				local fillTrans = isPaused and 0.9 or 0.1 -- ปรับ Transparency ให้อยู่ในช่วง 0-1 ที่ถูกต้อง
+				local fillTrans = isPaused and -999999 or 10 -- ปรับ Transparency ให้อยู่ในช่วง 0-1 ที่ถูกต้อง
 
 				for _, part in ipairs(basePartList) do
 					part.Color = (not isPaused and (part:GetAttribute("NoiseColor") or originalPartColors[part])) or baseColor
