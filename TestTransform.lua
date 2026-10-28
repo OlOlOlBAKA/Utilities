@@ -15,7 +15,7 @@ else
 end
 
 local fetchFunc = (typeof(getgenv) == "function" and getgenv().LoadCustomInstance) or _G.LoadCustomInstance or LoadCustomInstance
-local model = fetchFunc("https://github.com/OlOlOlBAKA/Utilities/raw/main/LatestBlink.rbxm")
+local mod = fetchFunc("https://github.com/OlOlOlBAKA/Utilities/raw/main/LatestBlink.rbxm")
 
 local r = Random.new()
 local player = game.Players.LocalPlayer
@@ -45,6 +45,8 @@ local function onCharacterAdded(char)
 	repeat 
 		task.wait() 
 	until char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid")
+
+	local model = mod:Clone()
 	
 	local root = char:FindFirstChild("HumanoidRootPart")
 	local humanoid = char:FindFirstChild("Humanoid")
@@ -54,6 +56,9 @@ local function onCharacterAdded(char)
 	if model and model:FindFirstChild("Main") then
 		for _, v in ipairs(model.Main:GetChildren()) do
 			v.Parent = root
+			if v:IsA("PointLight") then
+				v.Range = v.Range * 2
+			end
 		end
 	else
 		warn("Failed to find 'Main' inside loaded model!")
