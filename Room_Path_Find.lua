@@ -528,7 +528,8 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 				m.Name == "BreakBoards" or 
 				m.Name == "MinecartMoving" or 
 				m.Name == "GardenGate" or
-				m.Name == "Door" then
+				m.Name == "Door" or 
+				m.Name == "DoorLattice" then
                 for _,p in ipairs(m:GetDescendants()) do
 					if p:IsA("BasePart") then
 						p.CanQuery = false
