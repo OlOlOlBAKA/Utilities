@@ -193,6 +193,10 @@ task.spawn(function()
             print("blacklisted room, despawned and break the loop")
             break
         end
+		if workspace:FindFirstChild("SeekMovingNewClone") or workspace:FindFirstChild("HonchoRig") then
+			print("chasing session, despawned and break the loop")
+			break
+		end
 
         latestRoom.Changed:Wait()
 		task.wait(2)
@@ -221,6 +225,10 @@ task.spawn(function()
             print("blacklisted room, despawned and break the loop")
             break
         end
+		if workspace:FindFirstChild("SeekMovingNewClone") or workspace:FindFirstChild("HonchoRig") then
+			print("chasing session, despawned and break the loop")
+			break
+		end
 
         if not isPresent and hasHidingSpot then
             reboundsLeft = reboundsLeft - 1
