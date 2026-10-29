@@ -543,6 +543,20 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
             end
         end
     end
+	for _,m in ipairs(roomFolder:GetChildren()) do
+		if m.Name == "DoorNormal" then
+            for _,p in ipairs(m:GetDescendants()) do
+				if p:IsA("BasePart") then
+					if not p:FindFirstChild("PathfindingModifier") then
+                        local skip = Instance.new("PathfindingModifier")
+                        skip.Label = "SubSkip"
+                        skip.PassThrough = true
+                        skip.Parent = p
+					end
+				end
+			end
+        end
+	end
 	
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 2,
@@ -996,28 +1010,9 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			return nil
 		end
 
-	for _,r in ipairs(workspace.CurrentRooms:GetChildren()) do
-        if r:IsA("Model") then
-            for _,m in ipairs(r:GetChildren()) do
-				if m.Name == "DoorNormal" then
-                    for _,p in ipairs(m:GetDescendants()) do
-					    if p:IsA("BasePart") then
-					    	if not p:FindFirstChild("PathfindingModifier") then
-                                local skip = Instance.new("PathfindingModifier")
-                                skip.Label = "SubSkip"
-                                skip.PassThrough = true
-                                skip.Parent = p
-						    end
-					    end
-				    end
-                end
-			end
-        end
-    end
-
 		local path = PathfindingService:CreatePath({
 			AgentRadius = 2,
-			AgentHeight = 2,
+			AgentHeight = 4,
 			AgentCanJump = false,
 			WaypointSpacing = 3,
 			Costs = {
