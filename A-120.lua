@@ -108,8 +108,8 @@ end)
         local entityConfig = {
             Model = game:GetObjects("rbxassetid://103020442987735")[1],
             Speed = 50,
-            HeightOffset = 6,
-            FloorYOffset = -1.5,
+            HeightOffset = 4.5,
+            FloorYOffset = 0,
             DelayTime = 5,
             SpawnOffsetRooms = 5,
             AttackType = "Front",
