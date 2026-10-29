@@ -546,7 +546,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	
 	local primaryPath = PathfindingService:CreatePath({
 		AgentRadius = 2,
-		AgentHeight = 2,
+		AgentHeight = 4,
 		AgentCanJump = false,
 		WaypointSpacing = 3,
 		Costs = { 
