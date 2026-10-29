@@ -768,7 +768,7 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 	end
 
 	local function startCameraShake()
-		if not RunService:IsClient() or renderConnection or not Main_Game or not Main_Game.camShaker then return end
+		if renderConnection or not Main_Game or not Main_Game.camShaker then return end
 
 		renderConnection = RunService.RenderStepped:Connect(function(dt)
 			if isMovementFinished or not model or not model.Parent then
