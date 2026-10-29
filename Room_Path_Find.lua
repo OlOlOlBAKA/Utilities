@@ -549,7 +549,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 		AgentRadius = 1,
 		AgentHeight = 1,
 		AgentCanJump = false,
-		WaypointSpacing = 3.5,
+		WaypointSpacing = 3,
 		Costs = { 
 			Default = 1,
 			Skip = 1,
@@ -565,12 +565,12 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local function processWaypointCandidate(pos: Vector3)
 		local distToStart = (pos - startPos).Magnitude
 		local distToEnd = (pos - endPos).Magnitude
-		if distToStart <= 10 or distToEnd <= 10 then return end
+		if distToStart <= 5 or distToEnd <= 5 then return end
 
 		local lastPos = filteredWaypoints[#filteredWaypoints]
 		if lastPos then
 			local distToLast = (pos - lastPos).Magnitude
-			if distToLast < 10 then return end
+			if distToLast < 5 then return end
 		end
 
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
