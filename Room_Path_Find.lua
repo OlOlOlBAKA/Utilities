@@ -528,8 +528,7 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 				m.Name == "BreakBoards" or 
 				m.Name == "MinecartMoving" or 
 				m.Name == "GardenGate" or
-				m.Name == "Door" or
-				m.Name == "DoorNormal" then
+				m.Name == "Door" then
                 for _,p in ipairs(m:GetDescendants()) do
 					if p:IsA("BasePart") then
 						p.CanQuery = false
@@ -546,13 +545,14 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
     end
 	
 	local primaryPath = PathfindingService:CreatePath({
-		AgentRadius = 1,
-		AgentHeight = 1,
+		AgentRadius = 2,
+		AgentHeight = 2,
 		AgentCanJump = false,
 		WaypointSpacing = 3,
 		Costs = { 
 			Default = 1,
 			Skip = 1,
+			SubSkip = math.huge
 		}
 	})
 
@@ -565,12 +565,12 @@ local function computePathWaypoints(startPos: Vector3, endPos: Vector3, heightOf
 	local function processWaypointCandidate(pos: Vector3)
 		local distToStart = (pos - startPos).Magnitude
 		local distToEnd = (pos - endPos).Magnitude
-		if distToStart <= 5 or distToEnd <= 5 then return end
+		if distToStart <= 10 or distToEnd <= 10 then return end
 
 		local lastPos = filteredWaypoints[#filteredWaypoints]
 		if lastPos then
 			local distToLast = (pos - lastPos).Magnitude
-			if distToLast < 5 then return end
+			if distToLast < 10 then return end
 		end
 
 		local groundPos = alignToFloorLevel(pos, roomFolder, floorYOffset)
@@ -996,14 +996,34 @@ function PathfindingMovement.MoveThroughRooms(options: MovementOptions)
 			return nil
 		end
 
+	for _,r in ipairs(workspace.CurrentRooms:GetChildren()) do
+        if r:IsA("Model") then
+            for _,m in ipairs(r:GetChildren()) do
+				if m.Name == "DoorNormal" then
+                    for _,p in ipairs(m:GetDescendants()) do
+					    if p:IsA("BasePart") then
+					    	if not p:FindFirstChild("PathfindingModifier") then
+                                local skip = Instance.new("PathfindingModifier")
+                                skip.Label = "SubSkip"
+                                skip.PassThrough = true
+                                skip.Parent = p
+						    end
+					    end
+				    end
+                end
+			end
+        end
+    end
+
 		local path = PathfindingService:CreatePath({
-			AgentRadius = 1,
-			AgentHeight = 2.5,
+			AgentRadius = 2,
+			AgentHeight = 2,
 			AgentCanJump = false,
 			WaypointSpacing = 3,
 			Costs = {
 				Default = 1,
-				Skip = 1
+				Skip = 1,
+				SubSkip = 1
 			}
 		})
 
