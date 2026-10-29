@@ -57,8 +57,8 @@ end)
 local entityConfig = {
     Model = game:GetObjects("rbxassetid://77366392445371")[1],
     Speed = 70,
-    HeightOffset = 5,
-    FloorYOffset = -2,
+    HeightOffset = 3,
+    FloorYOffset = 0,
     DelayTime = 4.5,
     SpawnOffsetRooms = 5,
     AttackType = "Front",
@@ -236,8 +236,8 @@ task.spawn(function()
             local entityConfig2 = {
                 Model = game:GetObjects("rbxassetid://77366392445371")[1],
                 Speed = 70,
-                HeightOffset = 5,
-                FloorYOffset = -2,
+                HeightOffset = 3,
+                FloorYOffset = 0,
                 DelayTime = 2.5,
                 SpawnOffsetRooms = 5,
                 AttackType = "Front",
