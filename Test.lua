@@ -93,7 +93,7 @@ local ENTITY_TABLE = {
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         OnlyInNoHidingSpotRoom = false,
-        BlacklistedEntities = {"Rebound", "Blink"}
+        BlacklistedEntities = {"Rebound"}
     },
     {
         Name = "Depth",    
@@ -105,7 +105,7 @@ local ENTITY_TABLE = {
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         OnlyInNoHidingSpotRoom = false,
-        BlacklistedEntities = {"Blink"}
+        BlacklistedEntities = {}
     },
     {
         Name = "Rebound",  
@@ -117,7 +117,7 @@ local ENTITY_TABLE = {
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         OnlyInNoHidingSpotRoom = false,
-        BlacklistedEntities = {"A-120", "Blink"}
+        BlacklistedEntities = {"A-120"}
     },
     {
         Name = "Blink",  
@@ -129,7 +129,7 @@ local ENTITY_TABLE = {
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
         OnlyInNoHidingSpotRoom = true,
-        BlacklistedEntities = {"Rebound", "A-120", "Depth"}
+        BlacklistedEntities = {}
     }
 }
 
