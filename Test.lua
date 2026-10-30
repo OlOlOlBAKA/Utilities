@@ -26,7 +26,7 @@ local success, floorVal = pcall(function()
 end)
 if success and floorVal == "Archives" or success and floorVal == "Rooms" then
     GLOBAL_IGNORE_MAX_ROOMS = true
-    print("Its Archives Floor")
+    print("Its Archives/Rooms Floor")
 end
 
 -- Fetch DOORS actual game seed
@@ -92,6 +92,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
+        OnlyInNoHidingSpotRoom = false,
         BlacklistedEntities = {"Rebound", "Blink"}
     },
     {
@@ -103,6 +104,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
+        OnlyInNoHidingSpotRoom = false,
         BlacklistedEntities = {"Blink"}
     },
     {
@@ -114,6 +116,7 @@ local ENTITY_TABLE = {
         CooldownRooms = 2,
         IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
+        OnlyInNoHidingSpotRoom = false,
         BlacklistedEntities = {"A-120", "Blink"}
     },
     {
@@ -123,8 +126,9 @@ local ENTITY_TABLE = {
         MaxRoom = 89, 
         CanSpawnInDark = true,
         CooldownRooms = 2,
-        IgnoreHidingSpots = true,
+        IgnoreHidingSpots = false,
         IgnoreMaxRoom = false,
+        OnlyInNoHidingSpotRoom = true,
         BlacklistedEntities = {"Rebound", "A-120", "Depth"}
     }
 }
@@ -384,9 +388,14 @@ local function handleHardcoreRoom(roomNumber)
             local lastDespawn = entityLastDespawnRoom[entity.Name]
             local cooldownPassed = (roomNumber - lastDespawn) > entity.CooldownRooms
 
-            -- Hiding spot validation:
-            -- If Archives floor & >1 player, check if hiding spots >= 1 (at least 1 spot available).
-            -- Otherwise default to checking hiding spots >= playerCount.
+            -- OnlyInNoHidingSpotRoom validation:
+            -- If entity requires a no-hiding-spot room, totalHidingSpots must be 0.
+            local noHidingSpotReq = true
+            if entity.OnlyInNoHidingSpotRoom then
+                noHidingSpotReq = (totalHidingSpots == 0)
+            end
+
+            -- Hiding spot validation (standard check for entities that require spots):
             local hidingSpotCheckPassed = entity.IgnoreHidingSpots
             if not hidingSpotCheckPassed then
                 if playerCount > 1 and floorVal == "Archives" or playerCount > 1 and floorVal == "Rooms" then
@@ -396,7 +405,7 @@ local function handleHardcoreRoom(roomNumber)
                 end
             end
 
-            if minRoomReq and maxRoomReq and darkReq and notAlreadyActive and blacklistPassed and cooldownPassed and hidingSpotCheckPassed then
+            if minRoomReq and maxRoomReq and darkReq and notAlreadyActive and blacklistPassed and cooldownPassed and noHidingSpotReq and hidingSpotCheckPassed then
                 table.insert(eligibleEntities, entity)
             end
         end
