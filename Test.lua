@@ -24,7 +24,7 @@ local GLOBAL_IGNORE_MAX_ROOMS = false
 local success, floorVal = pcall(function()
     return ReplicatedStorage.GameData.Floor.Value
 end)
-if success and floorVal == "Archives" then
+if success and floorVal == "Archives" or success and floorVal == "Rooms" then
     GLOBAL_IGNORE_MAX_ROOMS = true
     print("Its Archives Floor")
 end
@@ -118,7 +118,7 @@ local ENTITY_TABLE = {
     },
     {
         Name = "Blink",  
-        Weight = 0.25,  
+        Weight = 0.1,  
         MinRoom = 7, 
         MaxRoom = 89, 
         CanSpawnInDark = true,
@@ -389,7 +389,7 @@ local function handleHardcoreRoom(roomNumber)
             -- Otherwise default to checking hiding spots >= playerCount.
             local hidingSpotCheckPassed = entity.IgnoreHidingSpots
             if not hidingSpotCheckPassed then
-                if playerCount > 1 and floorVal == "Archives" then
+                if playerCount > 1 and floorVal == "Archives" or playerCount > 1 and floorVal == "Rooms" then
                     hidingSpotCheckPassed = (totalHidingSpots >= 1)
                 else
                     hidingSpotCheckPassed = (totalHidingSpots >= playerCount)
