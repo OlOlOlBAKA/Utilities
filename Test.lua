@@ -388,20 +388,18 @@ local function handleHardcoreRoom(roomNumber)
             local lastDespawn = entityLastDespawnRoom[entity.Name]
             local cooldownPassed = (roomNumber - lastDespawn) > entity.CooldownRooms
 
-            -- OnlyInNoHidingSpotRoom validation:
-            -- If entity requires a no-hiding-spot room, totalHidingSpots must be 0.
-            local noHidingSpotReq = true
-            if entity.OnlyInNoHidingSpotRoom then
-                noHidingSpotReq = (totalHidingSpots == 0)
-            end
-
-            -- Hiding spot validation (standard check for entities that require spots):
             local hidingSpotCheckPassed = entity.IgnoreHidingSpots
-            if not hidingSpotCheckPassed then
-                if playerCount > 1 and floorVal == "Archives" or playerCount > 1 and floorVal == "Rooms" then
-                    hidingSpotCheckPassed = (totalHidingSpots >= 1)
-                else
-                    hidingSpotCheckPassed = (totalHidingSpots >= playerCount)
+            
+            if entity.OnlyInNoHidingSpotRoom then
+                -- If it requires a no-hiding-spot room, totalHidingSpots must strictly be 0
+                hidingSpotCheckPassed = (totalHidingSpots == 0)
+            else
+                if not hidingSpotCheckPassed then
+                    if playerCount > 1 and (floorVal == "Archives" or floorVal == "Rooms") then
+                        hidingSpotCheckPassed = (totalHidingSpots >= 1)
+                    else
+                        hidingSpotCheckPassed = (totalHidingSpots >= playerCount)
+                    end
                 end
             end
 
