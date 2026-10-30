@@ -86,7 +86,7 @@ local entityConfig = {
 					part.Blink:Play()
 					part.Attachment.Open.Enabled = true
 					part.Attachment.Closed.Enabled = false
-					task.wait(0.5)
+					task.wait(1)
 					canKill = true
 				else
 					part.BlinkForeshadow:Play()
@@ -108,7 +108,7 @@ local entityConfig = {
 			model.Main.Whisper.Volume = model.Main.Whisper.Volume / 2
 			model.Main.Whisper:Play()
 			model.Main.Attachment.Closed.Enabled = true
-			task.wait(1)
+			task.wait(0.5)
 			setState(true)
 			task.spawn(function()
 				while model and model.Parent do
