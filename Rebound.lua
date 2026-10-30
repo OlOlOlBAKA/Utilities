@@ -63,7 +63,7 @@ local entityConfig = {
     SpawnOffsetRooms = 5,
     AttackType = "Front",
 
-    HitboxRange = 50,
+    HitboxRange = 30,
     RaycastHitbox = true,
     SphereRadius = 4,
     Damage = 100,
@@ -243,7 +243,7 @@ task.spawn(function()
                 SpawnOffsetRooms = 5,
                 AttackType = "Front",
 
-                HitboxRange = 50,
+                HitboxRange = 30,
                 RaycastHitbox = true,
                 SphereRadius = 4,
                 Damage = 100,
