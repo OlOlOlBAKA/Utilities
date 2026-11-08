@@ -49,7 +49,6 @@ local CrucifixStorage = {
 local roomFloorCache = setmetatable({}, { __mode = "k" })
 
 local keywordList = {
-	"door",
 	"gate",
 	"board",
 	"cart",
